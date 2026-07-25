@@ -1,0 +1,10 @@
+{
+  "name": "CEHF Primaria",
+  "short_name": "CEHF",
+  "description": "Tu semana académica en un solo lugar.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f7f5f1",
+  "theme_color": "#5b3f8c",
+  "lang": "es-MX"
+}

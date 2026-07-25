@@ -1,0 +1,262 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profilePath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(profilePath());
+    }
+
+    function profile() {
+      return get(profilePath()).data;
+    }
+
+    function isActive() {
+      return hasProfile() && profile().active == true;
+    }
+
+    function roleIs(role) {
+      return isActive() && profile().role == role;
+    }
+
+    function isStaff() {
+      return roleIs("director") || roleIs("teacher");
+    }
+
+    function isDirector() {
+      return roleIs("director");
+    }
+
+    function sameInstitution(data) {
+      return isActive() && data.institutionId == profile().institutionId;
+    }
+
+    match /system/bootstrap {
+      allow get: if signedIn();
+      allow create: if signedIn()
+        && !exists(/databases/$(database)/documents/system/bootstrap)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isActive() && (
+        request.auth.uid == userId ||
+        isDirector() ||
+        (roleIs("teacher") && resource.data.role == "student")
+      );
+      allow list: if isDirector() || roleIs("teacher");
+      allow create: if signedIn() && (
+        isDirector() ||
+        (
+          request.auth.uid == userId &&
+          !exists(/databases/$(database)/documents/system/bootstrap) &&
+          request.resource.data.role == "director" &&
+          request.resource.data.active == true
+        )
+      );
+      allow update: if isDirector() || (
+        request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["name", "initials", "updatedAt"])
+      );
+      allow delete: if false;
+
+      match /preferences/{preferenceId} {
+        allow read, write: if isActive() && request.auth.uid == userId;
+      }
+
+      match /privateState/{stateId} {
+        allow read, write: if isActive() && request.auth.uid == userId;
+      }
+    }
+
+    match /institutions/{institutionId} {
+      allow read: if isActive() && profile().institutionId == institutionId;
+      allow create, update: if isDirector()
+        && request.resource.data.institutionId == institutionId;
+      allow delete: if false;
+
+      match /portal/{documentId} {
+        allow read: if isActive() && profile().institutionId == institutionId;
+        allow create, update: if isStaff()
+          && profile().institutionId == institutionId;
+        allow delete: if false;
+      }
+
+      match /{collectionName}/{documentId} {
+        allow read: if isActive() && profile().institutionId == institutionId;
+        allow create, update: if isDirector()
+          && request.resource.data.institutionId == institutionId;
+        allow delete: if false;
+      }
+    }
+
+    match /weeklyPlans/{planId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || resource.data.status == "published"
+      );
+      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
+        && sameInstitution(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /weeklyReviews/{reviewId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || resource.data.status in ["published", "closed"]
+      );
+      allow create, update: if isStaff()
+        && sameInstitution(request.resource.data);
+      allow delete: if false;
+
+      match /attempts/{attemptId} {
+        allow read: if isStaff() || (
+          isActive() && resource.data.studentId == request.auth.uid
+        );
+        allow create: if roleIs("student")
+          && request.resource.data.studentId == request.auth.uid;
+        allow update: if roleIs("student")
+          && resource.data.studentId == request.auth.uid
+          && request.resource.data.studentId == request.auth.uid;
+        allow delete: if false;
+      }
+    }
+
+    match /tasks/{taskId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || resource.data.status in ["published", "closed", "archived"]
+      );
+      allow create, update: if isStaff()
+        && sameInstitution(request.resource.data);
+      allow delete: if false;
+
+      match /submissions/{submissionId} {
+        allow read: if isStaff() || (
+          isActive() && resource.data.studentId == request.auth.uid
+        );
+        allow create: if roleIs("student")
+          && request.resource.data.studentId == request.auth.uid;
+        allow update: if isStaff() || (
+          roleIs("student")
+          && resource.data.studentId == request.auth.uid
+          && request.resource.data.studentId == request.auth.uid
+        );
+        allow delete: if false;
+      }
+    }
+
+    match /weeklyMaterials/{materialId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || resource.data.status in ["published", "archived"]
+      );
+      allow create, update: if isStaff()
+        && sameInstitution(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /weeklyProgress/{progressId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() ||
+        (
+          resource.data.studentId == request.auth.uid &&
+          resource.data.status in ["published", "corrected"]
+        )
+      );
+      allow create, update: if isStaff()
+        && sameInstitution(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /weeklyReports/{reportId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() ||
+        (
+          resource.data.studentId == request.auth.uid &&
+          resource.data.status == "published"
+        )
+      );
+      allow create, update: if isStaff()
+        && sameInstitution(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /wallPosts/{postId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || resource.data.status == "published"
+      );
+      allow create: if isActive()
+        && sameInstitution(request.resource.data)
+        && (
+          isStaff() ||
+          (
+            roleIs("student") &&
+            request.resource.data.createdBy == request.auth.uid &&
+            request.resource.data.status == "submitted"
+          )
+        );
+      allow update: if isStaff() && sameInstitution(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /forums/{forumId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() ||
+        request.auth.uid in resource.data.participantIds
+      );
+      allow create, update: if isStaff()
+        && sameInstitution(request.resource.data);
+      allow delete: if false;
+
+      match /topics/{topicId} {
+        allow read: if isActive();
+        allow create, update: if isStaff();
+        allow delete: if false;
+
+        match /posts/{postId} {
+          allow read: if isActive() && resource.data.status != "hidden";
+          allow create: if isActive()
+            && request.resource.data.authorId == request.auth.uid
+            && request.resource.data.status == "published";
+          allow update: if isStaff();
+          allow delete: if false;
+        }
+      }
+    }
+
+    match /notifications/{userId}/items/{notificationId} {
+      allow read: if isActive() && request.auth.uid == userId;
+      allow update: if isActive()
+        && request.auth.uid == userId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["read", "archivedAt"]);
+      allow create, delete: if false;
+    }
+
+    match /guardianContacts/{contactId} {
+      allow read, write: if isDirector();
+    }
+
+    match /messageOutbox/{messageId} {
+      allow read: if isDirector();
+      allow write: if false;
+    }
+
+    match /auditEvents/{eventId} {
+      allow read: if isDirector();
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

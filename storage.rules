@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return firestore.get(
+        /databases/(default)/documents/users/$(request.auth.uid)
+      ).data;
+    }
+
+    function active() {
+      return signedIn() && profile().active == true;
+    }
+
+    function isStaff() {
+      return active() && profile().role in ["director", "teacher"];
+    }
+
+    function safeUpload() {
+      return request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches(
+          "(application/pdf|image/.*|audio/.*|text/plain)"
+        );
+    }
+
+    match /institutions/{institutionId}/tasks/{taskId}/resources/{assetId} {
+      allow read: if active() && profile().institutionId == institutionId;
+      allow write: if isStaff()
+        && profile().institutionId == institutionId
+        && safeUpload();
+    }
+
+    match /institutions/{institutionId}/materials/{materialId}/{assetId} {
+      allow read: if active() && profile().institutionId == institutionId;
+      allow write: if isStaff()
+        && profile().institutionId == institutionId
+        && safeUpload();
+    }
+
+    match /institutions/{institutionId}/submissions/{studentId}/{submissionId}/{assetId} {
+      allow read: if active()
+        && profile().institutionId == institutionId
+        && (request.auth.uid == studentId || isStaff());
+      allow create, update: if active()
+        && profile().institutionId == institutionId
+        && request.auth.uid == studentId
+        && safeUpload();
+      allow delete: if false;
+    }
+
+    match /institutions/{institutionId}/wall/{postId}/{assetId} {
+      allow read: if active() && profile().institutionId == institutionId;
+      allow write: if isStaff()
+        && profile().institutionId == institutionId
+        && safeUpload();
+    }
+
+    match /institutions/{institutionId}/forum/{topicId}/{postId}/{assetId} {
+      allow read: if active() && profile().institutionId == institutionId;
+      allow create: if active()
+        && profile().institutionId == institutionId
+        && safeUpload();
+      allow update, delete: if isStaff()
+        && profile().institutionId == institutionId;
+    }
+
+    match /institutions/{institutionId}/profiles/{userId}/{assetId} {
+      allow read: if active() && profile().institutionId == institutionId;
+      allow write: if active()
+        && profile().institutionId == institutionId
+        && (request.auth.uid == userId || profile().role == "director")
+        && request.resource.size < 4 * 1024 * 1024
+        && request.resource.contentType.matches("image/.*");
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
