@@ -28,7 +28,6 @@ import {
   Newspaper,
   Plus,
   Search,
-  Send,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -42,6 +41,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
+import { ForumPage } from "@/components/forum-page";
 import {
   createFirstDirector,
   firebaseConfigured,
@@ -61,6 +61,8 @@ import {
   subjectColors,
 } from "@/lib/demo-data";
 import type {
+  ForumTopic,
+  ForumTopicKind,
   PortalState,
   ProgressLevel,
   Role,
@@ -69,6 +71,18 @@ import type {
 } from "@/lib/types";
 
 type IconType = typeof Home;
+
+type ForumDraftDetails = {
+  prompt: string;
+  group: string;
+  forumName: string;
+  kind: ForumTopicKind;
+  status: ForumTopic["status"];
+  opensAt: string;
+  closesAt: string;
+  allowReplies: boolean;
+  allowAttachments: boolean;
+};
 
 const routes: Record<SectionKey, string> = {
   dashboard: "/dashboard",
@@ -185,7 +199,28 @@ export function CEHFApp() {
     if (saved) {
       try {
         const restored = JSON.parse(saved) as PortalState;
-        queueMicrotask(() => setState(restored));
+        const defaults = createDemoState();
+        const hasCurrentForumModel = restored.forumTopics?.some(
+          (topic) => "forumId" in topic && "allowReplies" in topic,
+        );
+        const migrated = hasCurrentForumModel
+          ? {
+              ...defaults,
+              ...restored,
+              forumModeration:
+                restored.forumModeration ?? defaults.forumModeration,
+            }
+          : {
+              ...defaults,
+              ...restored,
+              forumTopics: defaults.forumTopics,
+              forumModeration: defaults.forumModeration,
+            };
+        window.localStorage.setItem(
+          "cehf-demo-state",
+          JSON.stringify(migrated),
+        );
+        queueMicrotask(() => setState(migrated));
       } catch {
         window.localStorage.removeItem("cehf-demo-state");
       }
@@ -488,7 +523,7 @@ export function CEHFApp() {
           <CreateModal
             section={activeSection}
             onClose={() => setCreateOpen(false)}
-            onCreate={(titleValue, subject) => {
+            onCreate={(titleValue, subject, forumDraft) => {
               const id = `${activeSection}-${Date.now()}`;
               updateState((previous) => {
                 if (activeSection === "tasks") {
@@ -549,18 +584,44 @@ export function CEHFApp() {
                   };
                 }
                 if (activeSection === "forum") {
+                  const details = forumDraft ?? {
+                    prompt:
+                      "Escribe una consigna clara para iniciar la conversación.",
+                    group: "5.º A",
+                    forumName: `${subject} · 5.º A`,
+                    kind: "subject" as const,
+                    status: "open" as const,
+                    opensAt: "Publicado ahora",
+                    closesAt: "Sin fecha de cierre",
+                    allowReplies: true,
+                    allowAttachments: false,
+                  };
                   return {
                     ...previous,
                     forumTopics: [
                       {
                         id,
+                        forumId: `custom-${Date.now()}`,
+                        forumName: details.forumName,
                         title: titleValue,
-                        prompt:
-                          "Escribe una consigna clara para iniciar la conversación.",
+                        prompt: details.prompt,
+                        kind: details.kind,
                         subject,
-                        group: "5.º A",
-                        closesAt: "Sin fecha de cierre",
-                        status: "open",
+                        group: details.group,
+                        responsible: currentProfile.name,
+                        participants: [
+                          currentProfile.name.split(" ")[0],
+                          "Sofía",
+                          "Diego",
+                          "Emilia",
+                        ],
+                        opensAt: details.opensAt,
+                        closesAt: details.closesAt,
+                        status: details.status,
+                        allowReplies: details.allowReplies,
+                        allowAttachments: details.allowAttachments,
+                        lastActivity:
+                          details.status === "scheduled" ? "Programado" : "Ahora",
                         replies: [],
                       },
                       ...previous.forumTopics,
@@ -602,7 +663,13 @@ export function CEHFApp() {
                   };
                 }
                 return previous;
-              }, "Borrador creado");
+              },
+              activeSection === "forum"
+                ? forumDraft?.status === "scheduled"
+                  ? "Conversación programada"
+                  : "Conversación publicada"
+                : "Borrador creado",
+              );
               setCreateOpen(false);
             }}
           />
@@ -2020,172 +2087,6 @@ function WallPage({
   );
 }
 
-function ForumPage({
-  state,
-  updateState,
-  profile,
-  role,
-}: {
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-  profile: UserProfile;
-  role: Role;
-}) {
-  const [selected, setSelected] = useState(state.forumTopics[0]?.id);
-  const [reply, setReply] = useState("");
-  const topic =
-    state.forumTopics.find((item) => item.id === selected) ??
-    state.forumTopics[0];
-  if (!topic) return null;
-  return (
-    <div className="forum-layout">
-      <aside className="forum-list panel">
-        <div className="small-search">
-          <Search size={17} />
-          <input aria-label="Buscar conversaciones" placeholder="Buscar tema…" />
-        </div>
-        <span className="nav-kicker">Conversaciones abiertas</span>
-        {state.forumTopics.map((item) => (
-          <button
-            key={item.id}
-            className={selected === item.id ? "active" : ""}
-            onClick={() => setSelected(item.id)}
-          >
-            <span className={`status-dot ${item.status === "open" ? "achieved" : "not_observed"}`} />
-            <span>
-              <strong>{item.title}</strong>
-              <small>
-                {item.subject} · {item.replies.length} respuestas
-              </small>
-            </span>
-          </button>
-        ))}
-      </aside>
-      <section className="forum-thread panel">
-        <div className="thread-header">
-          <div>
-            <div className="list-card-meta">
-              <span>{topic.subject}</span>
-              <i>•</i>
-              <span>{topic.group}</span>
-              <i>•</i>
-              <span>{topic.closesAt}</span>
-            </div>
-            <h2>{topic.title}</h2>
-          </div>
-          {role !== "student" && (
-            <button
-              className="secondary-button"
-              onClick={() =>
-                updateState(
-                  (previous) => ({
-                    ...previous,
-                    forumTopics: previous.forumTopics.map((item) =>
-                      item.id === topic.id
-                        ? {
-                            ...item,
-                            status: item.status === "open" ? "closed" : "open",
-                          }
-                        : item,
-                    ),
-                  }),
-                  topic.status === "open" ? "Conversación cerrada" : "Conversación abierta",
-                )
-              }
-            >
-              {topic.status === "open" ? "Cerrar tema" : "Reabrir tema"}
-            </button>
-          )}
-        </div>
-        <div className="prompt-card">
-          <CircleHelp size={22} />
-          <div>
-            <span>Consigna</span>
-            <p>{topic.prompt}</p>
-          </div>
-        </div>
-        <div className="community-reminder">
-          <ShieldCheck size={17} />
-          Comparte ideas con respeto. No publiques datos personales o
-          calificaciones.
-        </div>
-        <div className="replies">
-          {topic.replies.map((item) => (
-            <article className={`reply ${item.teacher ? "teacher-reply" : ""}`} key={item.id}>
-              <span className="avatar small">{item.initials}</span>
-              <div>
-                <div className="reply-meta">
-                  <strong>{item.author}</strong>
-                  {item.teacher && <span>Docente</span>}
-                  <small>{item.createdAt}</small>
-                </div>
-                <p>{item.body}</p>
-                <button className="text-button">Responder</button>
-              </div>
-            </article>
-          ))}
-          {!topic.replies.length && (
-            <div className="empty-state compact-empty">
-              <MessageCircle size={28} />
-              <strong>Inicia la conversación</strong>
-              <p>Comparte la primera idea con el grupo.</p>
-            </div>
-          )}
-        </div>
-        {topic.status === "open" && (
-          <form
-            className="reply-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!reply.trim()) return;
-              updateState(
-                (previous) => ({
-                  ...previous,
-                  forumTopics: previous.forumTopics.map((item) =>
-                    item.id === topic.id
-                      ? {
-                          ...item,
-                          replies: [
-                            ...item.replies,
-                            {
-                              id: `reply-${Date.now()}`,
-                              author: profile.name,
-                              initials: profile.initials,
-                              body: reply.trim(),
-                              createdAt: "Ahora",
-                              teacher: role !== "student",
-                            },
-                          ],
-                        }
-                      : item,
-                  ),
-                }),
-                "Tu respuesta se publicó en el grupo",
-              );
-              setReply("");
-            }}
-          >
-            <span className="avatar small">{profile.initials}</span>
-            <textarea
-              aria-label="Escribe tu respuesta"
-              value={reply}
-              onChange={(event) => setReply(event.target.value)}
-              placeholder="Comparte tu idea con respeto…"
-              rows={3}
-            />
-            <button className="primary-button" disabled={!reply.trim()}>
-              <Send size={17} /> Publicar
-            </button>
-          </form>
-        )}
-      </section>
-    </div>
-  );
-}
-
 function UsersPage({ role }: { role: Role }) {
   if (role === "student") {
     return (
@@ -2598,10 +2499,26 @@ function CreateModal({
 }: {
   section: SectionKey;
   onClose: () => void;
-  onCreate: (title: string, subject: string) => void;
+  onCreate: (
+    title: string,
+    subject: string,
+    forumDraft?: ForumDraftDetails,
+  ) => void;
 }) {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("Ciencias");
+  const [prompt, setPrompt] = useState("");
+  const [group, setGroup] = useState("5.º A");
+  const [forumName, setForumName] = useState("Ciencias · 5.º A");
+  const [forumKind, setForumKind] =
+    useState<ForumTopicKind>("weekly_question");
+  const [forumStatus, setForumStatus] =
+    useState<ForumTopic["status"]>("open");
+  const [opensAt, setOpensAt] = useState("Publicado ahora");
+  const [closesAt, setClosesAt] = useState("Cierra el viernes");
+  const [allowReplies, setAllowReplies] = useState(true);
+  const [allowAttachments, setAllowAttachments] = useState(false);
+  const isForum = section === "forum";
   return (
     <motion.div
       className="modal-backdrop"
@@ -2613,18 +2530,36 @@ function CreateModal({
       }}
     >
       <motion.form
-        className="modal"
+        className={`modal ${isForum ? "forum-create-modal" : ""}`}
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
         onSubmit={(event) => {
           event.preventDefault();
-          onCreate(title.trim(), subject);
+          onCreate(
+            title.trim(),
+            subject,
+            isForum
+              ? {
+                  prompt: prompt.trim(),
+                  group,
+                  forumName: forumName.trim(),
+                  kind: forumKind,
+                  status: forumStatus,
+                  opensAt: opensAt.trim(),
+                  closesAt: closesAt.trim(),
+                  allowReplies,
+                  allowAttachments,
+                }
+              : undefined,
+          );
         }}
       >
         <div className="modal-heading">
           <div>
-            <span className="eyebrow">Nuevo borrador</span>
+            <span className="eyebrow">
+              {isForum ? "Conversación guiada" : "Nuevo borrador"}
+            </span>
             <h2>{createLabel(section)}</h2>
           </div>
           <button className="plain-icon" type="button" onClick={onClose}>
@@ -2645,7 +2580,10 @@ function CreateModal({
           Materia o campo
           <select
             value={subject}
-            onChange={(event) => setSubject(event.target.value)}
+            onChange={(event) => {
+              setSubject(event.target.value);
+              if (isForum) setForumName(`${event.target.value} · ${group}`);
+            }}
           >
             <option>Ciencias</option>
             <option>Matemáticas</option>
@@ -2653,19 +2591,145 @@ function CreateModal({
             <option>Comunidad</option>
           </select>
         </label>
-        <div className="setup-note compact-note">
-          <ShieldCheck size={19} />
-          <p>
-            Se guardará como borrador. Podrás revisar audiencia, fechas y
-            accesibilidad antes de publicar.
-          </p>
-        </div>
+        {isForum ? (
+          <>
+            <label>
+              Consigna
+              <textarea
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="Escribe la pregunta o indicación que guiará la conversación"
+                rows={3}
+                required
+              />
+            </label>
+            <div className="forum-create-grid">
+              <label>
+                Tipo de foro
+                <select
+                  value={forumKind}
+                  onChange={(event) => {
+                    const nextKind = event.target.value as ForumTopicKind;
+                    setForumKind(nextKind);
+                    if (nextKind === "announcement") setAllowReplies(false);
+                  }}
+                >
+                  <option value="weekly_question">Pregunta de la semana</option>
+                  <option value="subject">Foro de materia</option>
+                  <option value="reading_club">Club de lectura</option>
+                  <option value="task_help">Dudas sobre una tarea</option>
+                  <option value="group_chat">Conversación de grupo</option>
+                  <option value="wall">Foro del periódico</option>
+                  <option value="announcement">Aviso institucional</option>
+                </select>
+              </label>
+              <label>
+                Grupo
+                <select
+                  value={group}
+                  onChange={(event) => {
+                    setGroup(event.target.value);
+                    setForumName(`${subject} · ${event.target.value}`);
+                  }}
+                >
+                  <option>5.º A</option>
+                  <option>5.º B</option>
+                  <option>4.º–6.º</option>
+                  <option>Toda Primaria</option>
+                </select>
+              </label>
+              <label>
+                Espacio
+                <input
+                  value={forumName}
+                  onChange={(event) => setForumName(event.target.value)}
+                  placeholder="Ciencias · 5.º A"
+                  required
+                />
+              </label>
+              <label>
+                Publicación
+                <select
+                  value={forumStatus}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value as ForumTopic["status"];
+                    setForumStatus(nextStatus);
+                    setOpensAt(
+                      nextStatus === "scheduled"
+                        ? "Se abre el lunes · 07:00"
+                        : "Publicado ahora",
+                    );
+                  }}
+                >
+                  <option value="open">Publicar ahora</option>
+                  <option value="scheduled">Programar</option>
+                  <option value="closed">Publicar cerrado</option>
+                </select>
+              </label>
+              <label>
+                Apertura
+                <input
+                  value={opensAt}
+                  onChange={(event) => setOpensAt(event.target.value)}
+                />
+              </label>
+              <label>
+                Cierre
+                <input
+                  value={closesAt}
+                  onChange={(event) => setClosesAt(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="forum-create-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={allowReplies}
+                  onChange={(event) => setAllowReplies(event.target.checked)}
+                />
+                Permitir respuestas
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={allowAttachments}
+                  onChange={(event) => setAllowAttachments(event.target.checked)}
+                />
+                Permitir un adjunto
+              </label>
+            </div>
+            <div className="setup-note compact-note">
+              <ShieldCheck size={19} />
+              <p>
+                La audiencia será el grupo seleccionado y la conversación
+                quedará disponible para moderación.
+              </p>
+            </div>
+          </>
+        ) : (
+          <div className="setup-note compact-note">
+            <ShieldCheck size={19} />
+            <p>
+              Se guardará como borrador. Podrás revisar audiencia, fechas y
+              accesibilidad antes de publicar.
+            </p>
+          </div>
+        )}
         <div className="modal-actions">
           <button className="secondary-button" type="button" onClick={onClose}>
             Cancelar
           </button>
-          <button className="primary-button" disabled={!title.trim()}>
-            Crear borrador <ArrowRight size={17} />
+          <button
+            className="primary-button"
+            disabled={!title.trim() || (isForum && !prompt.trim())}
+          >
+            {isForum
+              ? forumStatus === "scheduled"
+                ? "Programar tema"
+                : "Publicar tema"
+              : "Crear borrador"}{" "}
+            <ArrowRight size={17} />
           </button>
         </div>
       </motion.form>

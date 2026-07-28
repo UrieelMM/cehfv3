@@ -97,6 +97,15 @@ export type WallPost = {
   favorite: boolean;
 };
 
+export type ForumReactionKind = "helpful" | "interesting" | "celebrate";
+
+export type ForumAttachment = {
+  id: string;
+  name: string;
+  type: "image" | "document" | "link";
+  sizeLabel?: string;
+};
+
 export type ForumReply = {
   id: string;
   author: string;
@@ -104,17 +113,57 @@ export type ForumReply = {
   body: string;
   createdAt: string;
   teacher?: boolean;
+  parentId?: string;
+  attachment?: ForumAttachment;
+  reactions?: Partial<Record<ForumReactionKind, number>>;
+  reactedByMe?: ForumReactionKind[];
+  status?: "visible" | "hidden";
+  reports?: number;
+  markedAnswer?: boolean;
+  edited?: boolean;
 };
+
+export type ForumTopicKind =
+  | "weekly_question"
+  | "subject"
+  | "reading_club"
+  | "task_help"
+  | "group_chat"
+  | "wall"
+  | "announcement";
 
 export type ForumTopic = {
   id: string;
+  forumId: string;
+  forumName: string;
   title: string;
   prompt: string;
+  kind: ForumTopicKind;
   subject: string;
   group: string;
+  responsible: string;
+  participants: string[];
+  opensAt?: string;
   closesAt: string;
-  status: "open" | "closed";
+  status: "open" | "scheduled" | "closed" | "archived";
+  allowReplies: boolean;
+  allowAttachments: boolean;
+  pinned?: boolean;
+  unreadCount?: number;
+  lastActivity: string;
   replies: ForumReply[];
+};
+
+export type ForumModerationCase = {
+  id: string;
+  topicId: string;
+  replyId: string;
+  author: string;
+  excerpt: string;
+  reason: string;
+  reportedAt: string;
+  status: "open" | "hidden" | "dismissed" | "restored";
+  resolvedBy?: string;
 };
 
 export type AppNotification = {
@@ -150,6 +199,7 @@ export type PortalState = {
   reports: WeeklyReport[];
   wallPosts: WallPost[];
   forumTopics: ForumTopic[];
+  forumModeration: ForumModerationCase[];
   notifications: AppNotification[];
   settings: PortalSettings;
   updatedAt?: string;

@@ -46,6 +46,7 @@ test("supports the documented application routes", async () => {
     "/weekly-progress",
     "/wall-newspaper",
     "/forum",
+    "/forum/science-5a/topic-cambios",
   ]) {
     const response = await render(pathname);
     assert.equal(response.status, 200, `${pathname} should render`);
