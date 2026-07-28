@@ -6231,3 +6231,181 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+/* Readability pass: larger type while preserving the existing hierarchy */
+.sidebar-nav button,
+.sidebar-footer > button {
+  font-size: 0.92rem;
+}
+
+.week-switcher strong {
+  font-size: 0.94rem;
+}
+
+.search input,
+.small-search input {
+  font-size: 0.86rem;
+}
+
+.profile-copy strong {
+  font-size: 0.87rem;
+}
+
+.profile-copy small,
+.demo-switcher > span {
+  font-size: 0.72rem;
+}
+
+.eyebrow,
+.story-kicker,
+.card-kicker,
+.mini-label {
+  font-size: 0.75rem;
+}
+
+.primary-button,
+.secondary-button,
+.light-button {
+  font-size: 0.86rem;
+}
+
+.forum-page {
+  --forum-text-xs: 0.69rem;
+  --forum-text-sm: 0.77rem;
+  --forum-text-md: 0.86rem;
+  --forum-text-body: 0.92rem;
+}
+
+.forum-hero-kicker {
+  font-size: 0.74rem;
+}
+
+.forum-community-hero p {
+  font-size: var(--forum-text-body);
+}
+
+.forum-hero-stats > div span,
+.forum-hero-stats > button span,
+.forum-card-heading span,
+.forum-section-kicker,
+.forum-space small,
+.forum-space em,
+.forum-topic-item-copy small,
+.forum-topic-item-copy em,
+.forum-unread,
+.forum-post-author > span,
+.forum-status,
+.forum-post-labels > span,
+.forum-post-meta span,
+.forum-participation-summary p span,
+.forum-participation-summary > button,
+.forum-conversation-heading small,
+.forum-teacher-label,
+.forum-you-label,
+.forum-reply-author > small,
+.forum-marked-label,
+.forum-attachment small,
+.forum-pending-attachment small,
+.forum-reply-actions button,
+.forum-first-reply p,
+.forum-composer-toolbar > div button,
+.forum-composer-toolbar > span,
+.forum-composer-toolbar .forum-publish-button,
+.forum-replying-to,
+.forum-composer-error,
+.forum-mention-menu > span,
+.forum-mention-menu button,
+.forum-closed-note span,
+.forum-safety-card > span,
+.forum-case-preview > span,
+.forum-case-preview small,
+.forum-case-preview button,
+.forum-all-clear span,
+.forum-participation-card > div span,
+.forum-private-note,
+.forum-guideline-list > div > span,
+.forum-guideline-list p,
+.forum-setting-toggles small,
+.forum-case-heading small,
+.forum-case-status,
+.forum-moderation-summary span,
+.forum-moderation-list article > span,
+.forum-moderation-list article > em,
+.forum-moderation-list article button,
+.forum-moderation-drawer > footer {
+  font-size: var(--forum-text-xs);
+}
+
+.forum-search input,
+.forum-select select,
+.forum-status-pills button,
+.forum-space strong,
+.forum-topic-item-copy strong,
+.forum-load-more,
+.forum-context-link,
+.forum-post-author strong,
+.forum-participation-summary p strong,
+.forum-conversation-heading strong,
+.forum-reply-author strong,
+.forum-attachment strong,
+.forum-pending-attachment strong,
+.forum-closed-note strong,
+.forum-safety-card li,
+.forum-safety-card > button,
+.forum-case-preview p,
+.forum-all-clear strong,
+.forum-participation-card p,
+.forum-guideline-list strong,
+.forum-field,
+.forum-create-grid label,
+.forum-setting-toggles strong,
+.forum-create-options label,
+.forum-moderation-list article > strong {
+  font-size: var(--forum-text-sm);
+}
+
+.forum-post-content > p,
+.forum-reply-content > p,
+.forum-composer textarea,
+.forum-guidelines-dialog > p {
+  font-size: var(--forum-text-body);
+}
+
+.forum-field input,
+.forum-field select,
+.forum-field textarea,
+.forum-create-grid input,
+.forum-create-grid select,
+.forum-create-modal > label textarea {
+  font-size: var(--forum-text-md);
+}
+
+.forum-space {
+  min-height: 58px;
+}
+
+.forum-topic-item {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.forum-post-content > p,
+.forum-reply-content > p {
+  line-height: 1.68;
+}
+
+.forum-social-layout {
+  grid-template-columns: 250px minmax(0, 1fr) 260px;
+}
+
+@media (max-width: 1240px) {
+  .forum-social-layout {
+    grid-template-columns: 235px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .forum-social-layout {
+    grid-template-columns: 1fr;
+  }
+}
