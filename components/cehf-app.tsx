@@ -26,7 +26,9 @@ import {
   Moon,
   MoreHorizontal,
   Newspaper,
+  Pencil,
   Plus,
+  Quote,
   Search,
   Settings,
   ShieldCheck,
@@ -207,12 +209,14 @@ export function CEHFApp() {
           ? {
               ...defaults,
               ...restored,
+              weeklyVerse: restored.weeklyVerse ?? defaults.weeklyVerse,
               forumModeration:
                 restored.forumModeration ?? defaults.forumModeration,
             }
           : {
               ...defaults,
               ...restored,
+              weeklyVerse: restored.weeklyVerse ?? defaults.weeklyVerse,
               forumTopics: defaults.forumTopics,
               forumModeration: defaults.forumModeration,
             };
@@ -927,6 +931,7 @@ function SectionContent({
       return (
         <Dashboard
           role={role}
+          profile={profile}
           state={state}
           navigate={navigate}
           updateState={updateState}
@@ -1006,11 +1011,13 @@ function SectionContent({
 
 function Dashboard({
   role,
+  profile,
   state,
   navigate,
   updateState,
 }: {
   role: Role;
+  profile: UserProfile;
   state: PortalState;
   navigate: (section: SectionKey) => void;
   updateState: (
@@ -1022,6 +1029,12 @@ function Dashboard({
     const director = role === "director";
     return (
       <div className="dashboard-stack">
+        <WeeklyVerseCard
+          role={role}
+          profile={profile}
+          state={state}
+          updateState={updateState}
+        />
         <section className="hero-card teacher-hero">
           <div className="hero-copy">
             <span className="pill pill-light">
@@ -1148,6 +1161,12 @@ function Dashboard({
   const nextReview = state.reviews.find((review) => review.progress < 100);
   return (
     <div className="dashboard-stack">
+      <WeeklyVerseCard
+        role={role}
+        profile={profile}
+        state={state}
+        updateState={updateState}
+      />
       <section className="hero-card">
         <div className="hero-copy">
           <span className="pill pill-light">
@@ -1299,6 +1318,171 @@ function Dashboard({
         </article>
       </section>
     </div>
+  );
+}
+
+function WeeklyVerseCard({
+  role,
+  profile,
+  state,
+  updateState,
+}: {
+  role: Role;
+  profile: UserProfile;
+  state: PortalState;
+  updateState: (
+    updater: (previous: PortalState) => PortalState,
+    message?: string,
+  ) => void;
+}) {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const canEdit = role === "teacher" || role === "director";
+
+  return (
+    <>
+      <section className="weekly-verse" aria-labelledby="weekly-verse-title">
+        <div className="weekly-verse-icon" aria-hidden="true">
+          <Quote size={24} />
+        </div>
+        <div className="weekly-verse-copy">
+          <span className="eyebrow">Versículo bíblico de la semana</span>
+          <blockquote id="weekly-verse-title">
+            “{state.weeklyVerse.text}”
+          </blockquote>
+          <div className="weekly-verse-meta">
+            <cite>{state.weeklyVerse.reference}</cite>
+            <span aria-hidden="true">·</span>
+            <span>Establecido por {state.weeklyVerse.updatedBy}</span>
+          </div>
+        </div>
+        {canEdit && (
+          <button
+            className="secondary-button weekly-verse-edit"
+            onClick={() => setEditorOpen(true)}
+          >
+            <Pencil size={16} />
+            Editar versículo
+          </button>
+        )}
+      </section>
+
+      <AnimatePresence>
+        {editorOpen && (
+          <VerseEditorModal
+            text={state.weeklyVerse.text}
+            reference={state.weeklyVerse.reference}
+            onClose={() => setEditorOpen(false)}
+            onSave={(text, reference) => {
+              updateState(
+                (previous) => ({
+                  ...previous,
+                  weeklyVerse: {
+                    text,
+                    reference,
+                    updatedBy: profile.name,
+                    updatedAt: new Date().toISOString(),
+                  },
+                }),
+                "Versículo semanal actualizado",
+              );
+              setEditorOpen(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
+function VerseEditorModal({
+  text,
+  reference,
+  onClose,
+  onSave,
+}: {
+  text: string;
+  reference: string;
+  onClose: () => void;
+  onSave: (text: string, reference: string) => void;
+}) {
+  const [verseText, setVerseText] = useState(text);
+  const [verseReference, setVerseReference] = useState(reference);
+  const ready = Boolean(verseText.trim() && verseReference.trim());
+
+  return (
+    <motion.div
+      className="modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <motion.form
+        className="modal verse-editor-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="verse-editor-title"
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (ready) onSave(verseText.trim(), verseReference.trim());
+        }}
+      >
+        <div className="modal-heading">
+          <div>
+            <span className="eyebrow">Mensaje para toda la comunidad</span>
+            <h2 id="verse-editor-title">Versículo de la semana</h2>
+          </div>
+          <button
+            className="plain-icon"
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar editor"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <label>
+          Versículo
+          <textarea
+            autoFocus
+            value={verseText}
+            onChange={(event) => setVerseText(event.target.value)}
+            placeholder="Escribe el texto del versículo"
+            maxLength={300}
+            rows={4}
+            required
+          />
+          <small>{verseText.length}/300 caracteres</small>
+        </label>
+        <label>
+          Referencia bíblica
+          <input
+            value={verseReference}
+            onChange={(event) => setVerseReference(event.target.value)}
+            placeholder="Ej. Filipenses 4:13"
+            maxLength={80}
+            required
+          />
+        </label>
+        <div className="setup-note compact-note">
+          <BookOpen size={19} />
+          <p>Al guardar, el versículo aparecerá en el Inicio de todos los roles.</p>
+        </div>
+        <div className="modal-actions">
+          <button className="secondary-button" type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="primary-button" type="submit" disabled={!ready}>
+            Guardar versículo
+          </button>
+        </div>
+      </motion.form>
+    </motion.div>
   );
 }
 

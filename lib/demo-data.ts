@@ -45,6 +45,12 @@ export const createDemoState = (): PortalState => ({
     ],
     completion: 68,
   },
+  weeklyVerse: {
+    text: "Todo lo puedo en Cristo que me fortalece.",
+    reference: "Filipenses 4:13",
+    updatedBy: "Dirección",
+    updatedAt: "2026-07-20T13:00:00.000Z",
+  },
   reviews: [
     {
       id: "review-ciencias",

@@ -674,6 +674,66 @@ code {
   gap: 26px;
 }
 
+.weekly-verse {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 21px 23px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--gold) 24%, var(--border));
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(circle at 96% 10%, color-mix(in srgb, var(--gold-soft) 72%, transparent) 0 76px, transparent 77px),
+    color-mix(in srgb, var(--gold-soft) 36%, var(--surface));
+  box-shadow: var(--shadow-sm);
+}
+
+.weekly-verse-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
+.weekly-verse-copy {
+  min-width: 0;
+}
+
+.weekly-verse blockquote {
+  margin: 6px 0 7px;
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.015em;
+}
+
+.weekly-verse-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.weekly-verse-meta cite {
+  color: var(--gold);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.weekly-verse-edit {
+  position: relative;
+  z-index: 1;
+  white-space: nowrap;
+}
+
 .hero-card {
   position: relative;
   display: flex;
@@ -3051,6 +3111,7 @@ code {
 .login-form input,
 .modal input,
 .modal select,
+.verse-editor-modal textarea,
 .drawer-body textarea {
   width: 100%;
   min-height: 44px;
@@ -3061,6 +3122,18 @@ code {
   color: var(--foreground);
   font-size: 0.78rem;
   font-weight: 450;
+}
+
+.verse-editor-modal textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.verse-editor-modal label small {
+  align-self: flex-end;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 500;
 }
 
 .password-field {
@@ -3720,6 +3793,17 @@ code {
     min-height: 0;
     padding: 27px 22px;
     flex-direction: column;
+  }
+
+  .weekly-verse {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    padding: 19px;
+  }
+
+  .weekly-verse-edit {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .hero-copy h2,

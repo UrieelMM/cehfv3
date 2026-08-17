@@ -22,6 +22,13 @@ export type WeekPlan = {
   completion: number;
 };
 
+export type WeeklyVerse = {
+  text: string;
+  reference: string;
+  updatedBy: string;
+  updatedAt: string;
+};
+
 export type Review = {
   id: string;
   title: string;
@@ -192,6 +199,7 @@ export type PortalSettings = {
 
 export type PortalState = {
   week: WeekPlan;
+  weeklyVerse: WeeklyVerse;
   reviews: Review[];
   tasks: Task[];
   materials: Material[];
