@@ -107,6 +107,12 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   );
   assert.match(storageRules, /safeUpload/);
   assert.match(storageRules, /canUploadTaskSubmission/);
+  assert.match(storageRules, /function canManageProfilePhoto/);
+  assert.match(
+    storageRules,
+    /allow create, update: if canManageProfilePhoto\(institutionId, userId\)/,
+  );
+  assert.match(storageRules, /image\/\(jpeg\|png\|webp\)/);
   assert.match(storageRules, /function isDirector/);
   assert.match(storageRules, /request\.auth\.token\.role == "director"/);
   assert.match(indexes, /weeklyMaterials/);

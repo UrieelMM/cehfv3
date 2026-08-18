@@ -32,6 +32,12 @@ service firebase.storage {
       return active() && profile().institutionId == institutionId;
     }
 
+    function canManageProfilePhoto(institutionId, userId) {
+      return sameInstitution(institutionId) && (
+        request.auth.uid == userId || profile().role == "director"
+      );
+    }
+
     function safeUpload() {
       return request.resource.size < 20 * 1024 * 1024
         && request.resource.contentType.matches(
@@ -154,10 +160,9 @@ service firebase.storage {
 
     match /institutions/{institutionId}/profiles/{userId}/{assetId} {
       allow read: if sameInstitution(institutionId);
-      allow create, update: if sameInstitution(institutionId)
-        && (request.auth.uid == userId || isDirector())
+      allow create, update: if canManageProfilePhoto(institutionId, userId)
         && request.resource.size < 4 * 1024 * 1024
-        && request.resource.contentType.matches("image/.*");
+        && request.resource.contentType.matches("image/(jpeg|png|webp)");
       allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
