@@ -208,6 +208,15 @@ service cloud.firestore {
             && data.institutionId == institutionId;
         }
 
+        // Las consultas collectionGroup no pueden demostrar el valor de un
+        // segmento comodín de la ruta. Para lecturas se usa el ámbito
+        // institucional inmutable del documento; create/update siguen
+        // exigiendo que ese valor coincida también con la ruta física.
+        function canReadTaskInstitution(data) {
+          return isActive()
+            && data.institutionId == profile().institutionId;
+        }
+
         function isTaskStaff(data) {
           return isDirector() || (
             roleIs("teacher") && data.createdBy == request.auth.uid
@@ -252,7 +261,7 @@ service cloud.firestore {
             );
         }
 
-        allow read: if taskBelongsToInstitution(resource.data) && (
+        allow read: if canReadTaskInstitution(resource.data) && (
           isTaskStaff(resource.data) || (
             isAssignedStudent(resource.data)
             && resource.data.status in ["published", "closed"]

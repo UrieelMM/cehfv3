@@ -113,6 +113,15 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(indexes, /"collectionGroup": "tareas"/);
   assert.match(firestoreRules, /ciclosEscolares\/\{schoolYearId\}/);
   assert.match(firestoreRules, /function canStudentSubmit/);
+  assert.match(firestoreRules, /function canReadTaskInstitution/);
+  assert.match(
+    firestoreRules,
+    /allow read: if canReadTaskInstitution\(resource\.data\)/,
+  );
+  assert.match(
+    firestoreRules,
+    /allow create: if taskBelongsToInstitution\(request\.resource\.data\)/,
+  );
   assert.match(firestoreRules, /function validCurrentTaskScope/);
   assert.match(firestoreRules, /function validCalendarScope/);
   assert.match(firestoreRules, /match \/semanas\/\{weekId\}/);
