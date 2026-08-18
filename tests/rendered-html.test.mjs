@@ -147,6 +147,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /account-registration-modal/);
   assert.match(appSource, /Nivel escolar/);
   assert.match(appSource, /Alumno · \$\{schoolLevelLabels\[schoolLevel\]\}/);
+  assert.match(appSource, /registration-summary-avatar/);
+  assert.match(appSource, /backgroundImage: `url\(\$\{photoPreview\}\)`/);
   assert.match(appSource, /Contraseña temporal/);
   assert.match(appSource, /setAuthReady\(false\)/);
   assert.match(appSource, /No pudimos cargar tu acceso/);

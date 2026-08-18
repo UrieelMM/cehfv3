@@ -3633,7 +3633,15 @@ function AccountRegistrationModal({
                   <div><strong>{firebaseReady ? "Firebase conectado" : "Modo demostración"}</strong><small>{firebaseReady ? "La cuenta se guardará en Auth, Firestore y Storage" : "La interfaz ya está lista para tus variables .env"}</small></div>
                 </div>
                 <motion.article className="registration-summary-card" layout>
-                  <span className="registration-summary-avatar">{firstName[0]?.toUpperCase() || (accountRole === "student" ? "A" : "M")}{lastName[0]?.toUpperCase() || ""}</span>
+                  <motion.span
+                    className="registration-summary-avatar"
+                    role="img"
+                    aria-label={photoPreview ? `Fotografía de ${displayName}` : `Iniciales de ${displayName}`}
+                    animate={{ scale: photoPreview ? [0.94, 1.04, 1] : 1 }}
+                    style={photoPreview ? { backgroundImage: `url(${photoPreview})` } : undefined}
+                  >
+                    {!photoPreview && <>{firstName[0]?.toUpperCase() || (accountRole === "student" ? "A" : "M")}{lastName[0]?.toUpperCase() || ""}</>}
+                  </motion.span>
                   <span className="role-chip">{accountRole === "student" ? `Alumno · ${schoolLevelLabels[schoolLevel]}` : "Maestro"}</span>
                   <h3>{displayName}</h3>
                   <p>{email.trim() || "correo@cehf.edu.mx"}</p>
