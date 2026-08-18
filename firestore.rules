@@ -46,6 +46,21 @@ service cloud.firestore {
       return isActive() && data.institutionId == profile().institutionId;
     }
 
+    function canQueryAcademicTask(data) {
+      return sameInstitution(data) && (
+        isDirector() ||
+        (
+          roleIs("teacher")
+          && data.createdBy == request.auth.uid
+        ) ||
+        (
+          roleIs("student")
+          && data.targetGroup == profile().grade + " " + profile().group
+          && data.status in ["published", "closed"]
+        )
+      );
+    }
+
     function calendarWeekPath(institutionId, schoolYearId, weekId) {
       return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/semanas/$(weekId);
     }
@@ -107,6 +122,13 @@ service cloud.firestore {
     match /system/bootstrap {
       allow read: if isDirector();
       allow write: if false;
+    }
+
+    // Firestore evalúa collectionGroup("tareas") contra todas las rutas que
+    // terminan en /tareas/{taskId}. El comodín recursivo es obligatorio para
+    // autorizar esa consulta; los filtros de datos mantienen el aislamiento.
+    match /{taskPath=**}/tareas/{taskId} {
+      allow list: if canQueryAcademicTask(resource.data);
     }
 
     match /users/{userId} {
