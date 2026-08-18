@@ -68,6 +68,7 @@ import {
   loginWithEmail,
   logoutFirebase,
   refreshPortalAccess,
+  PROFILE_PHOTO_MIME_TYPES,
   resetPassword,
   savePortalState,
   watchAuth,
@@ -3216,7 +3217,7 @@ function AccountRegistrationModal({
   function selectPhoto(file?: File) {
     if (!file) return;
     if (
-      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      !PROFILE_PHOTO_MIME_TYPES.includes(file.type) ||
       file.size >= 4 * 1024 * 1024
     ) {
       toast.error("Fotografía no válida", {
@@ -3555,7 +3556,7 @@ function AccountRegistrationModal({
                     >
                       {!photoPreview && <UserRound size={28} />}
                     </motion.span>
-                    <div><strong>Fotografía de perfil</strong><p>JPG, PNG o WEBP · máximo 4 MB.</p><label className="secondary-button"><UploadCloud size={15} /> {photo ? "Cambiar fotografía" : "Seleccionar fotografía"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectPhoto(event.target.files?.[0])} /></label><button type="button" className="registration-avatar-generate" onClick={generateAvatar}><Sparkles size={14} /> Generar avatar</button>{photo && <small>{photo.name}</small>}</div>
+                    <div><strong>Fotografía de perfil</strong><p>JPG, JPEG, PNG o WEBP · máximo 4 MB.</p><label className="secondary-button"><UploadCloud size={15} /> {photo ? "Cambiar fotografía" : "Seleccionar fotografía"}<input type="file" accept="image/jpeg,image/jpg,image/pjpeg,image/png,image/webp,.jpg,.jpeg" onChange={(event) => selectPhoto(event.target.files?.[0])} /></label><button type="button" className="registration-avatar-generate" onClick={generateAvatar}><Sparkles size={14} /> Generar avatar</button>{photo && <small>{photo.name}</small>}</div>
                   </div>
                 </section>
 

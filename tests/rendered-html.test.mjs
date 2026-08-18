@@ -112,7 +112,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     storageRules,
     /allow create, update: if canManageProfilePhoto\(institutionId, userId\)/,
   );
-  assert.match(storageRules, /image\/\(jpeg\|png\|webp\)/);
+  assert.match(storageRules, /image\/\(jpeg\|jpg\|pjpeg\|png\|webp\)/);
   assert.match(storageRules, /function isDirector/);
   assert.match(storageRules, /request\.auth\.token\.role == "director"/);
   assert.match(indexes, /weeklyMaterials/);
@@ -144,6 +144,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(css, /--coral:\s*#c62e45/i);
   assert.match(css, /url\("\/login-campus\.jpg"\)/i);
   assert.match(firebaseSource, /createManagedAccount/);
+  assert.match(firebaseSource, /PROFILE_PHOTO_MIME_TYPES/);
+  assert.match(firebaseSource, /await refreshPortalAccess\(director\)/);
+  assert.match(firebaseSource, /contentType: photoMetadata\.contentType/);
   assert.match(firebaseSource, /schoolLevel/);
   assert.match(firebaseSource, /gradesBySchoolLevel/);
   assert.match(firebaseSource, /cehf-account-creator/);

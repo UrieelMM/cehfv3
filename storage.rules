@@ -33,9 +33,14 @@ service firebase.storage {
     }
 
     function canManageProfilePhoto(institutionId, userId) {
-      return sameInstitution(institutionId) && (
-        request.auth.uid == userId || profile().role == "director"
-      );
+      return signedIn()
+        && request.auth.token.institutionId == institutionId
+        && (
+          request.auth.uid == userId || (
+            request.auth.token.role == "director"
+            && request.auth.token.allPermissions == true
+          )
+        );
     }
 
     function safeUpload() {
@@ -162,7 +167,7 @@ service firebase.storage {
       allow read: if sameInstitution(institutionId);
       allow create, update: if canManageProfilePhoto(institutionId, userId)
         && request.resource.size < 4 * 1024 * 1024
-        && request.resource.contentType.matches("image/(jpeg|png|webp)");
+        && request.resource.contentType.matches("image/(jpeg|jpg|pjpeg|png|webp)");
       allow delete: if isDirector() && sameInstitution(institutionId);
     }
 

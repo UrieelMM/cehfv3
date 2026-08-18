@@ -80,6 +80,14 @@ if (firebaseConfigured && typeof window !== "undefined") {
 
 export const firebase = { app, auth, db, storage, functions };
 
+export const PROFILE_PHOTO_MIME_TYPES: readonly string[] = [
+  "image/jpeg",
+  "image/jpg",
+  "image/pjpeg",
+  "image/png",
+  "image/webp",
+];
+
 export type ManagedAccountInput = {
   firstName: string;
   lastName: string;
@@ -125,6 +133,15 @@ const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
 
 function readSchoolLevel(value: unknown): SchoolLevel {
   return value === "secondary" ? "secondary" : "primary";
+}
+
+function profilePhotoMetadata(type: string) {
+  if (["image/jpeg", "image/jpg", "image/pjpeg"].includes(type)) {
+    return { extension: "jpg", contentType: "image/jpeg" };
+  }
+  if (type === "image/png") return { extension: "png", contentType: type };
+  if (type === "image/webp") return { extension: "webp", contentType: type };
+  return null;
 }
 
 function accountDate(value: unknown) {
@@ -190,6 +207,14 @@ export async function createManagedAccount(
   }
   const director = auth.currentUser;
   if (!director) throw new Error("Inicia sesión como Dirección.");
+  const photoMetadata = profilePhotoMetadata(input.photo.type);
+  if (!photoMetadata || input.photo.size >= 4 * 1024 * 1024) {
+    throw new Error("Selecciona una fotografía JPG, JPEG, PNG o WEBP menor a 4 MB.");
+  }
+  const access = await refreshPortalAccess(director);
+  if (access.role !== "director" || access.institutionId !== institutionId) {
+    throw new Error("Tu sesión de Dirección no corresponde a esta institución.");
+  }
 
   const firstName = input.firstName.trim();
   const lastName = input.lastName.trim();
@@ -234,13 +259,12 @@ export async function createManagedAccount(
     );
     createdUser = credential.user;
     await updateProfile(createdUser, { displayName: name });
-    const extension = input.photo.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
     const photoReference = ref(
       storage,
-      `institutions/${institutionId}/profiles/${createdUser.uid}/profile.${extension}`,
+      `institutions/${institutionId}/profiles/${createdUser.uid}/profile.${photoMetadata.extension}`,
     );
     await uploadBytes(photoReference, input.photo, {
-      contentType: input.photo.type,
+      contentType: photoMetadata.contentType,
     });
     const photoURL = await getDownloadURL(photoReference);
     const account: ManagedAccount = {
