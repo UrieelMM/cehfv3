@@ -171,6 +171,359 @@ async function requireCalendarDirector(
   };
 }
 
+async function requireAccountDirector(
+  auth: CallableRequest<unknown>["auth"],
+) {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const profileSnapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = profileSnapshot.data();
+  const institutionId = String(profile?.institutionId ?? "");
+  const valid =
+    profileSnapshot.exists &&
+    profile?.active === true &&
+    profile.role === "director" &&
+    auth.token.role === "director" &&
+    auth.token.allPermissions === true &&
+    auth.token.institutionId === institutionId &&
+    Boolean(institutionId);
+  if (!valid) {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo Dirección puede administrar cuentas de la comunidad.",
+    );
+  }
+  return {
+    uid: auth.uid,
+    name: String(profile?.name ?? "Dirección"),
+    institutionId,
+  };
+}
+
+function accountText(value: unknown, field: string, maximum = 80) {
+  const normalized = String(value ?? "").trim();
+  if (normalized.length < 1 || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} debe tener entre 1 y ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function accountEmail(value: unknown) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (
+    normalized.length > 254 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+  ) {
+    throw new HttpsError("invalid-argument", "Escribe un correo válido.");
+  }
+  return normalized;
+}
+
+function accountUid(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", "La cuenta seleccionada no es válida.");
+  }
+  return normalized;
+}
+
+function accountStringList(value: unknown, field: string, minimum = 1) {
+  if (!Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", `${field} no tiene un formato válido.`);
+  }
+  const values = [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+  if (
+    values.length < minimum ||
+    values.length > 20 ||
+    values.some((item) => item.length > 80)
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} debe contener entre ${minimum} y 20 opciones válidas.`,
+    );
+  }
+  return values;
+}
+
+async function managedAccountTarget(uid: string, institutionId: string) {
+  const reference = db.doc(`users/${uid}`);
+  const snapshot = await reference.get();
+  const data = snapshot.data();
+  if (
+    !snapshot.exists ||
+    data?.institutionId !== institutionId ||
+    !["student", "teacher"].includes(String(data?.role ?? ""))
+  ) {
+    throw new HttpsError(
+      "not-found",
+      "La cuenta ya no existe o no pertenece a esta institución.",
+    );
+  }
+  return { reference, snapshot, data: data as DocumentData };
+}
+
+function accountAuthError(error: unknown): never {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String(error.code)
+      : "";
+  if (code === "auth/email-already-exists") {
+    throw new HttpsError("already-exists", "Ese correo ya pertenece a otra cuenta.");
+  }
+  if (code === "auth/invalid-email") {
+    throw new HttpsError("invalid-argument", "Escribe un correo válido.");
+  }
+  logger.error("Account administration failed in Firebase Auth", error);
+  throw new HttpsError(
+    "internal",
+    "Firebase Authentication no pudo actualizar la cuenta.",
+  );
+}
+
+function accountTimestamp(value: unknown) {
+  return value instanceof Timestamp
+    ? value.toDate().toISOString()
+    : new Date().toISOString();
+}
+
+function serializeManagedAccount(uid: string, data: DocumentData) {
+  return {
+    uid,
+    firstName: String(data.firstName ?? ""),
+    lastName: String(data.lastName ?? ""),
+    name: String(data.name ?? "Cuenta CEHF"),
+    email: String(data.email ?? ""),
+    role: String(data.role) as "student" | "teacher",
+    initials: String(data.initials ?? "CE"),
+    active: data.active !== false,
+    ...(data.role === "student"
+      ? {
+          schoolLevel: data.schoolLevel === "secondary" ? "secondary" : "primary",
+          grade: String(data.grade ?? ""),
+          group: String(data.group ?? ""),
+        }
+      : {}),
+    subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
+    teacherIds: Array.isArray(data.teacherIds) ? data.teacherIds.map(String) : [],
+    ...(data.photoURL ? { photoURL: String(data.photoURL) } : {}),
+    createdAt: accountTimestamp(data.createdAt),
+  };
+}
+
+export const updateManagedAccount = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const uid = accountUid(input.uid);
+  const target = await managedAccountTarget(uid, director.institutionId);
+  const role = String(target.data.role) as "student" | "teacher";
+  const firstName = accountText(input.firstName, "El nombre");
+  const lastName = accountText(input.lastName, "Los apellidos");
+  const name = `${firstName} ${lastName}`;
+  const email = accountEmail(input.email);
+  const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
+  const subjects = accountStringList(input.subjects, "Las materias");
+  const teacherIds =
+    role === "student"
+      ? accountStringList(input.teacherIds, "El acompañamiento")
+      : [];
+  let studentAssignment: Record<string, string> = {};
+  if (role === "student") {
+    const schoolLevel = String(input.schoolLevel ?? "");
+    const grade = String(input.grade ?? "").trim();
+    const group = String(input.group ?? "").trim();
+    const grades =
+      schoolLevel === "secondary"
+        ? ["1.º", "2.º", "3.º"]
+        : schoolLevel === "primary"
+          ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"]
+          : [];
+    if (!grades.includes(grade) || !["A", "B", "C"].includes(group)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "Selecciona un nivel, grado y grupo válidos.",
+      );
+    }
+    const teacherSnapshots = await db.getAll(
+      ...teacherIds.map((teacherId) => db.doc(`users/${teacherId}`)),
+    );
+    const invalidTeacher = teacherSnapshots.some((snapshot) => {
+      const teacher = snapshot.data();
+      return (
+        !snapshot.exists ||
+        teacher?.institutionId !== director.institutionId ||
+        teacher?.role !== "teacher" ||
+        teacher?.active !== true
+      );
+    });
+    if (invalidTeacher) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Uno de los maestros asignados ya no está activo.",
+      );
+    }
+    studentAssignment = { schoolLevel, grade, group };
+  }
+  const photoURL = input.photoURL ? String(input.photoURL).trim() : "";
+  if (
+    photoURL &&
+    (!photoURL.startsWith("https://firebasestorage.googleapis.com/") ||
+      photoURL.length > 2_000)
+  ) {
+    throw new HttpsError("invalid-argument", "La fotografía no es válida.");
+  }
+
+  const auth = getAuth();
+  const previousAuth = await auth.getUser(uid).catch(accountAuthError);
+  await auth.updateUser(uid, { email, displayName: name }).catch(accountAuthError);
+  const updatedAt = FieldValue.serverTimestamp();
+  const nextData = {
+    firstName,
+    lastName,
+    name,
+    email,
+    initials,
+    subjects,
+    teacherIds,
+    ...studentAssignment,
+    ...(photoURL ? { photoURL } : {}),
+    updatedAt,
+    updatedBy: director.uid,
+  };
+  const auditReference = db
+    .collection(`institutions/${director.institutionId}/accountAudit`)
+    .doc();
+  const batch = db.batch();
+  batch.update(target.reference, nextData);
+  batch.set(auditReference, {
+    action: "updated",
+    targetUid: uid,
+    targetRole: role,
+    actorUid: director.uid,
+    actorName: director.name,
+    createdAt: updatedAt,
+  });
+  try {
+    await batch.commit();
+  } catch (error) {
+    await auth
+      .updateUser(uid, {
+        email: previousAuth.email,
+        displayName: previousAuth.displayName,
+      })
+      .catch((rollbackError) =>
+        logger.error("Could not roll back account Auth update", rollbackError),
+      );
+    logger.error("Could not save managed account profile", error);
+    throw new HttpsError("internal", "No pudimos guardar el perfil actualizado.");
+  }
+  return {
+    account: serializeManagedAccount(uid, {
+      ...target.data,
+      ...nextData,
+      createdAt: target.data.createdAt,
+    }),
+  };
+});
+
+export const setManagedAccountActive = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const uid = accountUid(input.uid);
+  if (typeof input.active !== "boolean") {
+    throw new HttpsError("invalid-argument", "El estado solicitado no es válido.");
+  }
+  const active = input.active;
+  const target = await managedAccountTarget(uid, director.institutionId);
+  const auth = getAuth();
+  const previousUser = await auth.getUser(uid).catch(accountAuthError);
+  await auth.updateUser(uid, { disabled: !active }).catch(accountAuthError);
+  const updatedAt = FieldValue.serverTimestamp();
+  const auditReference = db
+    .collection(`institutions/${director.institutionId}/accountAudit`)
+    .doc();
+  const batch = db.batch();
+  batch.update(target.reference, {
+    active,
+    updatedAt,
+    updatedBy: director.uid,
+  });
+  batch.set(auditReference, {
+    action: active ? "activated" : "deactivated",
+    targetUid: uid,
+    targetRole: String(target.data.role),
+    actorUid: director.uid,
+    actorName: director.name,
+    createdAt: updatedAt,
+  });
+  try {
+    await batch.commit();
+  } catch (error) {
+    await auth
+      .updateUser(uid, { disabled: previousUser.disabled })
+      .catch((rollbackError) =>
+        logger.error("Could not roll back account disabled state", rollbackError),
+      );
+    logger.error("Could not save managed account state", error);
+    throw new HttpsError("internal", "No pudimos guardar el estado de la cuenta.");
+  }
+  if (!active) await auth.revokeRefreshTokens(uid).catch(() => undefined);
+  return {
+    account: serializeManagedAccount(uid, { ...target.data, active }),
+  };
+});
+
+export const deleteManagedAccount = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const uid = accountUid(input.uid);
+  const target = await managedAccountTarget(uid, director.institutionId);
+  try {
+    await getAuth().deleteUser(uid);
+  } catch (error) {
+    const code =
+      typeof error === "object" && error && "code" in error
+        ? String(error.code)
+        : "";
+    if (code !== "auth/user-not-found") accountAuthError(error);
+  }
+  if (target.data.role === "teacher") {
+    const assignedStudents = await db
+      .collection("users")
+      .where("teacherIds", "array-contains", uid)
+      .get();
+    const writer = db.bulkWriter();
+    assignedStudents.docs
+      .filter((student) => student.data().institutionId === director.institutionId)
+      .forEach((student) => {
+        writer.update(student.ref, {
+          teacherIds: FieldValue.arrayRemove(uid),
+          updatedAt: FieldValue.serverTimestamp(),
+          updatedBy: director.uid,
+        });
+      });
+    await writer.close();
+  }
+  await db.recursiveDelete(target.reference);
+  await db
+    .collection(`institutions/${director.institutionId}/accountAudit`)
+    .add({
+      action: "deleted",
+      targetUid: uid,
+      targetRole: String(target.data.role),
+      targetName: String(target.data.name ?? "Cuenta CEHF"),
+      actorUid: director.uid,
+      actorName: director.name,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  const bucket = (await import("firebase-admin/storage")).getStorage().bucket();
+  await bucket
+    .deleteFiles({ prefix: `institutions/${director.institutionId}/profiles/${uid}/` })
+    .catch((error) => logger.warn("Could not delete profile photos", { uid, error }));
+  return { uid };
+});
+
 export const refreshPortalAccess = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");

@@ -4177,7 +4177,7 @@ code {
 }
 
 .user-table-card {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .table-toolbar {
@@ -4190,7 +4190,7 @@ code {
 }
 
 .user-table {
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .user-row {
@@ -4264,6 +4264,287 @@ code {
 .account-empty-state strong {
   color: var(--foreground);
   font-size: 0.82rem;
+}
+
+.account-row-actions {
+  position: relative;
+  justify-self: end;
+}
+
+.account-action-menu {
+  position: absolute;
+  z-index: 35;
+  top: calc(100% + 6px);
+  right: 0;
+  display: flex;
+  width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+  flex-direction: column;
+}
+
+.account-action-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 0.66rem;
+  font-weight: 720;
+  text-align: left;
+}
+
+.account-action-menu button:hover {
+  background: var(--surface-soft);
+}
+
+.account-action-menu button.danger {
+  color: var(--danger);
+}
+
+.account-management-backdrop {
+  z-index: 230;
+  padding: 16px;
+  background: color-mix(in srgb, #080d21 76%, transparent);
+  backdrop-filter: blur(13px);
+}
+
+.account-editor-modal {
+  display: flex;
+  width: min(760px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--violet) 20%, var(--border));
+  border-radius: 22px;
+  background: var(--surface-raised);
+  box-shadow: 0 34px 100px rgb(5 10 34 / 0.42);
+  flex-direction: column;
+}
+
+.account-editor-modal > header,
+.account-editor-modal > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.account-editor-modal > header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-editor-modal h2 {
+  margin: 2px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.account-editor-modal > footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+.account-editor-body {
+  display: flex;
+  overflow-y: auto;
+  padding: 20px;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.account-editor-profile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+
+.account-editor-profile > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-editor-profile > div strong {
+  font-size: 0.76rem;
+}
+
+.account-editor-profile > div span {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.account-editor-avatar {
+  width: 52px;
+  height: 52px;
+  background-position: center;
+  background-size: cover;
+}
+
+.account-photo-button {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.account-photo-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.account-editor-section {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  background: var(--surface);
+}
+
+.account-editor-section .registration-field {
+  margin-top: 11px;
+}
+
+.account-editor-section input,
+.account-editor-section select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+}
+
+.account-editor-assignment {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.account-confirm-modal {
+  display: flex;
+  width: min(470px, 100%);
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface-raised);
+  box-shadow: 0 34px 100px rgb(5 10 34 / 0.42);
+  flex-direction: column;
+  gap: 10px;
+}
+
+.account-confirm-icon {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  margin-bottom: 5px;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.account-confirm-modal.is-danger .account-confirm-icon {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+}
+
+.account-confirm-modal h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+}
+
+.account-confirm-modal > p {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 0.72rem;
+  line-height: 1.65;
+}
+
+.account-delete-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 5px;
+  padding: 11px;
+  border-radius: 11px;
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  font-size: 0.64rem;
+  line-height: 1.5;
+}
+
+.account-confirm-modal > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.danger-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--danger);
+  color: white;
+  font-size: 0.69rem;
+  font-weight: 780;
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+@media (max-width: 680px) {
+  .account-editor-profile {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .account-photo-button {
+    grid-column: 1 / -1;
+  }
+
+  .account-editor-assignment {
+    grid-template-columns: 1fr;
+  }
+
+  .account-editor-modal > footer,
+  .account-confirm-modal > footer {
+    flex-direction: column-reverse;
+  }
+
+  .account-editor-modal > footer button,
+  .account-confirm-modal > footer button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 820px) {
+  .user-table {
+    overflow-x: auto;
+  }
 }
 
 /* Account registration */

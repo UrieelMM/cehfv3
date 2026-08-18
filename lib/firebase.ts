@@ -103,6 +103,21 @@ export type ManagedAccountInput = {
   photo: File;
 };
 
+export type ManagedAccountUpdateInput = {
+  uid: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: "student" | "teacher";
+  schoolLevel?: SchoolLevel;
+  grade?: string;
+  group?: string;
+  subjects: string[];
+  teacherIds: string[];
+  photo?: File;
+  currentPhotoURL?: string;
+};
+
 export function generateTemporaryPassword() {
   const groups = [
     "ABCDEFGHJKLMNPQRSTUVWXYZ",
@@ -376,6 +391,99 @@ export async function createManagedAccount(
   }
 }
 
+async function requireManagedAccountAdmin() {
+  if (!auth?.currentUser || !functions) {
+    throw accountValidationError("Inicia sesión como Dirección.");
+  }
+  await refreshPortalAccess(auth.currentUser);
+  return functions;
+}
+
+export async function updateManagedAccount(
+  input: ManagedAccountUpdateInput,
+  institutionId: string,
+) {
+  if (!storage) throw new Error("Firebase Storage no está configurado.");
+  const callableFunctions = await requireManagedAccountAdmin();
+  let uploadedPhotoReference: StorageReference | null = null;
+  let photoURL: string | undefined;
+  if (input.photo) {
+    const metadata = profilePhotoMetadata(input.photo.type);
+    if (!metadata || input.photo.size >= 4 * 1024 * 1024) {
+      throw accountValidationError(
+        "Selecciona una fotografía JPG, JPEG, PNG o WEBP menor a 4 MB.",
+      );
+    }
+    uploadedPhotoReference = ref(
+      storage,
+      `institutions/${institutionId}/profiles/${input.uid}/profile-${crypto.randomUUID()}.${metadata.extension}`,
+    );
+    await uploadBytes(uploadedPhotoReference, input.photo, {
+      contentType: metadata.contentType,
+    });
+    photoURL = await getDownloadURL(uploadedPhotoReference);
+  }
+  const callable = httpsCallable<
+    Omit<ManagedAccountUpdateInput, "photo" | "currentPhotoURL"> & {
+      photoURL?: string;
+    },
+    { account: ManagedAccount }
+  >(callableFunctions, "updateManagedAccount");
+  try {
+    const result = await callable({
+      uid: input.uid,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      role: input.role,
+      subjects: input.subjects,
+      teacherIds: input.teacherIds,
+      ...(input.role === "student"
+        ? {
+            schoolLevel: input.schoolLevel,
+            grade: input.grade,
+            group: input.group,
+          }
+        : {}),
+      ...(photoURL ? { photoURL } : {}),
+    });
+    if (photoURL && input.currentPhotoURL && input.currentPhotoURL !== photoURL) {
+      try {
+        await deleteObject(ref(storage, input.currentPhotoURL));
+      } catch {
+        // La foto nueva ya quedó vinculada; una imagen histórica no debe
+        // convertir una edición exitosa en un error para Dirección.
+      }
+    }
+    return result.data.account;
+  } catch (error) {
+    if (uploadedPhotoReference) {
+      await deleteObject(uploadedPhotoReference).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+export async function setManagedAccountActive(uid: string, active: boolean) {
+  const callableFunctions = await requireManagedAccountAdmin();
+  const callable = httpsCallable<
+    { uid: string; active: boolean },
+    { account: ManagedAccount }
+  >(callableFunctions, "setManagedAccountActive");
+  const result = await callable({ uid, active });
+  return result.data.account;
+}
+
+export async function deleteManagedAccount(uid: string) {
+  const callableFunctions = await requireManagedAccountAdmin();
+  const callable = httpsCallable<{ uid: string }, { uid: string }>(
+    callableFunctions,
+    "deleteManagedAccount",
+  );
+  const result = await callable({ uid });
+  return result.data.uid;
+}
+
 export function watchAuth(callback: (user: User | null) => void) {
   if (!auth) return () => undefined;
   return onAuthStateChanged(auth, callback);
@@ -524,6 +632,16 @@ export function friendlyFirebaseError(error: unknown) {
       "Tu sesión venció. Cierra sesión y vuelve a ingresar.",
     "functions/permission-denied":
       "Tu cuenta no tiene permisos de Dirección para realizar este registro.",
+    "functions/already-exists":
+      "Ese correo ya pertenece a otra cuenta.",
+    "functions/not-found":
+      "La cuenta ya no existe o no pertenece a esta institución.",
+    "functions/failed-precondition":
+      "La cuenta tiene datos relacionados que debes corregir antes de continuar.",
+    "functions/invalid-argument":
+      "Revisa los datos de la cuenta e intenta nuevamente.",
+    "functions/internal":
+      "Firebase no pudo completar la administración de la cuenta.",
     "invalid-argument":
       "Firebase recibió datos inválidos. Revisa los campos del formulario.",
     "permission-denied":
@@ -551,6 +669,13 @@ export function friendlyFirebaseError(error: unknown) {
         "Firestore no pudo guardar el perfil. La cuenta temporal y su fotografía fueron eliminadas.",
     };
     return stageMessages[error.stage];
+  }
+  if (
+    code.startsWith("functions/") &&
+    error instanceof Error &&
+    error.message.trim()
+  ) {
+    return error.message.replace(/^Firebase:\s*/i, "").trim();
   }
   return messages[code] ?? "No pudimos completar la acción. Intenta nuevamente.";
 }

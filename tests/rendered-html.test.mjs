@@ -64,6 +64,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     css,
     firebaseSource,
     appSource,
+    usersSource,
     taskSource,
     taskUiSource,
     functionsSource,
@@ -78,6 +79,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("app/globals.css", projectRoot), "utf8"),
       readFile(new URL("lib/firebase.ts", projectRoot), "utf8"),
       readFile(new URL("components/cehf-app.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/users-page.tsx", projectRoot), "utf8"),
       readFile(new URL("lib/tasks-firebase.ts", projectRoot), "utf8"),
       readFile(new URL("components/tasks-workflow.tsx", projectRoot), "utf8"),
       readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
@@ -156,6 +158,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firebaseSource, /creationStage = "save-profile"/);
   assert.match(firebaseSource, /Firestore no pudo guardar el perfil/);
   assert.match(firebaseSource, /firebaseErrorDetails/);
+  assert.match(firebaseSource, /setManagedAccountActive/);
+  assert.match(firebaseSource, /deleteManagedAccount/);
+  assert.match(firebaseSource, /updateManagedAccount/);
   assert.doesNotMatch(firebaseSource, /\.\.\.account,\s*institutionId/);
   assert.match(firebaseSource, /schoolLevel/);
   assert.match(firebaseSource, /gradesBySchoolLevel/);
@@ -172,6 +177,13 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /setAuthReady\(false\)/);
   assert.match(appSource, /No pudimos cargar tu acceso/);
   assert.match(appSource, /\[Campus CEHF\] registrar cuenta/);
+  assert.match(usersSource, /Editar cuenta/);
+  assert.match(usersSource, /Desactivar acceso/);
+  assert.match(usersSource, /Eliminar cuenta definitivamente/);
+  assert.match(functionsSource, /Sólo Dirección puede administrar cuentas/);
+  assert.match(functionsSource, /revokeRefreshTokens/);
+  assert.match(functionsSource, /recursiveDelete/);
+  assert.match(functionsSource, /accountAudit/);
   assert.match(appSource, /Operación: \$\{operation\}/);
   assert.doesNotMatch(appSource, /Activar portal/);
   assert.match(taskSource, /createTaskAssignment/);

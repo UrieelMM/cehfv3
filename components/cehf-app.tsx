@@ -50,6 +50,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
+import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import {
   AcademicConfigurationCard,
@@ -617,6 +618,28 @@ export function CEHFApp() {
     });
   }
 
+  function replaceManagedAccount(account: ManagedAccount) {
+    setManagedAccounts((previous) => {
+      const next = previous
+        .map((item) => (item.uid === account.uid ? account : item))
+        .sort((first, second) => first.name.localeCompare(second.name, "es"));
+      if (usingDemo) {
+        window.localStorage.setItem("cehf-demo-accounts", JSON.stringify(next));
+      }
+      return next;
+    });
+  }
+
+  function removeManagedAccount(uid: string) {
+    setManagedAccounts((previous) => {
+      const next = previous.filter((item) => item.uid !== uid);
+      if (usingDemo) {
+        window.localStorage.setItem("cehf-demo-accounts", JSON.stringify(next));
+      }
+      return next;
+    });
+  }
+
   if (!authReady) return <LoadingScreen />;
 
   if (!demoStarted && !firebaseUser) {
@@ -963,6 +986,8 @@ export function CEHFApp() {
               }}
               managedAccounts={managedAccounts}
               managedAccountsLoading={managedAccountsLoading}
+              updateManagedAccountState={replaceManagedAccount}
+              removeManagedAccountState={removeManagedAccount}
               firebaseReady={Boolean(firebaseUser && profile)}
             />
           </motion.div>
@@ -1455,6 +1480,8 @@ function SectionContent({
   saveAcademicCalendarConfiguration,
   managedAccounts,
   managedAccountsLoading,
+  updateManagedAccountState,
+  removeManagedAccountState,
   firebaseReady,
 }: {
   section: SectionKey;
@@ -1476,6 +1503,8 @@ function SectionContent({
   ) => Promise<void>;
   managedAccounts: ManagedAccount[];
   managedAccountsLoading: boolean;
+  updateManagedAccountState: (account: ManagedAccount) => void;
+  removeManagedAccountState: (uid: string) => void;
   firebaseReady: boolean;
 }) {
   switch (section) {
@@ -1556,10 +1585,14 @@ function SectionContent({
       );
     case "users":
       return (
-        <UsersPage
+        <CommunityUsersPage
           role={role}
           accounts={managedAccounts}
           loading={managedAccountsLoading}
+          firebaseReady={firebaseReady}
+          institutionId={profile.institutionId}
+          onUpdated={updateManagedAccountState}
+          onRemoved={removeManagedAccountState}
         />
       );
     case "settings":
@@ -2661,184 +2694,6 @@ function MaterialsPage({
             </div>
           </article>
         ))}
-      </section>
-    </div>
-  );
-}
-
-function UsersPage({
-  role,
-  accounts,
-  loading,
-}: {
-  role: Role;
-  accounts: ManagedAccount[];
-  loading: boolean;
-}) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "student" | "teacher">("all");
-  if (role === "student") {
-    return (
-      <GuidedState
-        icon={LockKeyhole}
-        title="Esta sección es para personal autorizado"
-        description="Tu información académica sigue disponible en Mi semana, Avance y Reportes."
-      />
-    );
-  }
-  const normalizedQuery = query.trim().toLocaleLowerCase("es-MX");
-  const visibleAccounts = accounts.filter(
-    (account) =>
-      (filter === "all" || account.role === filter) &&
-      (!normalizedQuery ||
-        `${account.name} ${account.email}`
-          .toLocaleLowerCase("es-MX")
-          .includes(normalizedQuery)),
-  );
-  const students = accounts.filter((account) => account.role === "student");
-  const teachers = accounts.filter((account) => account.role === "teacher");
-  const groups = new Set(
-    students
-      .map(
-        (account) =>
-          `${schoolLevelLabels[account.schoolLevel ?? "primary"]} ${account.grade ?? ""} ${account.group ?? ""}`.trim(),
-      )
-      .filter(Boolean),
-  );
-  return (
-    <div className="account-directory-page">
-      <section className="metric-grid compact-metrics">
-        <motion.article className="metric-card" whileHover={{ y: -3 }}>
-          <span className="metric-icon violet">
-            <Users size={20} />
-          </span>
-          <strong>{students.length}</strong>
-          <p>Estudiantes activos</p>
-        </motion.article>
-        <motion.article className="metric-card" whileHover={{ y: -3 }}>
-          <span className="metric-icon mint">
-            <GraduationCap size={20} />
-          </span>
-          <strong>{teachers.length}</strong>
-          <p>Maestros</p>
-        </motion.article>
-        <motion.article className="metric-card" whileHover={{ y: -3 }}>
-          <span className="metric-icon gold">
-            <Library size={20} />
-          </span>
-          <strong>{groups.size}</strong>
-          <p>Grupos</p>
-        </motion.article>
-        <motion.article className="metric-card" whileHover={{ y: -3 }}>
-          <span className="metric-icon coral">
-            <ShieldCheck size={20} />
-          </span>
-          <strong>{accounts.filter((account) => !account.active).length}</strong>
-          <p>Accesos pausados</p>
-        </motion.article>
-      </section>
-      <section className="panel user-table-card">
-        <div className="table-toolbar">
-          <div className="small-search">
-            <Search size={17} />
-            <input
-              type="search"
-              aria-label="Buscar personas"
-              placeholder="Buscar por nombre o correo…"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </div>
-          <div className="filter-pills" aria-label="Filtrar cuentas">
-            {(
-              [
-                ["all", "Todos"],
-                ["student", "Estudiantes"],
-                ["teacher", "Maestros"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                type="button"
-                className={filter === value ? "active" : ""}
-                aria-pressed={filter === value}
-                onClick={() => setFilter(value)}
-                key={value}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="user-table">
-          <div className="user-row table-head">
-            <span>Persona</span>
-            <span>Rol</span>
-            <span>Asignación</span>
-            <span>Estado</span>
-            <span />
-          </div>
-          <AnimatePresence mode="popLayout">
-            {visibleAccounts.map((account, index) => (
-              <motion.div
-                className="user-row"
-                key={account.uid}
-                layout
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ delay: Math.min(index, 6) * 0.035 }}
-              >
-                <div className="user-cell">
-                  <span
-                    className="avatar small account-avatar"
-                    style={
-                      account.photoURL
-                        ? { backgroundImage: `url(${account.photoURL})` }
-                        : undefined
-                    }
-                  >
-                    {!account.photoURL && account.initials}
-                  </span>
-                  <span className="user-identity">
-                    <strong>{account.name}</strong>
-                    <small>{account.email}</small>
-                  </span>
-                </div>
-                <span>{account.role === "student" ? "Estudiante" : "Maestro"}</span>
-                <span>
-                  {account.role === "student"
-                    ? `${schoolLevelLabels[account.schoolLevel ?? "primary"]} · ${account.grade ?? "Sin grado"} ${account.group ?? ""}`
-                    : account.subjects.join(" · ") || "Sin materias"}
-                </span>
-                <span
-                  className={`status-tag ${
-                    account.active ? "status-achieved" : "status-neutral"
-                  }`}
-                >
-                  {account.active ? "Activa" : "Pausada"}
-                </span>
-                <button
-                  className="plain-icon"
-                  aria-label={`Opciones de ${account.name}`}
-                >
-                  <MoreHorizontal size={18} />
-                </button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {!loading && visibleAccounts.length === 0 && (
-            <div className="account-empty-state">
-              <Search size={22} />
-              <strong>No encontramos cuentas</strong>
-              <span>Prueba con otro nombre o cambia el filtro.</span>
-            </div>
-          )}
-          {loading && (
-            <div className="account-loading-state">
-              <span className="button-spinner" /> Sincronizando cuentas…
-            </div>
-          )}
-        </div>
       </section>
     </div>
   );
