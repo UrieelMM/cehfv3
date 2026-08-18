@@ -252,6 +252,10 @@
 .academic-calendar-title p { margin: 0; color: var(--muted); font-size: .64rem; line-height: 1.45; }
 .academic-calendar-title button { flex: 0 0 auto; }
 .academic-week-list { display: grid; gap: 8px; }
+.academic-week-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 11px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); color: var(--muted); font-size: .58rem; }
+.academic-week-pagination > div { display: flex; align-items: center; gap: 7px; }
+.academic-week-pagination strong { color: var(--foreground); }
+.academic-week-pagination .plain-icon { width: 32px; height: 32px; background: var(--surface); }
 .academic-week-row { display: grid; grid-template-columns: 52px minmax(150px, 1.25fr) minmax(130px, .8fr) minmax(130px, .8fr) auto 34px; align-items: end; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
 .academic-week-index { display: grid; min-height: 42px; place-items: center; align-content: center; gap: 2px; border-radius: 9px; background: var(--violet-soft); color: var(--violet); }
 .academic-week-index span { font-size: .54rem; font-weight: 800; }
@@ -335,6 +339,8 @@
   .academic-cycle-grid, .academic-term-grid { grid-template-columns: 1fr; }
   .academic-calendar-title { flex-direction: column; }
   .academic-calendar-title button { width: 100%; justify-content: center; }
+  .academic-week-pagination { align-items: stretch; flex-direction: column; }
+  .academic-week-pagination > div { justify-content: space-between; }
   .academic-week-row { grid-template-columns: 38px 1fr 34px; }
   .academic-week-row label:nth-of-type(1), .academic-week-row label:nth-of-type(2), .academic-week-row label:nth-of-type(3), .academic-week-status { grid-column: 2; }
   .academic-week-index { grid-column: 1; grid-row: 1 / 5; }

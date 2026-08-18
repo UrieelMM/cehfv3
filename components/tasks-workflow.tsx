@@ -1659,6 +1659,7 @@ function TaskTimeline({
 
 type WeekDraft = AcademicCalendarInput["weeks"][number];
 type TermDraft = AcademicCalendarInput["terms"][number];
+const ACADEMIC_WEEKS_PAGE_SIZE = 5;
 
 function dateInputValue(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -1729,6 +1730,23 @@ export function AcademicConfigurationCard({
         ],
   );
   const [busy, setBusy] = useState(false);
+  const [weekPage, setWeekPage] = useState(() => {
+    const currentIndex = weeks.findIndex(
+      (week) => academicDateStatus(week).className === "is-current",
+    );
+    return currentIndex >= 0
+      ? Math.floor(currentIndex / ACADEMIC_WEEKS_PAGE_SIZE) + 1
+      : 1;
+  });
+  const totalWeekPages = Math.max(
+    1,
+    Math.ceil(weeks.length / ACADEMIC_WEEKS_PAGE_SIZE),
+  );
+  const weekPageStart = (weekPage - 1) * ACADEMIC_WEEKS_PAGE_SIZE;
+  const visibleWeeks = weeks.slice(
+    weekPageStart,
+    weekPageStart + ACADEMIC_WEEKS_PAGE_SIZE,
+  );
 
   const validationMessage = useMemo(() => {
     if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(schoolYearId.trim())) {
@@ -1807,6 +1825,9 @@ export function AcademicConfigurationCard({
       endDate: addDaysToDateInput(startDate, 4),
     };
     setWeeks((current) => [...current, nextWeek]);
+    setWeekPage(
+      Math.ceil((weeks.length + 1) / ACADEMIC_WEEKS_PAGE_SIZE),
+    );
     setTerms((current) =>
       current.map((term, index) =>
         index === current.length - 1
@@ -1843,6 +1864,47 @@ export function AcademicConfigurationCard({
           ? { ...term, weekIds: term.weekIds.filter((id) => id !== weekId) }
           : term;
       }),
+    );
+  }
+
+  function weekPagination(label: string) {
+    if (weeks.length <= ACADEMIC_WEEKS_PAGE_SIZE) return null;
+    const firstVisible = weekPageStart + 1;
+    const lastVisible = Math.min(
+      weekPageStart + ACADEMIC_WEEKS_PAGE_SIZE,
+      weeks.length,
+    );
+    return (
+      <nav className="academic-week-pagination" aria-label={label}>
+        <span>
+          Semanas <strong>{firstVisible}–{lastVisible}</strong> de {weeks.length}
+        </span>
+        <div>
+          <button
+            className="plain-icon"
+            type="button"
+            disabled={weekPage === 1}
+            aria-label="Ver las cinco semanas anteriores"
+            onClick={() => setWeekPage((current) => Math.max(1, current - 1))}
+          >
+            <ChevronLeft size={17} />
+          </button>
+          <span>
+            Página <strong>{weekPage}</strong> de {totalWeekPages}
+          </span>
+          <button
+            className="plain-icon"
+            type="button"
+            disabled={weekPage === totalWeekPages}
+            aria-label="Ver las cinco semanas siguientes"
+            onClick={() =>
+              setWeekPage((current) => Math.min(totalWeekPages, current + 1))
+            }
+          >
+            <ChevronRight size={17} />
+          </button>
+        </div>
+      </nav>
     );
   }
 
@@ -1904,13 +1966,13 @@ export function AcademicConfigurationCard({
           </button>
         </div>
         <div className="academic-week-list">
-          {weeks.map((week, index) => {
+          {visibleWeeks.map((week, index) => {
             const status = academicDateStatus(week);
             return (
               <article className="academic-week-row" key={week.id}>
                 <div className="academic-week-index">
                   <CalendarDays size={17} />
-                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <span>{String(weekPageStart + index + 1).padStart(2, "0")}</span>
                 </div>
                 <label>
                   Nombre
@@ -1970,6 +2032,17 @@ export function AcademicConfigurationCard({
                   aria-label={`Quitar ${week.label}`}
                   onClick={() => {
                     setWeeks((current) => current.filter((item) => item.id !== week.id));
+                    setWeekPage((current) =>
+                      Math.min(
+                        current,
+                        Math.max(
+                          1,
+                          Math.ceil(
+                            (weeks.length - 1) / ACADEMIC_WEEKS_PAGE_SIZE,
+                          ),
+                        ),
+                      ),
+                    );
                     setTerms((current) =>
                       current.map((term) => ({
                         ...term,
@@ -1984,6 +2057,7 @@ export function AcademicConfigurationCard({
             );
           })}
         </div>
+        {weekPagination("Paginación de semanas del ciclo")}
       </div>
 
       <div className="academic-calendar-block">
@@ -2029,7 +2103,7 @@ export function AcademicConfigurationCard({
                 </button>
               </header>
               <div className="academic-term-weeks">
-                {weeks.map((week) => (
+                {visibleWeeks.map((week) => (
                   <label
                     className={term.weekIds.includes(week.id) ? "is-selected" : ""}
                     key={week.id}
@@ -2052,6 +2126,7 @@ export function AcademicConfigurationCard({
             </article>
           ))}
         </div>
+        {weekPagination("Paginación de semanas para los trimestres")}
       </div>
 
       <div className={`academic-integrity-note ${validationMessage ? "has-error" : "is-ready"}`}>

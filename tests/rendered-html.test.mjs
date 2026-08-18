@@ -138,6 +138,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(taskUiSource, /Calendario académico/);
   assert.match(taskUiSource, /Agregar semana/);
   assert.match(taskUiSource, /Agregar trimestre/);
+  assert.match(taskUiSource, /ACADEMIC_WEEKS_PAGE_SIZE = 5/);
+  assert.match(taskUiSource, /academic-week-pagination/);
   assert.match(functionsSource, /publishScheduledTasks/);
   assert.match(functionsSource, /onTaskConversationEvent/);
   assert.match(functionsSource, /export const saveAcademicCalendar/);
