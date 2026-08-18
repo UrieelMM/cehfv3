@@ -108,6 +108,11 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(storageRules, /safeUpload/);
   assert.match(storageRules, /canUploadTaskSubmission/);
   assert.match(storageRules, /function canManageProfilePhoto/);
+  assert.match(storageRules, /function sameInstitutionToken/);
+  assert.match(
+    storageRules,
+    /allow read: if sameInstitutionToken\(institutionId\)/,
+  );
   assert.match(
     storageRules,
     /allow create, update: if canManageProfilePhoto\(institutionId, userId\)/,
@@ -147,6 +152,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firebaseSource, /PROFILE_PHOTO_MIME_TYPES/);
   assert.match(firebaseSource, /await refreshPortalAccess\(director\)/);
   assert.match(firebaseSource, /contentType: photoMetadata\.contentType/);
+  assert.match(firebaseSource, /deleteObject\(uploadedPhotoReference\)/);
   assert.match(firebaseSource, /schoolLevel/);
   assert.match(firebaseSource, /gradesBySchoolLevel/);
   assert.match(firebaseSource, /cehf-account-creator/);

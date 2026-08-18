@@ -36,11 +36,13 @@ import {
 } from "firebase/firestore";
 import { Functions, getFunctions, httpsCallable } from "firebase/functions";
 import {
+  deleteObject,
   getDownloadURL,
   getStorage,
   ref,
   uploadBytes,
   type FirebaseStorage,
+  type StorageReference,
 } from "firebase/storage";
 import { createDemoState } from "./demo-data";
 import type {
@@ -250,6 +252,7 @@ export async function createManagedAccount(
   );
   const creatorAuth = getAuth(creatorApp);
   let createdUser: User | null = null;
+  let uploadedPhotoReference: StorageReference | null = null;
 
   try {
     const credential = await createUserWithEmailAndPassword(
@@ -263,6 +266,7 @@ export async function createManagedAccount(
       storage,
       `institutions/${institutionId}/profiles/${createdUser.uid}/profile.${photoMetadata.extension}`,
     );
+    uploadedPhotoReference = photoReference;
     await uploadBytes(photoReference, input.photo, {
       contentType: photoMetadata.contentType,
     });
@@ -293,6 +297,9 @@ export async function createManagedAccount(
     });
     return { account, password };
   } catch (error) {
+    if (uploadedPhotoReference) {
+      await deleteObject(uploadedPhotoReference).catch(() => undefined);
+    }
     if (createdUser) await deleteUser(createdUser).catch(() => undefined);
     throw error;
   } finally {
