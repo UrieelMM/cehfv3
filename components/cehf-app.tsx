@@ -76,10 +76,13 @@ import {
 import {
   createDemoTask,
   createTaskAssignment,
+  defaultAcademicCalendar,
   defaultAcademicConfig,
   legacyTasksToAssignments,
   markTaskNotificationsRead,
-  saveAcademicConfig,
+  resolveAcademicConfig,
+  saveAcademicCalendar,
+  watchAcademicCalendar,
   watchAcademicConfig,
   watchTaskAssignments,
   watchTaskNotifications,
@@ -92,6 +95,8 @@ import {
   subjectColors,
 } from "@/lib/demo-data";
 import type {
+  AcademicCalendar,
+  AcademicCalendarInput,
   ForumTopic,
   ForumTopicKind,
   ManagedAccount,
@@ -158,6 +163,48 @@ const taskIdFromPath = (path: string) => {
   return section === "tasks" && taskId ? decodeURIComponent(taskId) : null;
 };
 
+function academicWeekRange(config: AcademicConfig) {
+  if (!config.weekStartDate || !config.weekEndDate) return "";
+  const format = (value: string) =>
+    new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short" }).format(
+      new Date(`${value}T12:00:00`),
+    );
+  return `${format(config.weekStartDate)}–${format(config.weekEndDate)}`;
+}
+
+function demoCalendarFromInput(input: AcademicCalendarInput): AcademicCalendar {
+  const weeks = [...input.weeks]
+    .sort((first, second) => first.startDate.localeCompare(second.startDate))
+    .map((week, index) => {
+      const endExclusive = new Date(`${week.endDate}T12:00:00`);
+      endExclusive.setDate(endExclusive.getDate() + 1);
+      return {
+        ...week,
+        startAt: new Date(`${week.startDate}T00:00:00`).toISOString(),
+        endAt: new Date(
+          `${endExclusive.toISOString().slice(0, 10)}T00:00:00`,
+        ).toISOString(),
+        order: index + 1,
+        active: true,
+      };
+    });
+  return {
+    schoolYearId: input.schoolYearId,
+    configured: true,
+    weeks,
+    terms: input.terms.map((term, index) => {
+      const selected = weeks.filter((week) => term.weekIds.includes(week.id));
+      return {
+        ...term,
+        startDate: selected[0]?.startDate ?? "",
+        endDate: selected.at(-1)?.endDate ?? "",
+        order: index + 1,
+        active: true,
+      };
+    }),
+  };
+}
+
 const navigation: Array<{
   key: SectionKey;
   label: string;
@@ -182,7 +229,7 @@ const navigation: Array<{
 ];
 
 const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
-  dashboard: { eyebrow: "Semana 7 · 20–24 de julio", title: "Buenos días" },
+  dashboard: { eyebrow: "Panorama académico", title: "Buenos días" },
   "my-week": { eyebrow: "Planeación semanal", title: "Mi semana" },
   "weekly-review": { eyebrow: "Práctica breve", title: "Repasos" },
   tasks: { eyebrow: "Actividades y entregas", title: "Tareas" },
@@ -239,8 +286,11 @@ export function CEHFApp() {
   const [detailOpen, setDetailOpen] = useState<string | null>(() =>
     typeof window === "undefined" ? null : taskIdFromPath(window.location.pathname),
   );
-  const [academicConfig, setAcademicConfig] = useState<AcademicConfig>(
+  const [storedAcademicConfig, setStoredAcademicConfig] = useState<AcademicConfig>(
     defaultAcademicConfig,
+  );
+  const [academicCalendar, setAcademicCalendar] = useState<AcademicCalendar>(
+    defaultAcademicCalendar,
   );
   const [taskRecords, setTaskRecords] = useState<TaskAssignment[]>(() =>
     legacyTasksToAssignments(
@@ -265,6 +315,10 @@ export function CEHFApp() {
   const darkModeActive =
     state.settings.theme === "dark" ||
     (state.settings.theme === "system" && systemPrefersDark);
+  const academicConfig = useMemo(
+    () => resolveAcademicConfig(storedAcademicConfig, academicCalendar),
+    [academicCalendar, storedAcademicConfig],
+  );
 
   useEffect(() => {
     const onPopState = () => {
@@ -330,10 +384,19 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
-    return watchAcademicConfig(setAcademicConfig, (error) =>
+    return watchAcademicConfig(setStoredAcademicConfig, (error) =>
       toast.error(friendlyFirebaseError(error)),
     );
   }, [firebaseUser, profile]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    return watchAcademicCalendar(
+      storedAcademicConfig,
+      setAcademicCalendar,
+      (error) => toast.error(friendlyFirebaseError(error)),
+    );
+  }, [firebaseUser, profile, storedAcademicConfig]);
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
@@ -355,7 +418,8 @@ export function CEHFApp() {
   useEffect(() => {
     if (firebaseUser) return;
     queueMicrotask(() => {
-      setAcademicConfig(defaultAcademicConfig);
+      setStoredAcademicConfig(defaultAcademicConfig);
+      setAcademicCalendar(defaultAcademicCalendar);
       setTaskRecords(
         legacyTasksToAssignments(
           createDemoState().tasks,
@@ -538,6 +602,13 @@ export function CEHFApp() {
     (item) => !item.roles || item.roles.includes(role),
   );
   const title = pageTitles[activeSection];
+  const currentWeekRange = academicWeekRange(academicConfig);
+  const headingEyebrow =
+    activeSection === "dashboard"
+      ? academicConfig.calendarStatus === "active"
+        ? `${academicConfig.weekLabel} · ${currentWeekRange}`
+        : academicConfig.weekLabel
+      : title.eyebrow;
 
   return (
     <div className="app-shell">
@@ -557,12 +628,23 @@ export function CEHFApp() {
             <span>Campus</span>
           </div>
         </div>
-        <div className="week-switcher">
+        <div className={`week-switcher is-${academicConfig.calendarStatus}`}>
           <div>
-            <span>Semana activa</span>
+            <span>
+              {academicConfig.calendarStatus === "active"
+                ? "Semana actual"
+                : "Calendario académico"}
+            </span>
             <strong>{academicConfig.weekLabel}</strong>
+            <small>
+              {academicConfig.calendarStatus === "active"
+                ? `${currentWeekRange} · ${academicConfig.termLabel}`
+                : academicConfig.nextWeekLabel && academicConfig.nextWeekStartDate
+                  ? `Próxima: ${academicConfig.nextWeekLabel}`
+                  : "Dirección debe configurarlo"}
+            </small>
           </div>
-          <ChevronDown size={16} aria-hidden="true" />
+          <CalendarDays size={17} aria-hidden="true" />
         </div>
         <nav className="sidebar-nav" aria-label="Navegación principal">
           <span className="nav-kicker">Tu portal</span>
@@ -738,7 +820,7 @@ export function CEHFApp() {
         <main className="content">
           <div className="page-heading">
             <div>
-              <span className="eyebrow">{title.eyebrow}</span>
+              <span className="eyebrow">{headingEyebrow}</span>
               <h1>
                 {title.title}
                 {activeSection === "dashboard"
@@ -746,25 +828,53 @@ export function CEHFApp() {
                   : ""}
               </h1>
             </div>
-            {["teacher", "director"].includes(role) &&
-              (activeSection !== "users" || role === "director") &&
-              [
-                "my-week",
-                "weekly-review",
-                "tasks",
-                "weekly-materials",
-                "wall-newspaper",
-                "forum",
-                "users",
-              ].includes(activeSection) && (
-                <button
-                  className="primary-button"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  <Plus size={18} />
-                  {createLabel(activeSection)}
-                </button>
-              )}
+            <div className="page-heading-actions">
+              <span
+                className={"page-week-context is-" + academicConfig.calendarStatus}
+                title={
+                  academicConfig.calendarStatus === "active"
+                    ? [currentWeekRange, academicConfig.termLabel].join(" · ")
+                    : academicConfig.nextWeekLabel
+                      ? "Próxima: " + academicConfig.nextWeekLabel
+                      : "Calendario sin configurar"
+                }
+              >
+                <CalendarDays size={15} />
+                <span>
+                  <small>Semana actual</small>
+                  <strong>{academicConfig.weekLabel}</strong>
+                </span>
+              </span>
+              {["teacher", "director"].includes(role) &&
+                (activeSection !== "users" || role === "director") &&
+                [
+                  "my-week",
+                  "weekly-review",
+                  "tasks",
+                  "weekly-materials",
+                  "wall-newspaper",
+                  "forum",
+                  "users",
+                ].includes(activeSection) && (
+                  <button
+                    className="primary-button"
+                    disabled={
+                      activeSection === "tasks" &&
+                      academicConfig.calendarStatus !== "active"
+                    }
+                    title={
+                      activeSection === "tasks" &&
+                      academicConfig.calendarStatus !== "active"
+                        ? "Dirección debe configurar una semana activa"
+                        : undefined
+                    }
+                    onClick={() => setCreateOpen(true)}
+                  >
+                    <Plus size={18} />
+                    {createLabel(activeSection)}
+                  </button>
+                )}
+            </div>
           </div>
 
           <motion.div
@@ -784,9 +894,19 @@ export function CEHFApp() {
               taskRecords={taskRecords}
               taskRecordsLoading={taskRecordsLoading}
               academicConfig={academicConfig}
-              saveAcademicConfiguration={async (config) => {
-                if (firebaseUser) await saveAcademicConfig(config);
-                else setAcademicConfig(config);
+              academicCalendar={academicCalendar}
+              saveAcademicCalendarConfiguration={async (input) => {
+                if (firebaseUser) {
+                  await saveAcademicCalendar(input);
+                } else {
+                  setStoredAcademicConfig((current) => ({
+                    ...current,
+                    schoolYearId: input.schoolYearId,
+                    schoolYearLabel: input.schoolYearLabel,
+                    timezone: input.timezone,
+                  }));
+                  setAcademicCalendar(demoCalendarFromInput(input));
+                }
               }}
               managedAccounts={managedAccounts}
               managedAccountsLoading={managedAccountsLoading}
@@ -1297,7 +1417,8 @@ function SectionContent({
   taskRecords,
   taskRecordsLoading,
   academicConfig,
-  saveAcademicConfiguration,
+  academicCalendar,
+  saveAcademicCalendarConfiguration,
   managedAccounts,
   managedAccountsLoading,
 }: {
@@ -1314,7 +1435,10 @@ function SectionContent({
   taskRecords: TaskAssignment[];
   taskRecordsLoading: boolean;
   academicConfig: AcademicConfig;
-  saveAcademicConfiguration: (config: AcademicConfig) => Promise<void>;
+  academicCalendar: AcademicCalendar;
+  saveAcademicCalendarConfiguration: (
+    input: AcademicCalendarInput,
+  ) => Promise<void>;
   managedAccounts: ManagedAccount[];
   managedAccountsLoading: boolean;
 }) {
@@ -1334,6 +1458,7 @@ function SectionContent({
         <WeekPage
           role={role}
           state={state}
+          academicConfig={academicConfig}
           navigate={navigate}
           updateState={updateState}
         />
@@ -1403,7 +1528,8 @@ function SectionContent({
           updateState={updateState}
           role={role}
           academicConfig={academicConfig}
-          saveAcademicConfiguration={saveAcademicConfiguration}
+          academicCalendar={academicCalendar}
+          saveAcademicCalendarConfiguration={saveAcademicCalendarConfiguration}
         />
       );
     case "profile":
@@ -1893,11 +2019,13 @@ function VerseEditorModal({
 function WeekPage({
   role,
   state,
+  academicConfig,
   navigate,
   updateState,
 }: {
   role: Role;
   state: PortalState;
+  academicConfig: AcademicConfig;
   navigate: (section: SectionKey) => void;
   updateState: (
     updater: (previous: PortalState) => PortalState,
@@ -1909,7 +2037,24 @@ function WeekPage({
       <section className="panel week-overview">
         <div className="week-header">
           <div>
-            <span className="pill pill-active">Semana activa</span>
+            <span
+              className={`pill ${
+                academicConfig.calendarStatus === "active"
+                  ? "pill-active"
+                  : "pill-warning"
+              }`}
+            >
+              {academicConfig.calendarStatus === "active"
+                ? academicConfig.weekLabel
+                : "Sin semana activa"}
+            </span>
+            <small className="week-calendar-context">
+              {academicConfig.calendarStatus === "active"
+                ? `${academicWeekRange(academicConfig)} · ${academicConfig.termLabel}`
+                : academicConfig.nextWeekLabel
+                  ? `La siguiente será ${academicConfig.nextWeekLabel}`
+                  : "Dirección debe completar el calendario académico"}
+            </small>
             <h2>{state.week.title}</h2>
             <p>{state.week.welcomeMessage}</p>
           </div>
@@ -3090,7 +3235,8 @@ function SettingsPage({
   updateState,
   role,
   academicConfig,
-  saveAcademicConfiguration,
+  academicCalendar,
+  saveAcademicCalendarConfiguration,
 }: {
   state: PortalState;
   updateState: (
@@ -3099,7 +3245,10 @@ function SettingsPage({
   ) => void;
   role: Role;
   academicConfig: AcademicConfig;
-  saveAcademicConfiguration: (config: AcademicConfig) => Promise<void>;
+  academicCalendar: AcademicCalendar;
+  saveAcademicCalendarConfiguration: (
+    input: AcademicCalendarInput,
+  ) => Promise<void>;
 }) {
   return (
     <div className="settings-layout">
@@ -3238,9 +3387,14 @@ function SettingsPage({
       </section>
       {role === "director" && (
         <AcademicConfigurationCard
-          key={`${academicConfig.schoolYearId}-${academicConfig.termId}-${academicConfig.weekId}`}
+          key={`${academicConfig.schoolYearId}-${academicCalendar.weeks
+            .map((week) => `${week.id}:${week.startDate}:${week.endDate}`)
+            .join("|")}-${academicCalendar.terms
+            .map((term) => `${term.id}:${term.weekIds.join(",")}`)
+            .join("|")}`}
           config={academicConfig}
-          onSave={saveAcademicConfiguration}
+          calendar={academicCalendar}
+          onSave={saveAcademicCalendarConfiguration}
         />
       )}
     </div>

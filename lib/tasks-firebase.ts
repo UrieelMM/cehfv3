@@ -10,7 +10,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   Timestamp,
   where,
   writeBatch,
@@ -18,10 +17,15 @@ import {
   type QueryConstraint,
   type Unsubscribe,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
 import type {
+  AcademicCalendar,
+  AcademicCalendarInput,
   AcademicConfig,
+  AcademicTerm,
+  AcademicWeek,
   AppNotification,
   Task,
   TaskAssignment,
@@ -42,9 +46,47 @@ export const defaultAcademicConfig: AcademicConfig = {
   schoolYearLabel: "2026–2027",
   termId: "trimestre1",
   termLabel: "Trimestre 1",
-  weekId: "semana7",
-  weekLabel: "Semana 7",
+  weekId: "semana1",
+  weekLabel: "Semana 1",
   timezone: "America/Mexico_City",
+  calendarStatus: "active",
+  weekStartDate: "2026-08-17",
+  weekEndDate: "2026-08-21",
+};
+
+export const defaultAcademicCalendar: AcademicCalendar = {
+  schoolYearId: defaultAcademicConfig.schoolYearId,
+  configured: true,
+  weeks: [
+    {
+      id: "semana1",
+      label: "Semana 1",
+      startDate: "2026-08-17",
+      endDate: "2026-08-21",
+      startAt: "2026-08-17T06:00:00.000Z",
+      endAt: "2026-08-22T06:00:00.000Z",
+      order: 1,
+      active: true,
+    },
+  ],
+  terms: [
+    {
+      id: "trimestre1",
+      label: "Trimestre 1",
+      weekIds: ["semana1"],
+      startDate: "2026-08-17",
+      endDate: "2026-08-21",
+      order: 1,
+      active: true,
+    },
+  ],
+};
+
+export const emptyAcademicCalendar: AcademicCalendar = {
+  schoolYearId: defaultAcademicConfig.schoolYearId,
+  configured: false,
+  weeks: [],
+  terms: [],
 };
 
 function requireFirebase() {
@@ -224,18 +266,145 @@ export function watchAcademicConfig(
   );
 }
 
-export async function saveAcademicConfig(config: AcademicConfig) {
-  if (!firebase.db) throw new Error("Firebase no está configurado.");
-  await setDoc(
-    doc(firebase.db, "institutions", INSTITUTION_ID, "configuracion", "academica"),
-    {
-      ...config,
-      institutionId: INSTITUTION_ID,
-      updatedAt: serverTimestamp(),
-      updatedBy: firebase.auth?.currentUser?.uid ?? "",
+function weekFromData(id: string, data: DocumentData): AcademicWeek {
+  return {
+    id,
+    label: String(data.label ?? "Semana"),
+    startDate: String(data.startDate ?? ""),
+    endDate: String(data.endDate ?? ""),
+    startAt: asIso(data.startAt, ""),
+    endAt: asIso(data.endAt, ""),
+    order: Number(data.order ?? 0),
+    active: data.active !== false,
+  };
+}
+
+function termFromData(id: string, data: DocumentData): AcademicTerm {
+  return {
+    id,
+    label: String(data.label ?? "Trimestre"),
+    weekIds: Array.isArray(data.weekIds) ? data.weekIds.map(String) : [],
+    startDate: String(data.startDate ?? ""),
+    endDate: String(data.endDate ?? ""),
+    order: Number(data.order ?? 0),
+    active: data.active !== false,
+  };
+}
+
+export function watchAcademicCalendar(
+  config: AcademicConfig,
+  callback: (calendar: AcademicCalendar) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db) {
+    callback(defaultAcademicCalendar);
+    return () => undefined;
+  }
+  const cyclePath = [
+    "institutions",
+    config.institutionId,
+    "ciclosEscolares",
+    config.schoolYearId,
+  ];
+  let weeks: AcademicWeek[] = [];
+  let terms: AcademicTerm[] = [];
+  let weeksReady = false;
+  let termsReady = false;
+  const emit = () => {
+    if (!weeksReady || !termsReady) return;
+    callback({
+      schoolYearId: config.schoolYearId,
+      weeks,
+      terms,
+      configured: weeks.length > 0 && terms.length > 0,
+    });
+  };
+  const stopWeeks = onSnapshot(
+    collection(firebase.db, ...cyclePath, "semanas"),
+    (snapshot) => {
+      weeks = snapshot.docs
+        .map((entry) => weekFromData(entry.id, entry.data()))
+        .filter((week) => week.active)
+        .sort(
+          (first, second) =>
+            first.startDate.localeCompare(second.startDate) ||
+            first.order - second.order,
+        );
+      weeksReady = true;
+      emit();
     },
-    { merge: true },
+    (error) => onError?.(error),
   );
+  const stopTerms = onSnapshot(
+    collection(firebase.db, ...cyclePath, "trimestres"),
+    (snapshot) => {
+      terms = snapshot.docs
+        .map((entry) => termFromData(entry.id, entry.data()))
+        .filter((term) => term.active)
+        .sort((first, second) => first.order - second.order);
+      termsReady = true;
+      emit();
+    },
+    (error) => onError?.(error),
+  );
+  return () => {
+    stopWeeks();
+    stopTerms();
+  };
+}
+
+export function resolveAcademicConfig(
+  config: AcademicConfig,
+  calendar: AcademicCalendar,
+  now = new Date(),
+): AcademicConfig {
+  const nowTime = now.getTime();
+  const currentWeek = calendar.weeks.find((week) => {
+    const starts = new Date(week.startAt).getTime();
+    const ends = new Date(week.endAt).getTime();
+    return Number.isFinite(starts) && Number.isFinite(ends) && nowTime >= starts && nowTime < ends;
+  });
+  const currentTerm = currentWeek
+    ? calendar.terms.find((term) => term.weekIds.includes(currentWeek.id))
+    : undefined;
+  const nextWeek = calendar.weeks.find(
+    (week) => new Date(week.startAt).getTime() > nowTime,
+  );
+  if (currentWeek && currentTerm) {
+    return {
+      ...config,
+      termId: currentTerm.id,
+      termLabel: currentTerm.label,
+      weekId: currentWeek.id,
+      weekLabel: currentWeek.label,
+      calendarStatus: "active",
+      weekStartDate: currentWeek.startDate,
+      weekEndDate: currentWeek.endDate,
+      nextWeekLabel: nextWeek?.label,
+      nextWeekStartDate: nextWeek?.startDate,
+    };
+  }
+  return {
+    ...config,
+    termId: "",
+    termLabel: "Sin trimestre activo",
+    weekId: "",
+    weekLabel: calendar.configured ? "Sin semana activa" : "Calendario pendiente",
+    calendarStatus: calendar.configured ? "gap" : "unconfigured",
+    weekStartDate: undefined,
+    weekEndDate: undefined,
+    nextWeekLabel: nextWeek?.label,
+    nextWeekStartDate: nextWeek?.startDate,
+  };
+}
+
+export async function saveAcademicCalendar(input: AcademicCalendarInput) {
+  if (!firebase.functions) throw new Error("Firebase no está configurado.");
+  const callable = httpsCallable<AcademicCalendarInput, { calendarStatus: string }>(
+    firebase.functions,
+    "saveAcademicCalendar",
+  );
+  return (await callable(input)).data;
 }
 
 export function watchTaskAssignments(
@@ -277,6 +446,11 @@ export async function createTaskAssignment(
   profile: UserProfile,
   config: AcademicConfig,
 ) {
+  if (config.calendarStatus !== "active" || !config.weekId || !config.termId) {
+    throw new Error(
+      "No hay una semana activa configurada. Dirección debe revisar el calendario académico.",
+    );
+  }
   const { db, storage } = requireFirebase();
   const subjectId = input.subjectId || slugify(input.subject);
   const reference = doc(academicTaskCollection(config, subjectId));
@@ -287,8 +461,8 @@ export async function createTaskAssignment(
     schoolYearLabel: config.schoolYearLabel,
     termId: config.termId,
     termLabel: config.termLabel,
-    weekId: input.weekId,
-    weekLabel: input.weekLabel,
+    weekId: config.weekId,
+    weekLabel: config.weekLabel,
     subjectId,
     subject: input.subject,
     title: input.title.trim(),
@@ -342,7 +516,7 @@ export async function createTaskAssignment(
         "trimestres",
         config.termId,
         "semanas",
-        input.weekId,
+        config.weekId,
         "materias",
         subjectId,
         "tareas",
@@ -891,8 +1065,8 @@ export function createDemoTask(
     schoolYearLabel: config.schoolYearLabel,
     termId: config.termId,
     termLabel: config.termLabel,
-    weekId: input.weekId,
-    weekLabel: input.weekLabel,
+    weekId: config.weekId,
+    weekLabel: config.weekLabel,
     subjectId: input.subjectId,
     subject: input.subject,
     title: input.title,

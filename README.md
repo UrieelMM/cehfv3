@@ -39,24 +39,35 @@ Si `.env` no tiene credenciales, la pantalla de acceso permite abrir una demostr
 - [`lib/firebase.ts`](./lib/firebase.ts): Authentication, perfil y persistencia.
 - [`lib/tasks-firebase.ts`](./lib/tasks-firebase.ts): tareas, entregas, archivos, historial y prórrogas.
 - [`components/tasks-workflow.tsx`](./components/tasks-workflow.tsx): interfaz completa por rol.
-- [`functions/src/index.ts`](./functions/src/index.ts): publicación programada y notificaciones automáticas.
+- [`functions/src/index.ts`](./functions/src/index.ts): calendario seguro, publicación programada y notificaciones automáticas.
 - [`lib/demo-data.ts`](./lib/demo-data.ts): datos sintéticos del piloto.
 - [`firestore.rules`](./firestore.rules): aislamiento por rol, propiedad e institución.
 - [`storage.rules`](./storage.rules): archivos privados, tipos y tamaños permitidos.
 
 ## Organización académica de tareas
 
-Dirección define desde **Configuración → Ciclo académico activo** el ciclo, trimestre y semana vigentes. Las tareas se guardan con esta jerarquía reutilizable:
+Dirección define desde **Configuración → Calendario académico** las semanas con su rango de fechas y asigna cada una a un trimestre. El servidor valida traslapes, semanas sin trimestre y permisos; además sincroniza automáticamente la semana vigente según `America/Mexico_City`.
+
+El catálogo reutilizable queda separado de los datos operativos:
+
+```text
+institutions/cehf-primaria/ciclosEscolares/{ciclo}/
+  semanas/{semanaId}
+  trimestres/{trimestreId}
+  calendarioHistorial/{eventoId}
+```
+
+Las tareas conservan el ciclo, trimestre y semana resueltos por calendario y se guardan con esta jerarquía:
 
 ```text
 institutions/cehf-primaria/
   ciclosEscolares/cicloescolar26-27/
-  trimestres/trimestre1/
-  semanas/semana7/
-  materias/{materia}/tareas/{taskId}
+    trimestres/trimestre1/
+      semanas/semana1/
+        materias/{materia}/tareas/{taskId}
 ```
 
-Cada tarea conserva sus subcolecciones `entregas`, `historial` y `prorrogas`. Las reglas rechazan entregas fuera de fecha o cerradas, salvo que exista una prórroga individual vigente. El detalle siempre puede abrirse en `/tasks/{taskId}`.
+Cada tarea conserva sus subcolecciones `entregas`, `historial` y `prorrogas`. Las reglas comprueban que una tarea nueva use la semana actual y un trimestre válido; también rechazan entregas fuera de fecha o cerradas, salvo que exista una prórroga individual vigente. Los futuros documentos de avance y reportes deben incluir `schoolYearId`, `termId`, `termLabel`, `weekId` y `weekLabel`, que se validan contra el mismo catálogo. El detalle siempre puede abrirse en `/tasks/{taskId}`.
 
 ## WhatsApp
 

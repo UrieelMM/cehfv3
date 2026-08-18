@@ -79,6 +79,47 @@ export type AcademicConfig = {
   weekId: string;
   weekLabel: string;
   timezone: string;
+  calendarStatus: "active" | "gap" | "unconfigured";
+  weekStartDate?: string;
+  weekEndDate?: string;
+  nextWeekLabel?: string;
+  nextWeekStartDate?: string;
+};
+
+export type AcademicWeek = {
+  id: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  startAt: string;
+  endAt: string;
+  order: number;
+  active: boolean;
+};
+
+export type AcademicTerm = {
+  id: string;
+  label: string;
+  weekIds: string[];
+  startDate: string;
+  endDate: string;
+  order: number;
+  active: boolean;
+};
+
+export type AcademicCalendar = {
+  schoolYearId: string;
+  weeks: AcademicWeek[];
+  terms: AcademicTerm[];
+  configured: boolean;
+};
+
+export type AcademicCalendarInput = {
+  schoolYearId: string;
+  schoolYearLabel: string;
+  timezone: string;
+  weeks: Array<Pick<AcademicWeek, "id" | "label" | "startDate" | "endDate">>;
+  terms: Array<Pick<AcademicTerm, "id" | "label" | "weekIds">>;
 };
 
 export type TaskPublicationStatus =

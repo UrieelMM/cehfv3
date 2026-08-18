@@ -34,6 +34,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
+import { Functions, getFunctions } from "firebase/functions";
 import {
   getDownloadURL,
   getStorage,
@@ -66,15 +67,17 @@ let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 let storage: FirebaseStorage | null = null;
+let functions: Functions | null = null;
 
 if (firebaseConfigured && typeof window !== "undefined") {
   app = getApps().length ? getApp() : initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
   storage = getStorage(app);
+  functions = getFunctions(app, "us-central1");
 }
 
-export const firebase = { app, auth, db, storage };
+export const firebase = { app, auth, db, storage, functions };
 
 export type ManagedAccountInput = {
   firstName: string;

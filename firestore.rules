@@ -46,6 +46,64 @@ service cloud.firestore {
       return isActive() && data.institutionId == profile().institutionId;
     }
 
+    function calendarWeekPath(institutionId, schoolYearId, weekId) {
+      return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/semanas/$(weekId);
+    }
+
+    function calendarTermPath(institutionId, schoolYearId, termId) {
+      return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId);
+    }
+
+    function validCalendarScope(data) {
+      let weekPath = calendarWeekPath(
+        data.institutionId, data.schoolYearId, data.weekId
+      );
+      let termPath = calendarTermPath(
+        data.institutionId, data.schoolYearId, data.termId
+      );
+      return data.institutionId is string
+        && data.schoolYearId is string
+        && data.termId is string
+        && data.weekId is string
+        && exists(weekPath)
+        && exists(termPath)
+        && get(weekPath).data.active == true
+        && get(termPath).data.active == true
+        && get(termPath).data.weekIds is list
+        && get(termPath).data.weekIds.hasAny([data.weekId])
+        && data.weekLabel == get(weekPath).data.label
+        && data.termLabel == get(termPath).data.label;
+    }
+
+    function sameCalendarScope(before, after) {
+      return after.schoolYearId == before.schoolYearId
+        && after.termId == before.termId
+        && after.weekId == before.weekId
+        && after.termLabel == before.termLabel
+        && after.weekLabel == before.weekLabel;
+    }
+
+    function validCurrentTaskScope(
+      data, institutionId, schoolYearId, termId, weekId
+    ) {
+      let weekPath = calendarWeekPath(institutionId, schoolYearId, weekId);
+      let termPath = calendarTermPath(institutionId, schoolYearId, termId);
+      return exists(weekPath)
+        && exists(termPath)
+        && get(weekPath).data.active == true
+        && get(termPath).data.active == true
+        && get(termPath).data.weekIds is list
+        && get(termPath).data.weekIds.hasAny([weekId])
+        && request.time >= get(weekPath).data.startAt
+        && request.time < get(weekPath).data.endAt
+        && data.institutionId == institutionId
+        && data.schoolYearId == schoolYearId
+        && data.termId == termId
+        && data.weekId == weekId
+        && data.termLabel == get(termPath).data.label
+        && data.weekLabel == get(weekPath).data.label;
+    }
+
     match /system/bootstrap {
       allow read: if isDirector();
       allow write: if false;
@@ -116,10 +174,31 @@ service cloud.firestore {
 
       match /configuracion/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if isDirector()
+        allow create, update: if documentId != "academica"
+          && isDirector()
           && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;
         allow delete: if false;
+      }
+
+      match /ciclosEscolares/{schoolYearId} {
+        allow read: if isActive() && profile().institutionId == institutionId;
+        allow write: if false;
+
+        match /semanas/{weekId} {
+          allow read: if isActive() && profile().institutionId == institutionId;
+          allow write: if false;
+        }
+
+        match /trimestres/{termId} {
+          allow read: if isActive() && profile().institutionId == institutionId;
+          allow write: if false;
+        }
+
+        match /calendarioHistorial/{eventId} {
+          allow read: if isDirector() && profile().institutionId == institutionId;
+          allow write: if false;
+        }
       }
 
       match /ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId} {
@@ -182,9 +261,13 @@ service cloud.firestore {
         allow create: if taskBelongsToInstitution(request.resource.data)
           && isStaff()
           && request.resource.data.createdBy == request.auth.uid
-          && request.resource.data.schoolYearId == schoolYearId
-          && request.resource.data.termId == termId
-          && request.resource.data.weekId == weekId
+          && validCurrentTaskScope(
+            request.resource.data,
+            institutionId,
+            schoolYearId,
+            termId,
+            weekId
+          )
           && request.resource.data.subjectId == subjectId
           && request.resource.data.status in ["draft", "scheduled", "published"];
         allow update: if taskBelongsToInstitution(resource.data)
@@ -297,10 +380,13 @@ service cloud.firestore {
       allow read: if sameInstitution(resource.data) && (
         isStaff() || resource.data.status == "published"
       );
-      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow create: if isStaff()
+        && sameInstitution(request.resource.data)
+        && validCalendarScope(request.resource.data);
       allow update: if isStaff()
         && sameInstitution(resource.data)
-        && sameInstitution(request.resource.data);
+        && sameInstitution(request.resource.data)
+        && sameCalendarScope(resource.data, request.resource.data);
       allow delete: if false;
     }
 
@@ -308,10 +394,13 @@ service cloud.firestore {
       allow read: if sameInstitution(resource.data) && (
         isStaff() || resource.data.status in ["published", "closed"]
       );
-      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow create: if isStaff()
+        && sameInstitution(request.resource.data)
+        && validCalendarScope(request.resource.data);
       allow update: if isStaff()
         && sameInstitution(resource.data)
-        && sameInstitution(request.resource.data);
+        && sameInstitution(request.resource.data)
+        && sameCalendarScope(resource.data, request.resource.data);
       allow delete: if false;
 
       match /attempts/{attemptId} {
@@ -374,10 +463,13 @@ service cloud.firestore {
       allow read: if sameInstitution(resource.data) && (
         isStaff() || resource.data.status in ["published", "archived"]
       );
-      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow create: if isStaff()
+        && sameInstitution(request.resource.data)
+        && validCalendarScope(request.resource.data);
       allow update: if isStaff()
         && sameInstitution(resource.data)
-        && sameInstitution(request.resource.data);
+        && sameInstitution(request.resource.data)
+        && sameCalendarScope(resource.data, request.resource.data);
       allow delete: if false;
     }
 
@@ -389,10 +481,13 @@ service cloud.firestore {
           resource.data.status in ["published", "corrected"]
         )
       );
-      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow create: if isStaff()
+        && sameInstitution(request.resource.data)
+        && validCalendarScope(request.resource.data);
       allow update: if isStaff()
         && sameInstitution(resource.data)
-        && sameInstitution(request.resource.data);
+        && sameInstitution(request.resource.data)
+        && sameCalendarScope(resource.data, request.resource.data);
       allow delete: if false;
     }
 
@@ -404,10 +499,13 @@ service cloud.firestore {
           resource.data.status == "published"
         )
       );
-      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow create: if isStaff()
+        && sameInstitution(request.resource.data)
+        && validCalendarScope(request.resource.data);
       allow update: if isStaff()
         && sameInstitution(resource.data)
-        && sameInstitution(request.resource.data);
+        && sameInstitution(request.resource.data)
+        && sameCalendarScope(resource.data, request.resource.data);
       allow delete: if false;
     }
 

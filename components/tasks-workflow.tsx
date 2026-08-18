@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   BellRing,
+  CalendarDays,
   CalendarClock,
   Check,
   CheckCircle2,
@@ -24,6 +25,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UploadCloud,
   UserRound,
   Users,
@@ -48,6 +50,8 @@ import {
   watchTaskSubmissions,
 } from "@/lib/tasks-firebase";
 import type {
+  AcademicCalendar,
+  AcademicCalendarInput,
   AcademicConfig,
   ManagedAccount,
   Role,
@@ -405,6 +409,8 @@ export function TaskCreateModal({
     toLocalDateTime(new Date(Date.now() + 60 * 60 * 1000)),
   );
   const [busy, setBusy] = useState(false);
+  const hasActiveWeek =
+    config.calendarStatus === "active" && Boolean(config.weekId && config.termId);
   const groups = useMemo(() => {
     const fromAccounts = accounts
       .filter((account) => account.role === "student" && account.grade && account.group)
@@ -426,6 +432,10 @@ export function TaskCreateModal({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!hasActiveWeek) {
+      toast.error("Dirección debe configurar una semana activa antes de crear tareas.");
+      return;
+    }
     if (new Date(dueAt).getTime() <= Date.now()) {
       toast.error("La fecha de entrega debe estar en el futuro.");
       return;
@@ -496,6 +506,15 @@ export function TaskCreateModal({
         </header>
 
         <div className="task-create-body">
+          {!hasActiveWeek && (
+            <div className="task-calendar-warning" role="alert">
+              <CircleAlert size={19} />
+              <div>
+                <strong>No hay una semana activa</strong>
+                <span>Revisa las fechas del calendario académico desde Configuración.</span>
+              </div>
+            </div>
+          )}
           <section className="task-form-section">
             <div className="task-form-section-title">
               <span>01</span>
@@ -528,6 +547,11 @@ export function TaskCreateModal({
               <label>
                 Semana
                 <input value={config.weekLabel} readOnly />
+                {config.weekStartDate && config.weekEndDate && (
+                  <small>
+                    {config.weekStartDate} a {config.weekEndDate} · {config.termLabel}
+                  </small>
+                )}
               </label>
               <label>
                 Materia
@@ -719,7 +743,9 @@ export function TaskCreateModal({
             </button>
             <button
               className="primary-button"
-              disabled={busy || !title.trim() || !description.trim()}
+              disabled={
+                busy || !hasActiveWeek || !title.trim() || !description.trim()
+              }
             >
               {busy ? <span className="button-spinner" /> : <Sparkles size={17} />}
               {busy
@@ -1631,115 +1657,462 @@ function TaskTimeline({
   );
 }
 
+type WeekDraft = AcademicCalendarInput["weeks"][number];
+type TermDraft = AcademicCalendarInput["terms"][number];
+
+function dateInputValue(date: Date) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function addDaysToDateInput(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateInputValue(date);
+}
+
+function initialAcademicWeek(): WeekDraft {
+  const today = new Date();
+  const mondayOffset = (today.getDay() + 6) % 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - mondayOffset);
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  return {
+    id: "semana1",
+    label: "Semana 1",
+    startDate: dateInputValue(monday),
+    endDate: dateInputValue(friday),
+  };
+}
+
+function academicDateStatus(week: WeekDraft) {
+  const today = dateInputValue(new Date());
+  if (today < week.startDate) return { label: "Próxima", className: "is-upcoming" };
+  if (today > week.endDate) return { label: "Finalizada", className: "is-past" };
+  return { label: "Actual", className: "is-current" };
+}
+
 export function AcademicConfigurationCard({
   config,
+  calendar,
   onSave,
 }: {
   config: AcademicConfig;
-  onSave: (config: AcademicConfig) => Promise<void>;
+  calendar: AcademicCalendar;
+  onSave: (input: AcademicCalendarInput) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState(config);
+  const firstWeek = calendar.weeks.length
+    ? null
+    : initialAcademicWeek();
+  const [schoolYearId, setSchoolYearId] = useState(config.schoolYearId);
+  const [schoolYearLabel, setSchoolYearLabel] = useState(config.schoolYearLabel);
+  const [weeks, setWeeks] = useState<WeekDraft[]>(() =>
+    calendar.weeks.length
+      ? calendar.weeks.map(({ id, label, startDate, endDate }) => ({
+          id,
+          label,
+          startDate,
+          endDate,
+        }))
+      : [firstWeek as WeekDraft],
+  );
+  const [terms, setTerms] = useState<TermDraft[]>(() =>
+    calendar.terms.length
+      ? calendar.terms.map(({ id, label, weekIds }) => ({ id, label, weekIds }))
+      : [
+          {
+            id: "trimestre1",
+            label: "Trimestre 1",
+            weekIds: firstWeek ? [firstWeek.id] : [],
+          },
+        ],
+  );
   const [busy, setBusy] = useState(false);
+
+  const validationMessage = useMemo(() => {
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(schoolYearId.trim())) {
+      return "El identificador del ciclo sólo puede usar minúsculas, números y guiones.";
+    }
+    if (schoolYearLabel.trim().length < 2) return "Escribe el nombre visible del ciclo.";
+    if (!weeks.length) return "Agrega al menos una semana.";
+    for (const week of weeks) {
+      if (!week.label.trim() || !week.startDate || !week.endDate) {
+        return "Completa el nombre y el rango de todas las semanas.";
+      }
+      if (week.endDate < week.startDate) {
+        return `${week.label || "Una semana"} termina antes de comenzar.`;
+      }
+    }
+    const sortedWeeks = [...weeks].sort((first, second) =>
+      first.startDate.localeCompare(second.startDate),
+    );
+    for (let index = 1; index < sortedWeeks.length; index += 1) {
+      if (sortedWeeks[index].startDate <= sortedWeeks[index - 1].endDate) {
+        return `${sortedWeeks[index - 1].label} y ${sortedWeeks[index].label} se traslapan.`;
+      }
+    }
+    if (!terms.length) return "Agrega al menos un trimestre.";
+    if (terms.some((term) => !term.label.trim() || !term.weekIds.length)) {
+      return "Cada trimestre necesita nombre y al menos una semana.";
+    }
+    const weekOrder = new Map(
+      sortedWeeks.map((week, index) => [week.id, index]),
+    );
+    for (const term of terms) {
+      const indexes = term.weekIds
+        .map((weekId) => weekOrder.get(weekId) ?? -1)
+        .sort((first, second) => first - second);
+      if (
+        indexes.some(
+          (weekIndex, index) =>
+            index > 0 && weekIndex !== indexes[index - 1] + 1,
+        )
+      ) {
+        return `${term.label} debe agrupar semanas consecutivas.`;
+      }
+    }
+    const assignments = terms.flatMap((term) => term.weekIds);
+    const unassigned = weeks.find((week) => !assignments.includes(week.id));
+    if (unassigned) return `Asigna ${unassigned.label} a un trimestre.`;
+    if (new Set(assignments).size !== assignments.length) {
+      return "Cada semana sólo puede pertenecer a un trimestre.";
+    }
+    return "";
+  }, [schoolYearId, schoolYearLabel, terms, weeks]);
+
+  const currentWeek = weeks.find(
+    (week) => academicDateStatus(week).className === "is-current",
+  );
+
+  function addWeek() {
+    const nextNumber = weeks.length + 1;
+    const usedIds = new Set(weeks.map((week) => week.id));
+    let id = `semana${nextNumber}`;
+    let suffix = nextNumber;
+    while (usedIds.has(id)) {
+      suffix += 1;
+      id = `semana${suffix}`;
+    }
+    const lastWeek = [...weeks].sort((first, second) =>
+      first.endDate.localeCompare(second.endDate),
+    ).at(-1);
+    const startDate = lastWeek
+      ? addDaysToDateInput(lastWeek.endDate, 3)
+      : dateInputValue(new Date());
+    const nextWeek = {
+      id,
+      label: `Semana ${nextNumber}`,
+      startDate,
+      endDate: addDaysToDateInput(startDate, 4),
+    };
+    setWeeks((current) => [...current, nextWeek]);
+    setTerms((current) =>
+      current.map((term, index) =>
+        index === current.length - 1
+          ? { ...term, weekIds: [...term.weekIds, nextWeek.id] }
+          : term,
+      ),
+    );
+  }
+
+  function addTerm() {
+    const nextNumber = terms.length + 1;
+    const usedIds = new Set(terms.map((term) => term.id));
+    let id = `trimestre${nextNumber}`;
+    let suffix = nextNumber;
+    while (usedIds.has(id)) {
+      suffix += 1;
+      id = `trimestre${suffix}`;
+    }
+    setTerms((current) => [
+      ...current,
+      { id, label: `Trimestre ${nextNumber}`, weekIds: [] },
+    ]);
+  }
+
+  function assignWeek(termId: string, weekId: string, selected: boolean) {
+    setTerms((current) =>
+      current.map((term) => {
+        if (selected) {
+          return term.id === termId
+            ? { ...term, weekIds: [...new Set([...term.weekIds, weekId])] }
+            : { ...term, weekIds: term.weekIds.filter((id) => id !== weekId) };
+        }
+        return term.id === termId
+          ? { ...term, weekIds: term.weekIds.filter((id) => id !== weekId) }
+          : term;
+      }),
+    );
+  }
 
   return (
     <section className="panel settings-section academic-config-section">
-      <div className="settings-heading">
+      <div className="settings-heading academic-calendar-heading">
         <span className="settings-icon">
           <CalendarClock size={20} />
         </span>
         <div>
-          <h2>Ciclo académico activo</h2>
-          <p>Esta ruta organiza las tareas actuales y permite reutilizar el portal cada ciclo.</p>
+          <h2>Calendario académico</h2>
+          <p>Dirección define aquí las semanas que utilizarán tareas, avances y reportes.</p>
         </div>
+        <span className={`academic-current-chip ${currentWeek ? "is-active" : ""}`}>
+          <i /> {currentWeek ? `${currentWeek.label} en curso` : "Sin semana para hoy"}
+        </span>
       </div>
+
       <div className="academic-path-preview">
-        <span>{draft.schoolYearId}</span>
+        <span>{schoolYearId || "ciclo-escolar"}</span>
         <ChevronRight size={14} />
-        <span>{draft.termId}</span>
+        <span>{config.termId || "trimestre"}</span>
         <ChevronRight size={14} />
-        <span>{draft.weekId}</span>
+        <span>{currentWeek?.id ?? "semana"}</span>
         <ChevronRight size={14} />
         <span>materia</span>
       </div>
-      <div className="academic-config-grid">
+
+      <div className="academic-config-grid academic-cycle-grid">
         <label>
           Identificador del ciclo
           <input
-            value={draft.schoolYearId}
-            onChange={(event) => setDraft({ ...draft, schoolYearId: event.target.value })}
+            value={schoolYearId}
+            onChange={(event) => setSchoolYearId(event.target.value.toLowerCase())}
             placeholder="cicloescolar26-27"
           />
+          <small>Se conserva como clave estable para consultas históricas.</small>
         </label>
         <label>
-          Nombre visible
+          Nombre visible del ciclo
           <input
-            value={draft.schoolYearLabel}
-            onChange={(event) => setDraft({ ...draft, schoolYearLabel: event.target.value })}
+            value={schoolYearLabel}
+            onChange={(event) => setSchoolYearLabel(event.target.value)}
             placeholder="2026–2027"
           />
-        </label>
-        <label>
-          Identificador del trimestre
-          <input
-            value={draft.termId}
-            onChange={(event) => setDraft({ ...draft, termId: event.target.value })}
-            placeholder="trimestre1"
-          />
-        </label>
-        <label>
-          Nombre del trimestre
-          <input
-            value={draft.termLabel}
-            onChange={(event) => setDraft({ ...draft, termLabel: event.target.value })}
-          />
-        </label>
-        <label>
-          Identificador de semana
-          <input
-            value={draft.weekId}
-            onChange={(event) => setDraft({ ...draft, weekId: event.target.value })}
-            placeholder="semana7"
-          />
-        </label>
-        <label>
-          Nombre de la semana
-          <input
-            value={draft.weekLabel}
-            onChange={(event) => setDraft({ ...draft, weekLabel: event.target.value })}
-          />
+          <small>Se mostrará en tareas, reportes y filtros.</small>
         </label>
       </div>
+
+      <div className="academic-calendar-block">
+        <div className="academic-calendar-title">
+          <div>
+            <span className="eyebrow">Semanas del ciclo</span>
+            <h3>Nombre y rango de fechas</h3>
+            <p>Las fechas no pueden traslaparse. El cambio de semana se realiza automáticamente.</p>
+          </div>
+          <button className="secondary-button" type="button" onClick={addWeek}>
+            <Plus size={16} /> Agregar semana
+          </button>
+        </div>
+        <div className="academic-week-list">
+          {weeks.map((week, index) => {
+            const status = academicDateStatus(week);
+            return (
+              <article className="academic-week-row" key={week.id}>
+                <div className="academic-week-index">
+                  <CalendarDays size={17} />
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                </div>
+                <label>
+                  Nombre
+                  <input
+                    value={week.label}
+                    onChange={(event) =>
+                      setWeeks((current) =>
+                        current.map((item) =>
+                          item.id === week.id
+                            ? { ...item, label: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                    placeholder="Semana 1"
+                  />
+                </label>
+                <label>
+                  Inicio
+                  <input
+                    type="date"
+                    value={week.startDate}
+                    onChange={(event) =>
+                      setWeeks((current) =>
+                        current.map((item) =>
+                          item.id === week.id
+                            ? { ...item, startDate: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  Fin
+                  <input
+                    type="date"
+                    value={week.endDate}
+                    onChange={(event) =>
+                      setWeeks((current) =>
+                        current.map((item) =>
+                          item.id === week.id
+                            ? { ...item, endDate: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <span className={`academic-week-status ${status.className}`}>
+                  {status.label}
+                </span>
+                <button
+                  className="plain-icon academic-remove"
+                  type="button"
+                  disabled={weeks.length === 1}
+                  aria-label={`Quitar ${week.label}`}
+                  onClick={() => {
+                    setWeeks((current) => current.filter((item) => item.id !== week.id));
+                    setTerms((current) =>
+                      current.map((term) => ({
+                        ...term,
+                        weekIds: term.weekIds.filter((id) => id !== week.id),
+                      })),
+                    );
+                  }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="academic-calendar-block">
+        <div className="academic-calendar-title">
+          <div>
+            <span className="eyebrow">Trimestres</span>
+            <h3>Agrupa las semanas</h3>
+            <p>Cada semana pertenece a un solo trimestre para evitar reportes ambiguos.</p>
+          </div>
+          <button className="secondary-button" type="button" onClick={addTerm}>
+            <Plus size={16} /> Agregar trimestre
+          </button>
+        </div>
+        <div className="academic-term-grid">
+          {terms.map((term) => (
+            <article className="academic-term-card" key={term.id}>
+              <header>
+                <label>
+                  Nombre del trimestre
+                  <input
+                    value={term.label}
+                    onChange={(event) =>
+                      setTerms((current) =>
+                        current.map((item) =>
+                          item.id === term.id
+                            ? { ...item, label: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <button
+                  className="plain-icon"
+                  type="button"
+                  disabled={terms.length === 1}
+                  aria-label={`Quitar ${term.label}`}
+                  onClick={() =>
+                    setTerms((current) => current.filter((item) => item.id !== term.id))
+                  }
+                >
+                  <Trash2 size={16} />
+                </button>
+              </header>
+              <div className="academic-term-weeks">
+                {weeks.map((week) => (
+                  <label
+                    className={term.weekIds.includes(week.id) ? "is-selected" : ""}
+                    key={week.id}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={term.weekIds.includes(week.id)}
+                      onChange={(event) =>
+                        assignWeek(term.id, week.id, event.target.checked)
+                      }
+                    />
+                    <span>{week.label}</span>
+                    <small>{week.startDate.slice(5)} · {week.endDate.slice(5)}</small>
+                  </label>
+                ))}
+              </div>
+              <footer>
+                {term.weekIds.length} {term.weekIds.length === 1 ? "semana" : "semanas"}
+              </footer>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className={`academic-integrity-note ${validationMessage ? "has-error" : "is-ready"}`}>
+        {validationMessage ? <CircleAlert size={17} /> : <ShieldCheck size={17} />}
+        <span>
+          {validationMessage ||
+            "Calendario consistente: todas las semanas tienen un trimestre y no hay traslapes."}
+        </span>
+      </div>
+
       <div className="academic-config-footer">
         <span>
-          <ShieldCheck size={15} /> America/Mexico_City
+          <ShieldCheck size={15} /> Validación en Firebase · America/Mexico_City · historial protegido
         </span>
         <button
           className="primary-button"
-          disabled={
-            busy ||
-            !draft.schoolYearId.trim() ||
-            !draft.termId.trim() ||
-            !draft.weekId.trim()
-          }
+          disabled={busy || Boolean(validationMessage)}
           onClick={async () => {
             setBusy(true);
             try {
+              const order = new Map(
+                [...weeks]
+                  .sort((first, second) => first.startDate.localeCompare(second.startDate))
+                  .map((week, index) => [week.id, index]),
+              );
               await onSave({
-                ...draft,
-                schoolYearId: draft.schoolYearId.trim().toLowerCase(),
-                termId: draft.termId.trim().toLowerCase(),
-                weekId: draft.weekId.trim().toLowerCase(),
+                schoolYearId: schoolYearId.trim().toLowerCase(),
+                schoolYearLabel: schoolYearLabel.trim(),
+                timezone: config.timezone,
+                weeks: [...weeks]
+                  .sort((first, second) => first.startDate.localeCompare(second.startDate))
+                  .map((week) => ({
+                    ...week,
+                    label: week.label.trim(),
+                  })),
+                terms: terms.map((term) => ({
+                  ...term,
+                  label: term.label.trim(),
+                  weekIds: [...term.weekIds].sort(
+                    (first, second) => (order.get(first) ?? 0) - (order.get(second) ?? 0),
+                  ),
+                })),
               });
-              toast.success("Ciclo académico actualizado");
+              toast.success("Calendario académico actualizado", {
+                description: currentWeek
+                  ? `${currentWeek.label} quedó establecida como la semana actual.`
+                  : "El sistema activará la siguiente semana al llegar su fecha.",
+              });
             } catch (error) {
-              toast.error(error instanceof Error ? error.message : "No pudimos guardar la configuración.");
+              toast.error(
+                error instanceof Error
+                  ? error.message
+                  : "No pudimos guardar el calendario.",
+              );
             } finally {
               setBusy(false);
             }
           }}
         >
           {busy ? <span className="button-spinner" /> : <Check size={16} />}
-          Guardar ciclo activo
+          {busy ? "Validando calendario…" : "Guardar calendario"}
         </button>
       </div>
     </section>
