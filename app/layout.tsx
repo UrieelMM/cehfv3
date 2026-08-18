@@ -2,6 +2,23 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./tasks.css";
+
+const themeBootstrapScript = `
+  (() => {
+    try {
+      let theme = window.localStorage.getItem("cehf-theme");
+      if (!theme) {
+        const savedState = window.localStorage.getItem("cehf-demo-state");
+        theme = savedState ? JSON.parse(savedState)?.settings?.theme : null;
+      }
+      document.documentElement.dataset.theme =
+        theme === "dark" || theme === "system" ? theme : "light";
+    } catch {
+      document.documentElement.dataset.theme = "light";
+    }
+  })();
+`;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,36 +38,36 @@ export async function generateMetadata(): Promise<Metadata> {
     (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const description =
-    "Semana académica, tareas, repasos, materiales, avances y comunidad escolar en un solo lugar.";
+    "Tu experiencia académica, comunidad y progreso en un solo lugar.";
 
   return {
     title: {
-      default: "CEHF Primaria",
-      template: "%s · CEHF Primaria",
+      default: "Campus CEHF",
+      template: "%s · Campus CEHF",
     },
     description,
-    applicationName: "CEHF Primaria",
+    applicationName: "Campus CEHF",
     manifest: "/manifest.webmanifest",
     openGraph: {
-      title: "CEHF Primaria",
+      title: "Campus CEHF",
       description: "Una semana clara para aprender mejor.",
       type: "website",
       locale: "es_MX",
       url: origin,
       images: [
         {
-          url: `${origin}/og.png`,
-          width: 1746,
-          height: 909,
-          alt: "CEHF Primaria — Una semana clara para aprender mejor",
+          url: `${origin}/og-campus.png`,
+          width: 1739,
+          height: 904,
+          alt: "Campus CEHF — Una semana clara para aprender mejor",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "CEHF Primaria",
+      title: "Campus CEHF",
       description: "Una semana clara para aprender mejor.",
-      images: [`${origin}/og.png`],
+      images: [`${origin}/og-campus.png`],
     },
   };
 }
@@ -62,6 +79,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es-MX" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         {children}
       </body>

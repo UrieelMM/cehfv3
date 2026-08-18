@@ -114,6 +114,176 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /configuracion/{documentId} {
+        allow read: if isActive() && profile().institutionId == institutionId;
+        allow create, update: if isDirector()
+          && profile().institutionId == institutionId
+          && request.resource.data.institutionId == institutionId;
+        allow delete: if false;
+      }
+
+      match /ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId} {
+        function taskBelongsToInstitution(data) {
+          return isActive()
+            && profile().institutionId == institutionId
+            && data.institutionId == institutionId;
+        }
+
+        function isTaskStaff(data) {
+          return isDirector() || (
+            roleIs("teacher") && data.createdBy == request.auth.uid
+          );
+        }
+
+        function isAssignedStudent(data) {
+          return roleIs("student")
+            && data.targetGroup == profile().grade + " " + profile().group;
+        }
+
+        function parentTaskPath() {
+          return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId);
+        }
+
+        function parentTask() {
+          return get(parentTaskPath()).data;
+        }
+
+        function extensionPath(studentId) {
+          return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId);
+        }
+
+        function hasActiveExtension(studentId) {
+          return exists(extensionPath(studentId))
+            && get(extensionPath(studentId)).data.dueAt >= request.time;
+        }
+
+        function canStudentSubmit(studentId) {
+          let task = parentTask();
+          return request.auth.uid == studentId
+            && taskBelongsToInstitution(task)
+            && isAssignedStudent(task)
+            && (
+              (
+                task.status == "published"
+                && request.time <= task.dueAt
+              ) || (
+                task.status in ["published", "closed"]
+                && hasActiveExtension(studentId)
+              )
+            );
+        }
+
+        allow read: if taskBelongsToInstitution(resource.data) && (
+          isTaskStaff(resource.data) || (
+            isAssignedStudent(resource.data)
+            && resource.data.status in ["published", "closed"]
+          )
+        );
+        allow create: if taskBelongsToInstitution(request.resource.data)
+          && isStaff()
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.schoolYearId == schoolYearId
+          && request.resource.data.termId == termId
+          && request.resource.data.weekId == weekId
+          && request.resource.data.subjectId == subjectId
+          && request.resource.data.status in ["draft", "scheduled", "published"];
+        allow update: if taskBelongsToInstitution(resource.data)
+          && taskBelongsToInstitution(request.resource.data)
+          && isTaskStaff(resource.data)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.institutionId == resource.data.institutionId
+          && request.resource.data.schoolYearId == resource.data.schoolYearId
+          && request.resource.data.termId == resource.data.termId
+          && request.resource.data.weekId == resource.data.weekId
+          && request.resource.data.subjectId == resource.data.subjectId
+          && request.resource.data.status in [
+            "draft", "scheduled", "published", "closed", "archived"
+          ];
+        allow delete: if false;
+
+        match /historial/{eventId} {
+          allow read: if taskBelongsToInstitution(parentTask())
+            && isTaskStaff(parentTask());
+          allow create: if taskBelongsToInstitution(parentTask())
+            && isTaskStaff(parentTask())
+            && request.resource.data.authorId == request.auth.uid
+            && request.resource.data.authorRole in ["teacher", "director"];
+          allow update, delete: if false;
+        }
+
+        match /prorrogas/{studentId} {
+          allow read: if taskBelongsToInstitution(parentTask()) && (
+            isTaskStaff(parentTask()) || request.auth.uid == studentId
+          );
+          allow create, update: if taskBelongsToInstitution(parentTask())
+            && isTaskStaff(parentTask())
+            && request.resource.data.institutionId == institutionId
+            && request.resource.data.studentId == studentId
+            && request.resource.data.dueAt > request.time;
+          allow delete: if false;
+        }
+
+        match /entregas/{studentId} {
+          allow read: if taskBelongsToInstitution(parentTask()) && (
+            isTaskStaff(parentTask()) || request.auth.uid == studentId
+          );
+          allow create: if canStudentSubmit(studentId)
+            && request.resource.data.institutionId == institutionId
+            && request.resource.data.taskId == taskId
+            && request.resource.data.studentId == studentId
+            && request.resource.data.teacherId == parentTask().createdBy
+            && request.resource.data.status == "submitted"
+            && request.resource.data.version == 1;
+          allow update: if taskBelongsToInstitution(parentTask()) && (
+            (
+              canStudentSubmit(studentId)
+              && resource.data.studentId == studentId
+              && request.resource.data.studentId == studentId
+              && request.resource.data.teacherId == resource.data.teacherId
+              && request.resource.data.taskId == resource.data.taskId
+              && request.resource.data.institutionId == resource.data.institutionId
+              && request.resource.data.status == "submitted"
+              && request.resource.data.version == resource.data.version + 1
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                "content", "attachments", "status", "version", "submittedAt",
+                "updatedAt", "teacherFeedback"
+              ])
+            ) || (
+              isTaskStaff(parentTask())
+              && request.resource.data.studentId == resource.data.studentId
+              && request.resource.data.teacherId == resource.data.teacherId
+              && request.resource.data.taskId == resource.data.taskId
+              && request.resource.data.institutionId == resource.data.institutionId
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                "status", "teacherFeedback", "feedbackAt", "reviewedAt", "updatedAt"
+              ])
+              && request.resource.data.status in ["feedback", "reviewed"]
+            )
+          );
+          allow delete: if false;
+
+          match /historial/{eventId} {
+            allow read: if taskBelongsToInstitution(parentTask()) && (
+              isTaskStaff(parentTask()) || request.auth.uid == studentId
+            );
+            allow create: if taskBelongsToInstitution(parentTask()) && (
+              (
+                canStudentSubmit(studentId)
+                && request.resource.data.authorId == studentId
+                && request.resource.data.authorRole == "student"
+                && request.resource.data.type in ["submitted", "resubmitted"]
+              ) || (
+                isTaskStaff(parentTask())
+                && request.resource.data.authorId == request.auth.uid
+                && request.resource.data.authorRole in ["teacher", "director"]
+                && request.resource.data.type in ["feedback", "reviewed"]
+              )
+            );
+            allow update, delete: if false;
+          }
+        }
+      }
+
       match /{collectionName}/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
         allow create, update: if isDirector()

@@ -33,10 +33,81 @@ service firebase.storage {
     }
 
     function safeUpload() {
-      return request.resource.size < 15 * 1024 * 1024
+      return request.resource.size < 20 * 1024 * 1024
         && request.resource.contentType.matches(
-          "(application/pdf|image/.*|audio/.*|text/plain)"
+          "(application/pdf|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-(excel|powerpoint)|image/.*|audio/.*|text/plain)"
         );
+    }
+
+    function academicTask(institutionId, schoolYearId, termId, weekId, subjectId, taskId) {
+      return firestore.get(
+        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)
+      ).data;
+    }
+
+    function canReadAcademicTask(institutionId, schoolYearId, termId, weekId, subjectId, taskId) {
+      let task = academicTask(
+        institutionId, schoolYearId, termId, weekId, subjectId, taskId
+      );
+      return sameInstitution(institutionId) && (
+        isStaff() || (
+          profile().role == "student"
+          && task.targetGroup == profile().grade + " " + profile().group
+          && task.status in ["published", "closed"]
+        )
+      );
+    }
+
+    function hasActiveTaskExtension(institutionId, schoolYearId, termId, weekId, subjectId, taskId, studentId) {
+      return firestore.exists(
+        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId)
+      ) && firestore.get(
+        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId)
+      ).data.dueAt >= request.time;
+    }
+
+    function canUploadTaskSubmission(institutionId, schoolYearId, termId, weekId, subjectId, taskId, studentId) {
+      let task = academicTask(
+        institutionId, schoolYearId, termId, weekId, subjectId, taskId
+      );
+      return sameInstitution(institutionId)
+        && request.auth.uid == studentId
+        && profile().role == "student"
+        && task.targetGroup == profile().grade + " " + profile().group
+        && (
+          (task.status == "published" && request.time <= task.dueAt) || (
+            task.status in ["published", "closed"]
+            && hasActiveTaskExtension(
+              institutionId, schoolYearId, termId, weekId, subjectId,
+              taskId, studentId
+            )
+          )
+        );
+    }
+
+    match /institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}/recursos/{assetId} {
+      allow read: if canReadAcademicTask(
+        institutionId, schoolYearId, termId, weekId, subjectId, taskId
+      );
+      allow create: if isStaff()
+        && sameInstitution(institutionId)
+        && safeUpload();
+      allow update: if false;
+      allow delete: if isDirector() && sameInstitution(institutionId);
+    }
+
+    match /institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}/entregas/{studentId}/{versionId}/{assetId} {
+      allow read: if canReadAcademicTask(
+        institutionId, schoolYearId, termId, weekId, subjectId, taskId
+      ) && (request.auth.uid == studentId || isStaff());
+      allow create: if sameInstitution(institutionId)
+        && canUploadTaskSubmission(
+          institutionId, schoolYearId, termId, weekId, subjectId, taskId,
+          studentId
+        )
+        && safeUpload();
+      allow update: if false;
+      allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
     match /institutions/{institutionId}/tasks/{taskId}/resources/{assetId} {

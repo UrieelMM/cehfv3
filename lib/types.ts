@@ -70,6 +70,142 @@ export type Task = {
   objective: string;
 };
 
+export type AcademicConfig = {
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  timezone: string;
+};
+
+export type TaskPublicationStatus =
+  | "draft"
+  | "scheduled"
+  | "published"
+  | "closed"
+  | "archived";
+
+export type TaskLink = {
+  id: string;
+  label: string;
+  url: string;
+};
+
+export type TaskAttachment = {
+  id: string;
+  name: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+};
+
+export type TaskAssignment = {
+  id: string;
+  firestorePath: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  subjectId: string;
+  subject: string;
+  title: string;
+  description: string;
+  dueAt: string;
+  publishAt?: string;
+  publishedAt?: string;
+  closedAt?: string;
+  status: TaskPublicationStatus;
+  publicationMode: "draft" | "now" | "scheduled";
+  targetGroup: string;
+  links: TaskLink[];
+  attachments: TaskAttachment[];
+  createdBy: string;
+  teacherName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskSubmissionStatus =
+  | "draft"
+  | "submitted"
+  | "feedback"
+  | "reviewed";
+
+export type TaskSubmission = {
+  id: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  taskId: string;
+  content: string;
+  attachments: TaskAttachment[];
+  status: TaskSubmissionStatus;
+  version: number;
+  submittedAt?: string;
+  updatedAt: string;
+  teacherFeedback?: string;
+  feedbackAt?: string;
+  reviewedAt?: string;
+};
+
+export type TaskHistoryEventType =
+  | "created"
+  | "published"
+  | "scheduled"
+  | "closed"
+  | "reopened"
+  | "group_extension"
+  | "individual_extension"
+  | "submitted"
+  | "resubmitted"
+  | "feedback"
+  | "reviewed";
+
+export type TaskHistoryEvent = {
+  id: string;
+  type: TaskHistoryEventType;
+  authorId: string;
+  authorName: string;
+  authorRole: Role;
+  message: string;
+  createdAt: string;
+  version?: number;
+  attachments?: TaskAttachment[];
+  studentId?: string;
+  studentName?: string;
+  dueAt?: string;
+};
+
+export type TaskExtension = {
+  studentId: string;
+  studentName: string;
+  dueAt: string;
+  grantedBy: string;
+  grantedByName: string;
+  createdAt: string;
+};
+
+export type TaskCreateInput = {
+  title: string;
+  description: string;
+  subject: string;
+  subjectId: string;
+  weekId: string;
+  weekLabel: string;
+  dueAt: string;
+  targetGroup: string;
+  links: Array<{ label: string; url: string }>;
+  files: File[];
+  publicationMode: "draft" | "now" | "scheduled";
+  publishAt?: string;
+};
+
 export type Material = {
   id: string;
   title: string;

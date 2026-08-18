@@ -1,10 +1,10 @@
 {
-  "name": "CEHF Primaria",
-  "short_name": "CEHF",
-  "description": "Tu semana académica en un solo lugar.",
+  "name": "Campus CEHF",
+  "short_name": "Campus CEHF",
+  "description": "Tu experiencia académica y comunidad en un solo lugar.",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#f7f5f1",
-  "theme_color": "#5b3f8c",
+  "background_color": "#f3f6fa",
+  "theme_color": "#1f2985",
   "lang": "es-MX"
 }

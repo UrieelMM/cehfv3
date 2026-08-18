@@ -5931,45 +5931,385 @@ code {
 }
 
 .loading-screen {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  min-height: 100dvh;
+  overflow: hidden;
+  place-items: center;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      circle at 50% 42%,
+      color-mix(in srgb, var(--violet-soft) 68%, transparent) 0,
+      transparent 34%
+    ),
+    var(--background);
+  transition: background-color 280ms ease;
+}
+
+.loading-atmosphere,
+.loading-grid,
+.loading-aura {
+  position: absolute;
+  pointer-events: none;
+}
+
+.loading-atmosphere {
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+}
+
+.loading-grid {
+  inset: -20%;
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--violet) 6%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--violet) 6%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 54px 54px;
+  mask-image: radial-gradient(circle at center, black, transparent 64%);
+  animation: loading-grid-drift 12s linear infinite;
+}
+
+.loading-aura {
+  width: clamp(320px, 42vw, 620px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  filter: blur(24px);
+  opacity: 0.65;
+  animation: loading-aura-float 7s ease-in-out infinite alternate;
+}
+
+.loading-aura-primary {
+  top: -24%;
+  right: -12%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--violet) 18%, transparent),
+    transparent 68%
+  );
+}
+
+.loading-aura-accent {
+  bottom: -31%;
+  left: -11%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--coral) 15%, transparent),
+    transparent 68%
+  );
+  animation-delay: -3.5s;
+}
+
+.loading-stage {
   display: flex;
+  width: min(420px, calc(100vw - 40px));
+  align-items: center;
   flex-direction: column;
+  padding: 42px 38px 34px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 32px;
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  box-shadow:
+    0 32px 90px color-mix(in srgb, var(--foreground) 12%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 48%, transparent);
+  text-align: center;
+  backdrop-filter: blur(24px) saturate(140%);
+  animation: loading-stage-enter 360ms cubic-bezier(0.22, 0.8, 0.25, 1) both;
 }
 
-.loading-screen .brand-mark {
-  width: 54px;
-  height: 54px;
+.loading-emblem {
+  position: relative;
+  display: grid;
+  width: 116px;
+  height: 116px;
+  place-items: center;
 }
 
-.loading-line {
-  width: 180px;
+.loading-emblem .brand-mark {
+  z-index: 2;
+  width: 62px;
+  height: 62px;
+  flex-basis: 62px;
+  border-radius: 18px 18px 27px 18px;
+  box-shadow:
+    0 14px 34px color-mix(in srgb, var(--violet) 28%, transparent),
+    0 0 0 8px color-mix(in srgb, var(--surface) 86%, transparent);
+  animation: loading-mark-breathe 2.8s ease-in-out infinite;
+}
+
+.loading-emblem .brand-mark span {
+  font-size: 1.1rem;
+}
+
+.loading-emblem-glow {
+  position: absolute;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--violet) 22%, transparent);
+  filter: blur(18px);
+  animation: loading-glow 2.8s ease-in-out infinite;
+}
+
+.loading-orbit {
+  position: absolute;
+  border: 1px solid color-mix(in srgb, var(--violet) 21%, transparent);
+  border-radius: 50%;
+  animation: loading-orbit-spin 5.5s linear infinite;
+}
+
+.loading-orbit i {
+  position: absolute;
+  top: 50%;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  margin-top: -3.5px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--coral) 55%, transparent);
+}
+
+.loading-orbit-outer {
+  inset: 3px;
+}
+
+.loading-orbit-inner {
+  inset: 14px;
+  border-style: dashed;
+  animation-duration: 8s;
+  animation-direction: reverse;
+}
+
+.loading-orbit-inner i {
+  right: auto;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+  background: var(--violet);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--violet) 55%, transparent);
+}
+
+.loading-brand {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 17px;
+  color: var(--muted-strong);
+  font-size: 0.65rem;
+  font-weight: 760;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.loading-brand strong {
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  letter-spacing: 0.08em;
+}
+
+.loading-copy {
+  margin-top: 20px;
+}
+
+.loading-copy h1 {
+  margin-bottom: 8px;
+  color: var(--foreground);
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 5vw, 1.9rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.loading-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.loading-progress {
+  position: relative;
+  width: min(230px, 78%);
   height: 4px;
-  margin-top: 22px;
+  margin-top: 26px;
   overflow: hidden;
   border-radius: 99px;
-  background: var(--violet-soft);
+  background: color-mix(in srgb, var(--violet) 13%, var(--surface-soft));
 }
 
-.loading-line span {
-  display: block;
-  width: 50%;
-  height: 100%;
+.loading-progress span {
+  position: absolute;
+  inset: 0 auto 0 -45%;
+  width: 46%;
   border-radius: inherit;
-  background: var(--violet);
-  animation: loading 1.2s ease-in-out infinite alternate;
+  background: linear-gradient(90deg, var(--violet), var(--coral));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--violet) 28%, transparent);
+  animation: loading-progress-run 1.65s cubic-bezier(0.65, 0, 0.35, 1)
+    infinite;
 }
 
-.loading-screen p {
-  margin: 10px 0 0;
+.loading-status {
+  display: inline-flex;
+  min-height: 18px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.66rem;
+  font-weight: 620;
+  letter-spacing: 0.01em;
 }
 
-@keyframes loading {
+.loading-status i {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.loading-status b {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--violet);
+  animation: loading-dot 1.25s ease-in-out infinite;
+}
+
+.loading-status b:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.loading-status b:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+.loading-footer {
+  position: absolute;
+  bottom: clamp(22px, 5vh, 48px);
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.025em;
+}
+
+@keyframes loading-stage-enter {
   from {
-    transform: translateX(-15%);
+    opacity: 0.82;
+    transform: translateY(6px) scale(0.995);
   }
   to {
-    transform: translateX(115%);
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loading-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-mark-breathe {
+  50% {
+    transform: scale(1.045);
+  }
+}
+
+@keyframes loading-glow {
+  50% {
+    opacity: 0.52;
+    transform: scale(1.22);
+  }
+}
+
+@keyframes loading-progress-run {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(315%);
+  }
+}
+
+@keyframes loading-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes loading-aura-float {
+  to {
+    transform: translate3d(4%, 5%, 0) scale(1.08);
+  }
+}
+
+@keyframes loading-grid-drift {
+  to {
+    transform: translate3d(54px, 54px, 0);
+  }
+}
+
+@media (max-width: 520px) {
+  .loading-stage {
+    width: calc(100vw - 28px);
+    padding: 34px 22px 29px;
+    border-radius: 27px;
+  }
+
+  .loading-emblem {
+    width: 104px;
+    height: 104px;
+  }
+
+  .loading-copy {
+    margin-top: 17px;
+  }
+
+  .loading-progress {
+    margin-top: 23px;
+  }
+
+  .loading-footer {
+    max-width: calc(100vw - 48px);
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-stage,
+  .loading-orbit,
+  .loading-emblem .brand-mark,
+  .loading-emblem-glow,
+  .loading-progress span,
+  .loading-status b,
+  .loading-aura,
+  .loading-grid {
+    animation: none;
+  }
+
+  .loading-progress span {
+    inset: 0;
+    width: 100%;
+    opacity: 0.72;
   }
 }
 

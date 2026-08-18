@@ -2,7 +2,6 @@
 
 import {
   AlertCircle,
-  ArrowLeft,
   ArrowRight,
   Bell,
   BookOpen,
@@ -55,6 +54,12 @@ import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
 import {
+  AcademicConfigurationCard,
+  TaskCreateModal,
+  TaskDetailModal,
+  TaskListPage,
+} from "@/components/tasks-workflow";
+import {
   createManagedAccount,
   firebaseConfigured,
   friendlyFirebaseError,
@@ -69,6 +74,17 @@ import {
   watchAuth,
 } from "@/lib/firebase";
 import {
+  createDemoTask,
+  createTaskAssignment,
+  defaultAcademicConfig,
+  legacyTasksToAssignments,
+  markTaskNotificationsRead,
+  saveAcademicConfig,
+  watchAcademicConfig,
+  watchTaskAssignments,
+  watchTaskNotifications,
+} from "@/lib/tasks-firebase";
+import {
   createDemoState,
   demoManagedAccounts,
   demoProfiles,
@@ -79,12 +95,15 @@ import type {
   ForumTopic,
   ForumTopicKind,
   ManagedAccount,
+  AcademicConfig,
   PortalState,
   ProgressLevel,
   Role,
   SectionKey,
   UserProfile,
   WallPost,
+  TaskAssignment,
+  TaskCreateInput,
 } from "@/lib/types";
 
 type IconType = typeof Home;
@@ -132,6 +151,11 @@ const sectionFromPath = (path: string): SectionKey => {
   const name = path.split("/").filter(Boolean)[0] as SectionKey | undefined;
   if (!name || name === ("login" as SectionKey)) return "dashboard";
   return name in routes ? name : "dashboard";
+};
+
+const taskIdFromPath = (path: string) => {
+  const [section, taskId] = path.split("/").filter(Boolean);
+  return section === "tasks" && taskId ? decodeURIComponent(taskId) : null;
 };
 
 const navigation: Array<{
@@ -212,7 +236,20 @@ export function CEHFApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [detailOpen, setDetailOpen] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : taskIdFromPath(window.location.pathname),
+  );
+  const [academicConfig, setAcademicConfig] = useState<AcademicConfig>(
+    defaultAcademicConfig,
+  );
+  const [taskRecords, setTaskRecords] = useState<TaskAssignment[]>(() =>
+    legacyTasksToAssignments(
+      createDemoState().tasks,
+      defaultAcademicConfig,
+      demoProfiles.student,
+    ),
+  );
+  const [taskRecordsLoading, setTaskRecordsLoading] = useState(false);
   const [mobileMore, setMobileMore] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>(
@@ -230,8 +267,10 @@ export function CEHFApp() {
     (state.settings.theme === "system" && systemPrefersDark);
 
   useEffect(() => {
-    const onPopState = () =>
+    const onPopState = () => {
       setActiveSection(sectionFromPath(window.location.pathname));
+      setDetailOpen(taskIdFromPath(window.location.pathname));
+    };
     window.addEventListener("popstate", onPopState);
     const saved = window.localStorage.getItem("cehf-demo-state");
     if (saved) {
@@ -290,6 +329,55 @@ export function CEHFApp() {
   }, []);
 
   useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    return watchAcademicConfig(setAcademicConfig, (error) =>
+      toast.error(friendlyFirebaseError(error)),
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    queueMicrotask(() => setTaskRecordsLoading(true));
+    return watchTaskAssignments(
+      profile,
+      academicConfig,
+      (tasks) => {
+        setTaskRecords(tasks);
+        setTaskRecordsLoading(false);
+      },
+      (error) => {
+        setTaskRecordsLoading(false);
+        toast.error(friendlyFirebaseError(error));
+      },
+    );
+  }, [academicConfig, firebaseUser, profile]);
+
+  useEffect(() => {
+    if (firebaseUser) return;
+    queueMicrotask(() => {
+      setAcademicConfig(defaultAcademicConfig);
+      setTaskRecords(
+        legacyTasksToAssignments(
+          createDemoState().tasks,
+          defaultAcademicConfig,
+          demoProfiles[demoRole],
+        ),
+      );
+      setTaskRecordsLoading(false);
+    });
+  }, [demoRole, firebaseUser]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    return watchTaskNotifications(
+      profile.uid,
+      (notifications) =>
+        setState((previous) => ({ ...previous, notifications })),
+      (error) => toast.error(friendlyFirebaseError(error)),
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
     if (!firebaseConfigured) return;
     return watchAuth(async (user) => {
       setFirebaseUser(user);
@@ -314,6 +402,7 @@ export function CEHFApp() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = state.settings.theme;
+    window.localStorage.setItem("cehf-theme", state.settings.theme);
     document.documentElement.classList.toggle(
       "reduce-motion",
       state.settings.reducedMotion,
@@ -364,9 +453,22 @@ export function CEHFApp() {
   function navigate(section: SectionKey) {
     window.history.pushState({}, "", routes[section]);
     setActiveSection(section);
+    setDetailOpen(null);
     setSidebarOpen(false);
     setMobileMore(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openTaskDetail(taskId: string) {
+    window.history.pushState({}, "", `/tasks/${encodeURIComponent(taskId)}`);
+    setActiveSection("tasks");
+    setDetailOpen(taskId);
+  }
+
+  function closeTaskDetail() {
+    window.history.pushState({}, "", "/tasks");
+    setActiveSection("tasks");
+    setDetailOpen(null);
   }
 
   function updateState(
@@ -425,7 +527,7 @@ export function CEHFApp() {
       <GuidedState
         icon={ShieldCheck}
         title="Tu cuenta necesita una asignación"
-        description="La cuenta existe, pero todavía no tiene un perfil de CEHF Primaria. Pide a Dirección que complete tu rol y grupo."
+        description="La cuenta existe, pero todavía no tiene un perfil de Campus CEHF. Pide a Dirección que complete tu rol y grupo."
         actionLabel="Cerrar sesión"
         onAction={() => void logoutFirebase()}
       />
@@ -452,13 +554,13 @@ export function CEHFApp() {
           </div>
           <div>
             <strong>CEHF</strong>
-            <span>Primaria</span>
+            <span>Campus</span>
           </div>
         </div>
         <div className="week-switcher">
           <div>
             <span>Semana activa</span>
-            <strong>{state.week.label}</strong>
+            <strong>{academicConfig.weekLabel}</strong>
           </div>
           <ChevronDown size={16} aria-hidden="true" />
         </div>
@@ -473,7 +575,15 @@ export function CEHFApp() {
               <item.icon size={19} aria-hidden="true" />
               <span>{item.label}</span>
               {item.key === "tasks" && role === "student" && (
-                <span className="nav-count">1</span>
+                <span className="nav-count">
+                  {
+                    taskRecords.filter(
+                      (task) =>
+                        task.status === "published" &&
+                        new Date(task.dueAt).getTime() >= Date.now(),
+                    ).length
+                  }
+                </span>
               )}
             </button>
           ))}
@@ -591,16 +701,24 @@ export function CEHFApp() {
                     state={state}
                     onClose={() => setNotificationsOpen(false)}
                     onMarkAll={() =>
-                      updateState(
-                        (previous) => ({
-                          ...previous,
-                          notifications: previous.notifications.map((item) => ({
-                            ...item,
-                            read: true,
-                          })),
-                        }),
-                        "Notificaciones marcadas como leídas",
-                      )
+                      firebaseUser && profile
+                        ? void markTaskNotificationsRead(profile.uid)
+                            .then(() =>
+                              toast.success("Notificaciones marcadas como leídas"),
+                            )
+                            .catch((error) =>
+                              toast.error(friendlyFirebaseError(error)),
+                            )
+                        : updateState(
+                            (previous) => ({
+                              ...previous,
+                              notifications: previous.notifications.map((item) => ({
+                                ...item,
+                                read: true,
+                              })),
+                            }),
+                            "Notificaciones marcadas como leídas",
+                          )
                     }
                   />
                 )}
@@ -662,7 +780,14 @@ export function CEHFApp() {
               state={state}
               navigate={navigate}
               updateState={updateState}
-              openDetail={setDetailOpen}
+              openDetail={openTaskDetail}
+              taskRecords={taskRecords}
+              taskRecordsLoading={taskRecordsLoading}
+              academicConfig={academicConfig}
+              saveAcademicConfiguration={async (config) => {
+                if (firebaseUser) await saveAcademicConfig(config);
+                else setAcademicConfig(config);
+              }}
               managedAccounts={managedAccounts}
               managedAccountsLoading={managedAccountsLoading}
             />
@@ -684,7 +809,30 @@ export function CEHFApp() {
             onNavigate={navigate}
           />
         )}
-        {createOpen && activeSection === "users" ? (
+        {createOpen && activeSection === "tasks" ? (
+          <TaskCreateModal
+            config={academicConfig}
+            accounts={managedAccounts}
+            onClose={() => setCreateOpen(false)}
+            onCreate={async (input: TaskCreateInput) => {
+              if (firebaseUser && profile) {
+                await createTaskAssignment(input, profile, academicConfig);
+              } else {
+                setTaskRecords((previous) => [
+                  createDemoTask(input, currentProfile, academicConfig),
+                  ...previous,
+                ]);
+              }
+              toast.success(
+                input.publicationMode === "now"
+                  ? "Tarea publicada y notificación preparada"
+                  : input.publicationMode === "scheduled"
+                    ? "Tarea programada"
+                    : "Borrador guardado",
+              );
+            }}
+          />
+        ) : createOpen && activeSection === "users" ? (
           <AccountRegistrationModal
             accounts={managedAccounts}
             firebaseReady={firebaseConfigured && Boolean(firebaseUser)}
@@ -846,11 +994,18 @@ export function CEHFApp() {
             }}
           />
         ) : null}
-        {detailOpen && (
-          <DetailDrawer
-            itemId={detailOpen}
-            state={state}
-            onClose={() => setDetailOpen(null)}
+        {detailOpen && taskRecords.find((task) => task.id === detailOpen) && (
+          <TaskDetailModal
+            task={taskRecords.find((task) => task.id === detailOpen)!}
+            profile={currentProfile}
+            accounts={managedAccounts}
+            firebaseReady={Boolean(firebaseUser && profile)}
+            onClose={closeTaskDetail}
+            onDemoTaskChange={(updatedTask) =>
+              setTaskRecords((previous) =>
+                previous.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
+              )
+            }
           />
         )}
       </AnimatePresence>
@@ -937,7 +1092,7 @@ function LoginScreen({
           </div>
           <div>
             <strong>CEHF</strong>
-            <span>Primaria</span>
+            <span>Campus</span>
           </div>
         </div>
         <div className="login-message">
@@ -950,8 +1105,8 @@ function LoginScreen({
             en movimiento.
           </h1>
           <p>
-            Todo lo que necesitas para aprender, descubrir y compartir tus
-            logros en Primaria.
+            Todo lo que necesitas para aprender, avanzar y conectar con tu
+            comunidad, en cada etapa.
           </p>
         </div>
         <div className="login-access-card">
@@ -969,7 +1124,7 @@ function LoginScreen({
             “Aquí encuentro mis actividades y puedo ver todo lo que voy
             logrando.”
           </p>
-          <span>— Comunidad CEHF Primaria</span>
+          <span>— Comunidad Campus CEHF</span>
         </div>
         </motion.section>
 
@@ -989,7 +1144,7 @@ function LoginScreen({
               </div>
               <div>
                 <strong>CEHF</strong>
-                <span>Primaria</span>
+                <span>Campus</span>
               </div>
             </div>
           </div>
@@ -1139,6 +1294,10 @@ function SectionContent({
   navigate,
   updateState,
   openDetail,
+  taskRecords,
+  taskRecordsLoading,
+  academicConfig,
+  saveAcademicConfiguration,
   managedAccounts,
   managedAccountsLoading,
 }: {
@@ -1152,6 +1311,10 @@ function SectionContent({
     message?: string,
   ) => void;
   openDetail: (id: string) => void;
+  taskRecords: TaskAssignment[];
+  taskRecordsLoading: boolean;
+  academicConfig: AcademicConfig;
+  saveAcademicConfiguration: (config: AcademicConfig) => Promise<void>;
   managedAccounts: ManagedAccount[];
   managedAccountsLoading: boolean;
 }) {
@@ -1185,10 +1348,10 @@ function SectionContent({
       );
     case "tasks":
       return (
-        <TasksPage
+        <TaskListPage
           role={role}
-          state={state}
-          updateState={updateState}
+          tasks={taskRecords}
+          loading={taskRecordsLoading}
           openDetail={openDetail}
         />
       );
@@ -1235,7 +1398,13 @@ function SectionContent({
       );
     case "settings":
       return (
-        <SettingsPage state={state} updateState={updateState} role={role} />
+        <SettingsPage
+          state={state}
+          updateState={updateState}
+          role={role}
+          academicConfig={academicConfig}
+          saveAcademicConfiguration={saveAcademicConfiguration}
+        />
       );
     case "profile":
       return <ProfilePage profile={profile} state={state} />;
@@ -1277,7 +1446,7 @@ function Dashboard({
             </span>
             <h2>
               {director
-                ? "La primaria avanza con una semana bien preparada."
+                ? "Nuestra comunidad avanza con una semana bien preparada."
                 : "Tu semana está casi lista para el grupo."}
             </h2>
             <p>
@@ -2009,103 +2178,6 @@ function ReviewsPage({
   );
 }
 
-function TasksPage({
-  role,
-  state,
-  updateState,
-  openDetail,
-}: {
-  role: Role;
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-  openDetail: (id: string) => void;
-}) {
-  return (
-    <div>
-      <div className="filter-row">
-        <div className="filter-pills">
-          <button className="active">Todas</button>
-          <button>Pendientes</button>
-          <button>Entregadas</button>
-          <button>Revisadas</button>
-        </div>
-        <div className="small-search">
-          <Search size={17} />
-          <input aria-label="Buscar tareas" placeholder="Buscar tarea…" />
-        </div>
-      </div>
-      <section className="task-grid">
-        {state.tasks.map((task) => {
-          const completed = ["submitted", "under_review", "reviewed"].includes(
-            task.status,
-          );
-          return (
-            <article className="task-card" key={task.id}>
-              <div className="task-card-top">
-                <span className={`subject-line ${subjectColors[task.subject] ?? "violet"}`} />
-                <div className="list-card-meta">
-                  <span>{task.subject}</span>
-                  <i>•</i>
-                  <span>{task.type}</span>
-                </div>
-                <button className="plain-icon" aria-label="Más opciones">
-                  <MoreHorizontal size={19} />
-                </button>
-              </div>
-              <h3>{task.title}</h3>
-              <p>{task.description}</p>
-              <div className="task-objective">
-                <Target size={16} />
-                <span>{task.objective}</span>
-              </div>
-              <div className="task-footer">
-                <span className={completed ? "success-copy" : "due-copy"}>
-                  {completed ? <CheckCircle2 size={17} /> : <Clock3 size={17} />}
-                  {completed
-                    ? task.status === "under_review"
-                      ? "En revisión"
-                      : "Entregada"
-                    : task.dueLabel}
-                </span>
-                <button
-                  className={completed ? "secondary-button" : "primary-button"}
-                  onClick={() => {
-                    if (role === "student" && !completed) {
-                      updateState(
-                        (previous) => ({
-                          ...previous,
-                          tasks: previous.tasks.map((item) =>
-                            item.id === task.id
-                              ? { ...item, status: "submitted" }
-                              : item,
-                          ),
-                        }),
-                        "Tarea entregada · 23 jul, 18:42",
-                      );
-                    } else {
-                      openDetail(task.id);
-                    }
-                  }}
-                >
-                  {role === "student"
-                    ? completed
-                      ? "Ver entrega"
-                      : "Entregar"
-                    : "Revisar"}
-                  <ArrowRight size={16} />
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </section>
-    </div>
-  );
-}
-
 function ProgressPage({
   role,
   state,
@@ -2421,7 +2493,7 @@ function wallStoryParagraphs(post: WallPost) {
   if (post.paragraphs?.length) return post.paragraphs;
   return [
     post.excerpt,
-    `Esta historia fue preparada por ${post.author} para compartir una experiencia de ${post.category.toLocaleLowerCase("es-MX")} con la comunidad de CEHF Primaria.`,
+    `Esta historia fue preparada por ${post.author} para compartir una experiencia de ${post.category.toLocaleLowerCase("es-MX")} con la comunidad de Campus CEHF.`,
     "Cada publicación del Periódico mural reúne observaciones, preguntas y aprendizajes que nacen dentro de nuestra escuela.",
   ];
 }
@@ -2514,7 +2586,7 @@ function WallStoryReader({
         >
           <span className="reader-blank-mark">CE</span>
           <span>Entre líneas</span>
-          <small>CEHF Primaria</small>
+          <small>Campus CEHF</small>
         </section>
       );
     }
@@ -2582,7 +2654,7 @@ function WallStoryReader({
           </blockquote>
         )}
         <div className="reader-content-footer">
-          <span>{page.last ? "CEHF PRIMARIA" : "CONTINÚA EN LA SIGUIENTE PÁGINA"}</span>
+          <span>{page.last ? "CAMPUS CEHF" : "CONTINÚA EN LA SIGUIENTE PÁGINA"}</span>
           {page.last && (
             <button
               type="button"
@@ -3017,6 +3089,8 @@ function SettingsPage({
   state,
   updateState,
   role,
+  academicConfig,
+  saveAcademicConfiguration,
 }: {
   state: PortalState;
   updateState: (
@@ -3024,6 +3098,8 @@ function SettingsPage({
     message?: string,
   ) => void;
   role: Role;
+  academicConfig: AcademicConfig;
+  saveAcademicConfiguration: (config: AcademicConfig) => Promise<void>;
 }) {
   return (
     <div className="settings-layout">
@@ -3161,24 +3237,11 @@ function SettingsPage({
         )}
       </section>
       {role === "director" && (
-        <section className="panel settings-section">
-          <div className="settings-heading">
-            <span className="settings-icon">
-              <ShieldCheck size={20} />
-            </span>
-            <div>
-              <h2>Institución</h2>
-              <p>Datos generales, ciclos, grados, grupos y políticas.</p>
-            </div>
-          </div>
-          <div className="setting-row">
-            <div>
-              <strong>CEHF Primaria</strong>
-              <span>America/Mexico_City · Ciclo 2026–2027</span>
-            </div>
-            <button className="secondary-button">Administrar</button>
-          </div>
-        </section>
+        <AcademicConfigurationCard
+          key={`${academicConfig.schoolYearId}-${academicConfig.termId}-${academicConfig.weekId}`}
+          config={academicConfig}
+          onSave={saveAcademicConfiguration}
+        />
       )}
     </div>
   );
@@ -3515,7 +3578,7 @@ function AccountRegistrationModal({
     if (!credentials) return;
     try {
       await navigator.clipboard.writeText(
-        `CEHF Primaria · ${credentials.account.name}\nCorreo: ${credentials.account.email}\nContraseña temporal: ${credentials.password}\nIngreso: ${window.location.origin}/login`,
+        `Campus CEHF · ${credentials.account.name}\nCorreo: ${credentials.account.email}\nContraseña temporal: ${credentials.password}\nIngreso: ${window.location.origin}/login`,
       );
       toast.success("Credenciales copiadas");
     } catch {
@@ -3954,7 +4017,7 @@ function CreateModal({
                   <option>5.º A</option>
                   <option>5.º B</option>
                   <option>4.º–6.º</option>
-                  <option>Toda Primaria</option>
+                  <option>Todo el campus</option>
                 </select>
               </label>
               <label>
@@ -4052,92 +4115,6 @@ function CreateModal({
           </button>
         </div>
       </motion.form>
-    </motion.div>
-  );
-}
-
-function DetailDrawer({
-  itemId,
-  state,
-  onClose,
-}: {
-  itemId: string;
-  state: PortalState;
-  onClose: () => void;
-}) {
-  const task = state.tasks.find((item) => item.id === itemId);
-  return (
-    <motion.div
-      className="drawer-backdrop"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <motion.aside
-        className="detail-drawer"
-        initial={{ x: "100%" }}
-        animate={{ x: 0 }}
-        exit={{ x: "100%" }}
-        transition={{ type: "spring", damping: 28, stiffness: 260 }}
-      >
-        <div className="drawer-header">
-          <button className="plain-icon" onClick={onClose}>
-            <ArrowLeft size={20} />
-          </button>
-          <span>Detalle de la tarea</span>
-          <button className="plain-icon">
-            <MoreHorizontal size={20} />
-          </button>
-        </div>
-        {task && (
-          <div className="drawer-body">
-            <span className="pill pill-active">{task.subject}</span>
-            <h2>{task.title}</h2>
-            <p>{task.description}</p>
-            <div className="drawer-info">
-              <span>
-                <Clock3 size={18} />
-                <span>
-                  <small>Fecha límite</small>
-                  <strong>{task.dueLabel}</strong>
-                </span>
-              </span>
-              <span>
-                <Target size={18} />
-                <span>
-                  <small>Objetivo</small>
-                  <strong>{task.objective}</strong>
-                </span>
-              </span>
-            </div>
-            <div className="submission-box">
-              <span className="metric-icon mint">
-                <CheckCircle2 size={21} />
-              </span>
-              <div>
-                <strong>Entrega recibida</strong>
-                <p>23 jul, 18:42 · Versión 1</p>
-              </div>
-            </div>
-            <label>
-              Retroalimentación
-              <textarea
-                rows={5}
-                defaultValue="Tu observación es clara. Añade una frase que explique qué evidencia te permitió decidirlo."
-              />
-            </label>
-            <button
-              className="primary-button full-button"
-              onClick={() => toast.success("Retroalimentación publicada")}
-            >
-              Publicar retroalimentación
-            </button>
-          </div>
-        )}
-      </motion.aside>
     </motion.div>
   );
 }
@@ -4323,15 +4300,59 @@ function Toggle({
 
 function LoadingScreen() {
   return (
-    <div className="loading-screen">
-      <div className="brand-mark">
-        <span>CE</span>
+    <main
+      className="loading-screen"
+      role="status"
+      aria-live="polite"
+      aria-label="Preparando Campus CEHF"
+    >
+      <div className="loading-atmosphere" aria-hidden="true">
+        <span className="loading-aura loading-aura-primary" />
+        <span className="loading-aura loading-aura-accent" />
+        <span className="loading-grid" />
       </div>
-      <div className="loading-line">
-        <span />
-      </div>
-      <p>Preparando tu semana…</p>
-    </div>
+
+      <section className="loading-stage">
+        <div className="loading-emblem" aria-hidden="true">
+          <span className="loading-orbit loading-orbit-outer">
+            <i />
+          </span>
+          <span className="loading-orbit loading-orbit-inner">
+            <i />
+          </span>
+          <span className="loading-emblem-glow" />
+          <div className="brand-mark">
+            <span>CE</span>
+          </div>
+        </div>
+
+        <div className="loading-brand">
+          <span>Campus</span>
+          <strong>CEHF</strong>
+        </div>
+
+        <div className="loading-copy">
+          <h1>Preparando tu experiencia</h1>
+          <p>Sincronizando tu semana y tu comunidad.</p>
+        </div>
+
+        <div className="loading-progress" aria-hidden="true">
+          <span />
+        </div>
+        <span className="loading-status">
+          Conectando todo para ti
+          <i aria-hidden="true">
+            <b />
+            <b />
+            <b />
+          </i>
+        </span>
+      </section>
+
+      <p className="loading-footer">
+        Un espacio para aprender, conectar y avanzar.
+      </p>
+    </main>
   );
 }
 

@@ -1,0 +1,923 @@
+"use client";
+
+import {
+  collection,
+  collectionGroup,
+  deleteField,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  Timestamp,
+  where,
+  writeBatch,
+  type DocumentData,
+  type QueryConstraint,
+  type Unsubscribe,
+} from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { firebase } from "./firebase";
+import type {
+  AcademicConfig,
+  AppNotification,
+  Task,
+  TaskAssignment,
+  TaskAttachment,
+  TaskCreateInput,
+  TaskExtension,
+  TaskHistoryEvent,
+  TaskHistoryEventType,
+  TaskSubmission,
+  UserProfile,
+} from "./types";
+
+const INSTITUTION_ID = "cehf-primaria";
+
+export const defaultAcademicConfig: AcademicConfig = {
+  institutionId: INSTITUTION_ID,
+  schoolYearId: "cicloescolar26-27",
+  schoolYearLabel: "2026–2027",
+  termId: "trimestre1",
+  termLabel: "Trimestre 1",
+  weekId: "semana7",
+  weekLabel: "Semana 7",
+  timezone: "America/Mexico_City",
+};
+
+function requireFirebase() {
+  if (!firebase.db || !firebase.storage) {
+    throw new Error("Firebase no está configurado para el flujo de tareas.");
+  }
+  return { db: firebase.db, storage: firebase.storage };
+}
+
+function asIso(value: unknown, fallback = new Date().toISOString()) {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate().toISOString();
+  }
+  return typeof value === "string" && value ? value : fallback;
+}
+
+function slugify(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "general";
+}
+
+function academicTaskCollection(config: AcademicConfig, subjectId: string) {
+  const { db } = requireFirebase();
+  return collection(
+    db,
+    "institutions",
+    config.institutionId,
+    "ciclosEscolares",
+    config.schoolYearId,
+    "trimestres",
+    config.termId,
+    "semanas",
+    config.weekId,
+    "materias",
+    subjectId,
+    "tareas",
+  );
+}
+
+function taskRef(task: TaskAssignment) {
+  const { db } = requireFirebase();
+  return doc(db, task.firestorePath);
+}
+
+function attachmentFromData(value: unknown): TaskAttachment | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  if (!data.storagePath || !data.name) return null;
+  return {
+    id: String(data.id ?? crypto.randomUUID()),
+    name: String(data.name),
+    storagePath: String(data.storagePath),
+    contentType: String(data.contentType ?? "application/octet-stream"),
+    size: Number(data.size ?? 0),
+  };
+}
+
+function attachmentsFromData(value: unknown) {
+  return Array.isArray(value)
+    ? value.map(attachmentFromData).filter(Boolean) as TaskAttachment[]
+    : [];
+}
+
+function taskFromData(
+  id: string,
+  firestorePath: string,
+  data: DocumentData,
+): TaskAssignment {
+  return {
+    id,
+    firestorePath,
+    institutionId: String(data.institutionId ?? INSTITUTION_ID),
+    schoolYearId: String(data.schoolYearId ?? defaultAcademicConfig.schoolYearId),
+    schoolYearLabel: String(
+      data.schoolYearLabel ?? defaultAcademicConfig.schoolYearLabel,
+    ),
+    termId: String(data.termId ?? defaultAcademicConfig.termId),
+    termLabel: String(data.termLabel ?? defaultAcademicConfig.termLabel),
+    weekId: String(data.weekId ?? defaultAcademicConfig.weekId),
+    weekLabel: String(data.weekLabel ?? defaultAcademicConfig.weekLabel),
+    subjectId: String(data.subjectId ?? slugify(String(data.subject ?? "General"))),
+    subject: String(data.subject ?? "General"),
+    title: String(data.title ?? "Actividad sin nombre"),
+    description: String(data.description ?? ""),
+    dueAt: asIso(data.dueAt),
+    publishAt: data.publishAt ? asIso(data.publishAt) : undefined,
+    publishedAt: data.publishedAt ? asIso(data.publishedAt) : undefined,
+    closedAt: data.closedAt ? asIso(data.closedAt) : undefined,
+    status: data.status ?? "draft",
+    publicationMode: data.publicationMode ?? "draft",
+    targetGroup: String(data.targetGroup ?? "5.º A"),
+    links: Array.isArray(data.links)
+      ? data.links.map((link: Record<string, unknown>) => ({
+          id: String(link.id ?? crypto.randomUUID()),
+          label: String(link.label ?? "Enlace"),
+          url: String(link.url ?? ""),
+        }))
+      : [],
+    attachments: attachmentsFromData(data.attachments),
+    createdBy: String(data.createdBy ?? ""),
+    teacherName: String(data.teacherName ?? "Docente CEHF"),
+    createdAt: asIso(data.createdAt),
+    updatedAt: asIso(data.updatedAt),
+  };
+}
+
+function submissionFromData(id: string, data: DocumentData): TaskSubmission {
+  return {
+    id,
+    studentId: String(data.studentId ?? id),
+    studentName: String(data.studentName ?? "Alumno"),
+    teacherId: String(data.teacherId ?? ""),
+    taskId: String(data.taskId ?? ""),
+    content: String(data.content ?? ""),
+    attachments: attachmentsFromData(data.attachments),
+    status: data.status ?? "draft",
+    version: Number(data.version ?? 0),
+    submittedAt: data.submittedAt ? asIso(data.submittedAt) : undefined,
+    updatedAt: asIso(data.updatedAt),
+    teacherFeedback: data.teacherFeedback
+      ? String(data.teacherFeedback)
+      : undefined,
+    feedbackAt: data.feedbackAt ? asIso(data.feedbackAt) : undefined,
+    reviewedAt: data.reviewedAt ? asIso(data.reviewedAt) : undefined,
+  };
+}
+
+function historyFromData(id: string, data: DocumentData): TaskHistoryEvent {
+  return {
+    id,
+    type: data.type,
+    authorId: String(data.authorId ?? ""),
+    authorName: String(data.authorName ?? "Campus CEHF"),
+    authorRole: data.authorRole ?? "teacher",
+    message: String(data.message ?? ""),
+    createdAt: asIso(data.createdAt),
+    version: data.version ? Number(data.version) : undefined,
+    attachments: attachmentsFromData(data.attachments),
+    studentId: data.studentId ? String(data.studentId) : undefined,
+    studentName: data.studentName ? String(data.studentName) : undefined,
+    dueAt: data.dueAt ? asIso(data.dueAt) : undefined,
+  };
+}
+
+export function watchAcademicConfig(
+  callback: (config: AcademicConfig) => void,
+  onError?: (error: Error) => void,
+) {
+  if (!firebase.db) {
+    callback(defaultAcademicConfig);
+    return () => undefined;
+  }
+  return onSnapshot(
+    doc(firebase.db, "institutions", INSTITUTION_ID, "configuracion", "academica"),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(defaultAcademicConfig);
+        return;
+      }
+      callback({
+        ...defaultAcademicConfig,
+        ...snapshot.data(),
+        institutionId: INSTITUTION_ID,
+      } as AcademicConfig);
+    },
+    (error) => onError?.(error),
+  );
+}
+
+export async function saveAcademicConfig(config: AcademicConfig) {
+  if (!firebase.db) throw new Error("Firebase no está configurado.");
+  await setDoc(
+    doc(firebase.db, "institutions", INSTITUTION_ID, "configuracion", "academica"),
+    {
+      ...config,
+      institutionId: INSTITUTION_ID,
+      updatedAt: serverTimestamp(),
+      updatedBy: firebase.auth?.currentUser?.uid ?? "",
+    },
+    { merge: true },
+  );
+}
+
+export function watchTaskAssignments(
+  profile: UserProfile,
+  config: AcademicConfig,
+  callback: (tasks: TaskAssignment[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db) {
+    callback([]);
+    return () => undefined;
+  }
+  const constraints: QueryConstraint[] = [
+    where("institutionId", "==", config.institutionId),
+    where("schoolYearId", "==", config.schoolYearId),
+  ];
+  if (profile.role === "teacher") {
+    constraints.push(where("createdBy", "==", profile.uid));
+  }
+  if (profile.role === "student") {
+    const targetGroup = `${profile.grade ?? ""} ${profile.group ?? ""}`.trim();
+    constraints.push(where("targetGroup", "==", targetGroup));
+    constraints.push(where("status", "in", ["published", "closed"]));
+  }
+  return onSnapshot(
+    query(collectionGroup(firebase.db, "tareas"), ...constraints),
+    (snapshot) => {
+      const tasks = snapshot.docs
+        .map((entry) => taskFromData(entry.id, entry.ref.path, entry.data()))
+        .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt));
+      callback(tasks);
+    },
+    (error) => onError?.(error),
+  );
+}
+
+export async function createTaskAssignment(
+  input: TaskCreateInput,
+  profile: UserProfile,
+  config: AcademicConfig,
+) {
+  const { db, storage } = requireFirebase();
+  const subjectId = input.subjectId || slugify(input.subject);
+  const reference = doc(academicTaskCollection(config, subjectId));
+  const initialBatch = writeBatch(db);
+  initialBatch.set(reference, {
+    institutionId: config.institutionId,
+    schoolYearId: config.schoolYearId,
+    schoolYearLabel: config.schoolYearLabel,
+    termId: config.termId,
+    termLabel: config.termLabel,
+    weekId: input.weekId,
+    weekLabel: input.weekLabel,
+    subjectId,
+    subject: input.subject,
+    title: input.title.trim(),
+    description: input.description.trim(),
+    dueAt: Timestamp.fromDate(new Date(input.dueAt)),
+    publishAt:
+      input.publicationMode === "scheduled" && input.publishAt
+        ? Timestamp.fromDate(new Date(input.publishAt))
+        : null,
+    status: "draft",
+    intendedStatus:
+      input.publicationMode === "now"
+        ? "published"
+        : input.publicationMode === "scheduled"
+          ? "scheduled"
+          : "draft",
+    publicationMode: input.publicationMode,
+    targetGroup: input.targetGroup,
+    links: input.links
+      .filter((link) => link.url.trim())
+      .map((link) => ({
+        id: crypto.randomUUID(),
+        label: link.label.trim() || "Enlace",
+        url: link.url.trim(),
+      })),
+    attachments: [],
+    createdBy: profile.uid,
+    teacherName: profile.name,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  const createdEvent = doc(collection(reference, "historial"));
+  initialBatch.set(createdEvent, {
+    type: "created",
+    authorId: profile.uid,
+    authorName: profile.name,
+    authorRole: profile.role,
+    message: "Creó la actividad.",
+    createdAt: serverTimestamp(),
+  });
+  await initialBatch.commit();
+
+  const attachments = await Promise.all(
+    input.files.map(async (file) => {
+      const assetId = crypto.randomUUID();
+      const storagePath = [
+        "institutions",
+        config.institutionId,
+        "ciclosEscolares",
+        config.schoolYearId,
+        "trimestres",
+        config.termId,
+        "semanas",
+        input.weekId,
+        "materias",
+        subjectId,
+        "tareas",
+        reference.id,
+        "recursos",
+        assetId,
+      ].join("/");
+      await uploadBytes(ref(storage, storagePath), file, {
+        contentType: file.type || "application/octet-stream",
+        customMetadata: { originalName: file.name },
+      });
+      return {
+        id: assetId,
+        name: file.name,
+        storagePath,
+        contentType: file.type || "application/octet-stream",
+        size: file.size,
+      } satisfies TaskAttachment;
+    }),
+  );
+
+  const finalStatus =
+    input.publicationMode === "now"
+      ? "published"
+      : input.publicationMode === "scheduled"
+        ? "scheduled"
+        : "draft";
+  const finalBatch = writeBatch(db);
+  finalBatch.update(reference, {
+    attachments,
+    status: finalStatus,
+    intendedStatus: deleteField(),
+    updatedAt: serverTimestamp(),
+    ...(finalStatus === "published" ? { publishedAt: serverTimestamp() } : {}),
+  });
+  if (finalStatus !== "draft") {
+    finalBatch.set(doc(collection(reference, "historial")), {
+      type: finalStatus === "scheduled" ? "scheduled" : "published",
+      authorId: profile.uid,
+      authorName: profile.name,
+      authorRole: profile.role,
+      message:
+        finalStatus === "scheduled"
+          ? "Programó la publicación de la actividad."
+          : "Publicó la actividad para el grupo.",
+      createdAt: serverTimestamp(),
+    });
+  }
+  await finalBatch.commit();
+  return reference.id;
+}
+
+export function watchTaskSubmissions(
+  task: TaskAssignment,
+  profile: UserProfile,
+  callback: (submissions: TaskSubmission[]) => void,
+  onError?: (error: Error) => void,
+) {
+  const reference = taskRef(task);
+  if (profile.role === "student") {
+    return onSnapshot(
+      doc(reference, "entregas", profile.uid),
+      (snapshot) =>
+        callback(snapshot.exists() ? [submissionFromData(snapshot.id, snapshot.data())] : []),
+      (error) => onError?.(error),
+    );
+  }
+  return onSnapshot(
+    collection(reference, "entregas"),
+    (snapshot) =>
+      callback(
+        snapshot.docs
+          .map((entry) => submissionFromData(entry.id, entry.data()))
+          .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt)),
+      ),
+    (error) => onError?.(error),
+  );
+}
+
+export function watchSubmissionHistory(
+  task: TaskAssignment,
+  studentId: string,
+  callback: (events: TaskHistoryEvent[]) => void,
+  onError?: (error: Error) => void,
+) {
+  return onSnapshot(
+    query(
+      collection(taskRef(task), "entregas", studentId, "historial"),
+      orderBy("createdAt", "asc"),
+    ),
+    (snapshot) =>
+      callback(snapshot.docs.map((entry) => historyFromData(entry.id, entry.data()))),
+    (error) => onError?.(error),
+  );
+}
+
+export function watchTaskHistory(
+  task: TaskAssignment,
+  callback: (events: TaskHistoryEvent[]) => void,
+  onError?: (error: Error) => void,
+) {
+  return onSnapshot(
+    query(collection(taskRef(task), "historial"), orderBy("createdAt", "asc")),
+    (snapshot) =>
+      callback(snapshot.docs.map((entry) => historyFromData(entry.id, entry.data()))),
+    (error) => onError?.(error),
+  );
+}
+
+export function watchTaskExtension(
+  task: TaskAssignment,
+  studentId: string,
+  callback: (extension: TaskExtension | null) => void,
+  onError?: (error: Error) => void,
+) {
+  return onSnapshot(
+    doc(taskRef(task), "prorrogas", studentId),
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        callback(null);
+        return;
+      }
+      const data = snapshot.data();
+      callback({
+        studentId,
+        studentName: String(data.studentName ?? "Alumno"),
+        dueAt: asIso(data.dueAt),
+        grantedBy: String(data.grantedBy ?? ""),
+        grantedByName: String(data.grantedByName ?? "Docente CEHF"),
+        createdAt: asIso(data.createdAt),
+      });
+    },
+    (error) => onError?.(error),
+  );
+}
+
+export function isTaskSubmissionOpen(
+  task: TaskAssignment,
+  extension?: TaskExtension | null,
+) {
+  const now = Date.now();
+  const extensionActive = extension && new Date(extension.dueAt).getTime() >= now;
+  if (task.status === "published" && new Date(task.dueAt).getTime() >= now) {
+    return true;
+  }
+  return Boolean(
+    extensionActive && ["published", "closed"].includes(task.status),
+  );
+}
+
+async function uploadSubmissionFiles(
+  task: TaskAssignment,
+  studentId: string,
+  version: number,
+  files: File[],
+) {
+  const { storage } = requireFirebase();
+  return Promise.all(
+    files.map(async (file) => {
+      const id = crypto.randomUUID();
+      const storagePath = `${task.firestorePath}/entregas/${studentId}/version-${version}/${id}`;
+      await uploadBytes(ref(storage, storagePath), file, {
+        contentType: file.type || "application/octet-stream",
+        customMetadata: { originalName: file.name },
+      });
+      return {
+        id,
+        name: file.name,
+        storagePath,
+        contentType: file.type || "application/octet-stream",
+        size: file.size,
+      } satisfies TaskAttachment;
+    }),
+  );
+}
+
+export async function submitTaskResponse(
+  task: TaskAssignment,
+  profile: UserProfile,
+  content: string,
+  files: File[],
+) {
+  const { db } = requireFirebase();
+  const reference = taskRef(task);
+  const currentTaskSnapshot = await getDoc(reference);
+  if (!currentTaskSnapshot.exists()) throw new Error("La tarea ya no está disponible.");
+  const currentTask = taskFromData(task.id, reference.path, currentTaskSnapshot.data());
+  const extensionSnapshot = await getDoc(doc(reference, "prorrogas", profile.uid));
+  const extension = extensionSnapshot.exists()
+    ? ({ dueAt: asIso(extensionSnapshot.data().dueAt) } as TaskExtension)
+    : null;
+  if (!isTaskSubmissionOpen(currentTask, extension)) {
+    throw new Error("La fecha de entrega terminó o la tarea está cerrada.");
+  }
+  const submissionReference = doc(reference, "entregas", profile.uid);
+  const currentSubmission = await getDoc(submissionReference);
+  const version = currentSubmission.exists()
+    ? Number(currentSubmission.data().version ?? 0) + 1
+    : 1;
+  const attachments = await uploadSubmissionFiles(
+    currentTask,
+    profile.uid,
+    version,
+    files,
+  );
+  const batch = writeBatch(db);
+  batch.set(
+    submissionReference,
+    {
+      institutionId: task.institutionId,
+      taskId: task.id,
+      studentId: profile.uid,
+      studentName: profile.name,
+      teacherId: task.createdBy,
+      content: content.trim(),
+      attachments,
+      status: "submitted",
+      version,
+      submittedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      createdAt: currentSubmission.exists()
+        ? currentSubmission.data().createdAt
+        : serverTimestamp(),
+      teacherFeedback: currentSubmission.exists()
+        ? currentSubmission.data().teacherFeedback ?? ""
+        : "",
+    },
+    { merge: true },
+  );
+  batch.set(doc(collection(submissionReference, "historial")), {
+    type: version === 1 ? "submitted" : "resubmitted",
+    authorId: profile.uid,
+    authorName: profile.name,
+    authorRole: "student",
+    studentId: profile.uid,
+    studentName: profile.name,
+    message: content.trim(),
+    attachments,
+    version,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+  return version;
+}
+
+export async function sendTaskFeedback(
+  task: TaskAssignment,
+  submission: TaskSubmission,
+  profile: UserProfile,
+  feedback: string,
+) {
+  const { db } = requireFirebase();
+  const submissionReference = doc(taskRef(task), "entregas", submission.studentId);
+  const batch = writeBatch(db);
+  batch.update(submissionReference, {
+    status: "feedback",
+    teacherFeedback: feedback.trim(),
+    feedbackAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  batch.set(doc(collection(submissionReference, "historial")), {
+    type: "feedback",
+    authorId: profile.uid,
+    authorName: profile.name,
+    authorRole: profile.role,
+    studentId: submission.studentId,
+    studentName: submission.studentName,
+    message: feedback.trim(),
+    version: submission.version,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function markTaskSubmissionReviewed(
+  task: TaskAssignment,
+  submission: TaskSubmission,
+  profile: UserProfile,
+) {
+  const { db } = requireFirebase();
+  const submissionReference = doc(taskRef(task), "entregas", submission.studentId);
+  const batch = writeBatch(db);
+  batch.update(submissionReference, {
+    status: "reviewed",
+    reviewedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  batch.set(doc(collection(submissionReference, "historial")), {
+    type: "reviewed",
+    authorId: profile.uid,
+    authorName: profile.name,
+    authorRole: profile.role,
+    studentId: submission.studentId,
+    studentName: submission.studentName,
+    message: "Marcó la entrega como finalizada.",
+    version: submission.version,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+async function updateTaskWithHistory(
+  task: TaskAssignment,
+  profile: UserProfile,
+  changes: Record<string, unknown>,
+  event: {
+    type: TaskHistoryEventType;
+    message: string;
+    dueAt?: string;
+    studentId?: string;
+    studentName?: string;
+  },
+) {
+  const { db } = requireFirebase();
+  const reference = taskRef(task);
+  const batch = writeBatch(db);
+  batch.update(reference, { ...changes, updatedAt: serverTimestamp() });
+  batch.set(doc(collection(reference, "historial")), {
+    ...event,
+    dueAt: event.dueAt ? Timestamp.fromDate(new Date(event.dueAt)) : null,
+    authorId: profile.uid,
+    authorName: profile.name,
+    authorRole: profile.role,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function publishTaskNow(
+  task: TaskAssignment,
+  profile: UserProfile,
+) {
+  if (new Date(task.dueAt).getTime() <= Date.now()) {
+    throw new Error("Actualiza la fecha de entrega antes de publicar.");
+  }
+  await updateTaskWithHistory(
+    task,
+    profile,
+    { status: "published", publicationMode: "now", publishedAt: serverTimestamp() },
+    { type: "published", message: "Publicó la actividad para el grupo." },
+  );
+}
+
+export async function closeTaskAssignment(
+  task: TaskAssignment,
+  profile: UserProfile,
+) {
+  await updateTaskWithHistory(
+    task,
+    profile,
+    { status: "closed", closedAt: serverTimestamp() },
+    { type: "closed", message: "Cerró la actividad para nuevas entregas." },
+  );
+}
+
+export async function extendTaskForGroup(
+  task: TaskAssignment,
+  profile: UserProfile,
+  dueAt: string,
+) {
+  if (new Date(dueAt).getTime() <= Date.now()) {
+    throw new Error("La nueva fecha debe estar en el futuro.");
+  }
+  await updateTaskWithHistory(
+    task,
+    profile,
+    {
+      status: "published",
+      dueAt: Timestamp.fromDate(new Date(dueAt)),
+      closedAt: deleteField(),
+    },
+    {
+      type: task.status === "closed" ? "reopened" : "group_extension",
+      message: "Extendió la fecha de entrega para todo el grupo.",
+      dueAt,
+    },
+  );
+}
+
+export async function grantIndividualTaskExtension(
+  task: TaskAssignment,
+  profile: UserProfile,
+  student: { uid: string; name: string },
+  dueAt: string,
+) {
+  if (new Date(dueAt).getTime() <= Date.now()) {
+    throw new Error("La prórroga debe terminar en el futuro.");
+  }
+  const { db } = requireFirebase();
+  const reference = taskRef(task);
+  const batch = writeBatch(db);
+  batch.set(
+    doc(reference, "prorrogas", student.uid),
+    {
+      institutionId: task.institutionId,
+      studentId: student.uid,
+      studentName: student.name,
+      dueAt: Timestamp.fromDate(new Date(dueAt)),
+      grantedBy: profile.uid,
+      grantedByName: profile.name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
+  batch.set(doc(collection(reference, "historial")), {
+    type: "individual_extension",
+    authorId: profile.uid,
+    authorName: profile.name,
+    authorRole: profile.role,
+    studentId: student.uid,
+    studentName: student.name,
+    dueAt: Timestamp.fromDate(new Date(dueAt)),
+    message: `Otorgó una prórroga individual a ${student.name}.`,
+    createdAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function getTaskAttachmentUrl(attachment: TaskAttachment) {
+  const { storage } = requireFirebase();
+  return getDownloadURL(ref(storage, attachment.storagePath));
+}
+
+function notificationDate(value: unknown) {
+  const date = new Date(asIso(value));
+  if (Date.now() - date.getTime() < 60_000) return "Ahora";
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+export function watchTaskNotifications(
+  userId: string,
+  callback: (notifications: AppNotification[]) => void,
+  onError?: (error: Error) => void,
+) {
+  if (!firebase.db) return () => undefined;
+  return onSnapshot(
+    query(
+      collection(firebase.db, "notifications", userId, "items"),
+      orderBy("createdAt", "desc"),
+    ),
+    (snapshot) =>
+      callback(
+        snapshot.docs.map((entry) => {
+          const data = entry.data();
+          return {
+            id: entry.id,
+            title: String(data.title ?? "Nueva notificación"),
+            detail: String(data.detail ?? ""),
+            category: data.category ?? "task",
+            createdAt: notificationDate(data.createdAt),
+            read: data.read === true,
+          } satisfies AppNotification;
+        }),
+      ),
+    (error) => onError?.(error),
+  );
+}
+
+export async function markTaskNotificationsRead(userId: string) {
+  if (!firebase.db) return;
+  const snapshot = await new Promise<
+    Array<{ ref: ReturnType<typeof doc>; read: boolean }>
+  >((resolve, reject) => {
+    const unsubscribe = onSnapshot(
+      collection(firebase.db!, "notifications", userId, "items"),
+      (result) => {
+        unsubscribe();
+        resolve(result.docs.map((entry) => ({ ref: entry.ref, read: entry.data().read === true })));
+      },
+      reject,
+    );
+  });
+  const unread = snapshot.filter((item) => !item.read);
+  if (!unread.length) return;
+  const batch = writeBatch(firebase.db);
+  unread.forEach((item) => batch.update(item.ref, { read: true }));
+  await batch.commit();
+}
+
+export function legacyTasksToAssignments(
+  tasks: Task[],
+  config: AcademicConfig,
+  profile: UserProfile,
+) {
+  const baseDue = Date.now() + 24 * 60 * 60 * 1000;
+  const targetGroup = `${profile.grade ?? "5.º"} ${profile.group ?? "A"}`.trim();
+  return tasks.map((task, index): TaskAssignment => {
+    const originalDue = new Date(task.dueAt).getTime();
+    const dueAt = new Date(
+      Number.isFinite(originalDue) && originalDue > Date.now()
+        ? originalDue
+        : baseDue + index * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    return {
+      id: task.id,
+      firestorePath: `demo/tasks/${task.id}`,
+      institutionId: config.institutionId,
+      schoolYearId: config.schoolYearId,
+      schoolYearLabel: config.schoolYearLabel,
+      termId: config.termId,
+      termLabel: config.termLabel,
+      weekId: config.weekId,
+      weekLabel: config.weekLabel,
+      subjectId: slugify(task.subject),
+      subject: task.subject,
+      title: task.title,
+      description: task.description,
+      dueAt,
+      status: "published",
+      publicationMode: "now",
+      targetGroup,
+      links: [],
+      attachments: [],
+      createdBy: "demo-teacher",
+      teacherName: "Mariana López",
+      createdAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
+      updatedAt: new Date(Date.now() - index * 3_600_000).toISOString(),
+    };
+  });
+}
+
+export function createDemoTask(
+  input: TaskCreateInput,
+  profile: UserProfile,
+  config: AcademicConfig,
+): TaskAssignment {
+  const now = new Date().toISOString();
+  const status =
+    input.publicationMode === "now"
+      ? "published"
+      : input.publicationMode === "scheduled"
+        ? "scheduled"
+        : "draft";
+  const id = `task-${Date.now()}`;
+  return {
+    id,
+    firestorePath: `demo/tasks/${id}`,
+    institutionId: config.institutionId,
+    schoolYearId: config.schoolYearId,
+    schoolYearLabel: config.schoolYearLabel,
+    termId: config.termId,
+    termLabel: config.termLabel,
+    weekId: input.weekId,
+    weekLabel: input.weekLabel,
+    subjectId: input.subjectId,
+    subject: input.subject,
+    title: input.title,
+    description: input.description,
+    dueAt: new Date(input.dueAt).toISOString(),
+    publishAt: input.publishAt
+      ? new Date(input.publishAt).toISOString()
+      : undefined,
+    publishedAt: status === "published" ? now : undefined,
+    status,
+    publicationMode: input.publicationMode,
+    targetGroup: input.targetGroup,
+    links: input.links
+      .filter((link) => link.url.trim())
+      .map((link) => ({ ...link, id: crypto.randomUUID() })),
+    attachments: input.files.map((file) => ({
+      id: crypto.randomUUID(),
+      name: file.name,
+      storagePath: `demo/${file.name}`,
+      contentType: file.type,
+      size: file.size,
+    })),
+    createdBy: profile.uid,
+    teacherName: profile.name,
+    createdAt: now,
+    updatedAt: now,
+  };
+}

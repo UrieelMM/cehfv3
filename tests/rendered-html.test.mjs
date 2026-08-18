@@ -25,17 +25,17 @@ async function render(pathname = "/") {
   );
 }
 
-test("server-renders the CEHF Primaria entry experience", async () => {
+test("server-renders the Campus CEHF entry experience", async () => {
   const response = await render("/");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>CEHF Primaria<\/title>/i);
+  assert.match(html, /<title>Campus CEHF<\/title>/i);
   assert.match(html, /Una semana clara para aprender mejor/i);
-  assert.match(html, /Preparando tu semana/i);
+  assert.match(html, /Preparando tu experiencia/i);
   assert.match(html, /manifest\.webmanifest/i);
-  assert.match(html, /og\.png/i);
+  assert.match(html, /og-campus\.png/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });
 
@@ -43,6 +43,7 @@ test("supports the documented application routes", async () => {
   for (const pathname of [
     "/dashboard",
     "/tasks",
+    "/tasks/task-bitacora",
     "/weekly-progress",
     "/wall-newspaper",
     "/forum",
@@ -63,6 +64,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     css,
     firebaseSource,
     appSource,
+    taskSource,
+    taskUiSource,
+    functionsSource,
+    taskCss,
   ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
@@ -73,6 +78,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("app/globals.css", projectRoot), "utf8"),
       readFile(new URL("lib/firebase.ts", projectRoot), "utf8"),
       readFile(new URL("components/cehf-app.tsx", projectRoot), "utf8"),
+      readFile(new URL("lib/tasks-firebase.ts", projectRoot), "utf8"),
+      readFile(new URL("components/tasks-workflow.tsx", projectRoot), "utf8"),
+      readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
+      readFile(new URL("app/tasks.css", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -96,9 +105,14 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     /match \/system\/bootstrap\s*{\s*allow read: if isDirector\(\);\s*allow write: if false;/,
   );
   assert.match(storageRules, /safeUpload/);
+  assert.match(storageRules, /canUploadTaskSubmission/);
   assert.match(storageRules, /function isDirector/);
   assert.match(indexes, /weeklyMaterials/);
-  assert.match(manifest, /CEHF Primaria/);
+  assert.match(indexes, /"collectionGroup": "tareas"/);
+  assert.match(firestoreRules, /ciclosEscolares\/\{schoolYearId\}/);
+  assert.match(firestoreRules, /function canStudentSubmit/);
+  assert.match(firestoreRules, /match \/prorrogas\/\{studentId\}/);
+  assert.match(manifest, /Campus CEHF/);
   assert.match(css, /--brand-primary:\s*#1f2985/i);
   assert.match(css, /--violet:\s*#1f2985/i);
   assert.match(css, /--coral:\s*#c62e45/i);
@@ -108,7 +122,16 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /account-registration-modal/);
   assert.match(appSource, /Contraseña temporal/);
   assert.doesNotMatch(appSource, /Activar portal/);
-  await access(new URL("public/og.png", projectRoot));
+  assert.match(taskSource, /createTaskAssignment/);
+  assert.match(taskSource, /watchTaskAssignments/);
+  assert.match(taskSource, /submitTaskResponse/);
+  assert.match(taskUiSource, /TaskCreateModal/);
+  assert.match(taskUiSource, /TaskDetailModal/);
+  assert.match(taskUiSource, /Prórroga individual/);
+  assert.match(functionsSource, /publishScheduledTasks/);
+  assert.match(functionsSource, /onTaskConversationEvent/);
+  assert.match(taskCss, /task-modern-grid/);
+  await access(new URL("public/og-campus.png", projectRoot));
   await access(new URL("public/login-campus.jpg", projectRoot));
   await access(new URL("public/sw.js", projectRoot));
 });

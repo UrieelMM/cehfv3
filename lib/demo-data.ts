@@ -22,7 +22,7 @@ export const demoProfiles: Record<Role, UserProfile> = {
   director: {
     uid: "demo-director",
     name: "Alejandra Torres",
-    email: "direccion.primaria@cehf.edu.mx",
+    email: "direccion@cehf.edu.mx",
     role: "director",
     subjects: [],
     initials: "AT",
@@ -314,7 +314,7 @@ export const createDemoState = (): PortalState => ({
       id: "wall-reading",
       title: "Tres libros para viajar sin salir del salón",
       excerpt:
-        "Recomendaciones breves preparadas por el club de lectura de primaria.",
+        "Recomendaciones breves preparadas por el club de lectura del campus.",
       category: "Lecturas",
       author: "Club de lectura",
       group: "4.º–6.º",
@@ -582,8 +582,8 @@ export const createDemoState = (): PortalState => ({
         "La feria se realizará el viernes a las 12:30. Cada grupo presentará una experiencia de su semana.",
       kind: "announcement",
       subject: "Comunidad",
-      group: "Toda Primaria",
-      responsible: "Dirección Primaria",
+      group: "Todo el campus",
+      responsible: "Dirección Académica",
       participants: ["Dirección", "Docentes", "Estudiantes"],
       opensAt: "Publicado el 22 jul",
       closesAt: "Solo lectura",
