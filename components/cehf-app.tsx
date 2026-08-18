@@ -269,6 +269,13 @@ const progressLabels: Record<
   },
 };
 
+function reportFirebaseError(operation: string, error: unknown) {
+  const message = friendlyFirebaseError(error);
+  console.error(`[Campus CEHF] ${operation}`, error);
+  toast.error(message, { description: `Operación: ${operation}` });
+  return message;
+}
+
 export function CEHFApp() {
   const [activeSection, setActiveSection] = useState<SectionKey>(() =>
     typeof window === "undefined"
@@ -396,7 +403,7 @@ export function CEHFApp() {
     return watchAcademicConfig(
       profile.institutionId,
       setStoredAcademicConfig,
-      (error) => toast.error(friendlyFirebaseError(error)),
+      (error) => reportFirebaseError("cargar configuración académica", error),
     );
   }, [firebaseUser, profile]);
 
@@ -405,7 +412,7 @@ export function CEHFApp() {
     return watchAcademicCalendar(
       storedAcademicConfig,
       setAcademicCalendar,
-      (error) => toast.error(friendlyFirebaseError(error)),
+      (error) => reportFirebaseError("cargar semanas y trimestres", error),
     );
   }, [firebaseUser, profile, storedAcademicConfig]);
 
@@ -424,7 +431,7 @@ export function CEHFApp() {
       },
       (error) => {
         setTaskRecordsLoading(false);
-        toast.error(friendlyFirebaseError(error));
+        reportFirebaseError("cargar tareas", error);
       },
     );
   }, [academicConfig, firebaseUser, profile]);
@@ -451,7 +458,7 @@ export function CEHFApp() {
       profile.uid,
       (notifications) =>
         setState((previous) => ({ ...previous, notifications })),
-      (error) => toast.error(friendlyFirebaseError(error)),
+      (error) => reportFirebaseError("cargar notificaciones", error),
     );
   }, [firebaseUser, profile]);
 
@@ -481,9 +488,8 @@ export function CEHFApp() {
         }
         setProfile(nextProfile);
       } catch (error) {
-        const message = friendlyFirebaseError(error);
+        const message = reportFirebaseError("inicializar acceso", error);
         setAuthFailure(message);
-        toast.error(message);
       } finally {
         setAuthReady(true);
       }
@@ -508,7 +514,7 @@ export function CEHFApp() {
         if (active) setManagedAccounts(accounts);
       })
       .catch((error) => {
-        if (active) toast.error(friendlyFirebaseError(error));
+        if (active) reportFirebaseError("cargar comunidad escolar", error);
       })
       .finally(() => {
         if (active) setManagedAccountsLoading(false);
@@ -571,7 +577,7 @@ export function CEHFApp() {
         window.localStorage.setItem("cehf-demo-state", JSON.stringify(next));
       } else if (profile) {
         void savePortalState(next, profile).catch((error) =>
-          toast.error(friendlyFirebaseError(error)),
+          reportFirebaseError("guardar estado del portal", error),
         );
       }
       return next;

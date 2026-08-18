@@ -202,15 +202,16 @@ export const refreshPortalAccess = onCall(async (request) => {
     currentClaims.role !== desiredClaims.role ||
     currentClaims.institutionId !== desiredClaims.institutionId ||
     currentClaims.allPermissions !== desiredClaims.allPermissions;
-  if (changed) {
-    await getAuth().setCustomUserClaims(request.auth.uid, desiredClaims);
-    logger.info("Portal access claims refreshed", {
-      uid: request.auth.uid,
-      role,
-      institutionId,
-    });
-  }
-  return { changed, role, institutionId };
+  // Se reemiten siempre para que clientes que todavía condicionan la
+  // renovación del ID token a `changed` también obtengan una sesión fresca.
+  await getAuth().setCustomUserClaims(request.auth.uid, desiredClaims);
+  logger.info("Portal access claims refreshed", {
+    uid: request.auth.uid,
+    role,
+    institutionId,
+    claimsChanged: changed,
+  });
+  return { changed: true, claimsChanged: changed, role, institutionId };
 });
 
 export const saveAcademicCalendar = onCall(async (request) => {

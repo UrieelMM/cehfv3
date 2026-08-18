@@ -98,6 +98,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firestoreRules, /match \/weeklyProgress/);
   assert.match(firestoreRules, /match \/weeklyReports/);
   assert.match(firestoreRules, /match \/messageOutbox/);
+  assert.match(firestoreRules, /function roleIs\(role\)/);
   assert.match(firestoreRules, /request\.auth\.token\.role == "director"/);
   assert.match(firestoreRules, /request\.auth\.token\.allPermissions == true/);
   assert.match(
@@ -107,6 +108,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(storageRules, /safeUpload/);
   assert.match(storageRules, /canUploadTaskSubmission/);
   assert.match(storageRules, /function isDirector/);
+  assert.match(storageRules, /request\.auth\.token\.role == "director"/);
   assert.match(indexes, /weeklyMaterials/);
   assert.match(indexes, /"collectionGroup": "tareas"/);
   assert.match(firestoreRules, /ciclosEscolares\/\{schoolYearId\}/);
@@ -130,6 +132,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /Contraseña temporal/);
   assert.match(appSource, /setAuthReady\(false\)/);
   assert.match(appSource, /No pudimos cargar tu acceso/);
+  assert.match(appSource, /Operación: \$\{operation\}/);
   assert.doesNotMatch(appSource, /Activar portal/);
   assert.match(taskSource, /createTaskAssignment/);
   assert.match(taskSource, /isFirebaseTaskAssignment/);
@@ -153,6 +156,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /export const syncAcademicCalendar/);
   assert.match(functionsSource, /export const refreshPortalAccess/);
   assert.match(functionsSource, /setCustomUserClaims/);
+  assert.match(functionsSource, /claimsChanged: changed/);
   assert.match(functionsSource, /Cada semana sólo puede pertenecer a un trimestre/);
   assert.match(taskCss, /task-modern-grid/);
   await access(new URL("public/og-campus.png", projectRoot));
