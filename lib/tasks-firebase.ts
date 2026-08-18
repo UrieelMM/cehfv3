@@ -259,24 +259,25 @@ function historyFromData(id: string, data: DocumentData): TaskHistoryEvent {
 }
 
 export function watchAcademicConfig(
+  institutionId: string,
   callback: (config: AcademicConfig) => void,
   onError?: (error: Error) => void,
 ) {
   if (!firebase.db) {
-    callback(defaultAcademicConfig);
+    callback({ ...defaultAcademicConfig, institutionId });
     return () => undefined;
   }
   return onSnapshot(
-    doc(firebase.db, "institutions", INSTITUTION_ID, "configuracion", "academica"),
+    doc(firebase.db, "institutions", institutionId, "configuracion", "academica"),
     (snapshot) => {
       if (!snapshot.exists()) {
-        callback(defaultAcademicConfig);
+        callback({ ...defaultAcademicConfig, institutionId });
         return;
       }
       callback({
         ...defaultAcademicConfig,
         ...snapshot.data(),
-        institutionId: INSTITUTION_ID,
+        institutionId,
       } as AcademicConfig);
     },
     (error) => onError?.(error),

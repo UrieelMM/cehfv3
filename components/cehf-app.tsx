@@ -276,6 +276,7 @@ export function CEHFApp() {
       : sectionFromPath(window.location.pathname),
   );
   const [authReady, setAuthReady] = useState(!firebaseConfigured);
+  const [authFailure, setAuthFailure] = useState<string | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [demoRole, setDemoRole] = useState<Role>("student");
@@ -317,8 +318,15 @@ export function CEHFApp() {
     state.settings.theme === "dark" ||
     (state.settings.theme === "system" && systemPrefersDark);
   const academicConfig = useMemo(
-    () => resolveAcademicConfig(storedAcademicConfig, academicCalendar),
-    [academicCalendar, storedAcademicConfig],
+    () =>
+      resolveAcademicConfig(
+        {
+          ...storedAcademicConfig,
+          institutionId: currentProfile.institutionId,
+        },
+        academicCalendar,
+      ),
+    [academicCalendar, currentProfile.institutionId, storedAcademicConfig],
   );
 
   useEffect(() => {
@@ -385,8 +393,10 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
-    return watchAcademicConfig(setStoredAcademicConfig, (error) =>
-      toast.error(friendlyFirebaseError(error)),
+    return watchAcademicConfig(
+      profile.institutionId,
+      setStoredAcademicConfig,
+      (error) => toast.error(friendlyFirebaseError(error)),
     );
   }, [firebaseUser, profile]);
 
@@ -448,6 +458,8 @@ export function CEHFApp() {
   useEffect(() => {
     if (!firebaseConfigured) return;
     return watchAuth(async (user) => {
+      setAuthReady(false);
+      setAuthFailure(null);
       setFirebaseUser(user);
       if (!user) {
         setProfile(null);
@@ -456,13 +468,22 @@ export function CEHFApp() {
       }
       try {
         const nextProfile = await getProfile(user);
-        if (nextProfile) await refreshPortalAccess(user);
-        setProfile(nextProfile);
         if (nextProfile) {
+          const access = await refreshPortalAccess(user);
+          if (access.institutionId !== nextProfile.institutionId) {
+            throw new Error("El acceso institucional no coincide con el perfil.");
+          }
+          setStoredAcademicConfig((current) => ({
+            ...current,
+            institutionId: nextProfile.institutionId,
+          }));
           setState(await loadPortalState(nextProfile));
         }
+        setProfile(nextProfile);
       } catch (error) {
-        toast.error(friendlyFirebaseError(error));
+        const message = friendlyFirebaseError(error);
+        setAuthFailure(message);
+        toast.error(message);
       } finally {
         setAuthReady(true);
       }
@@ -482,7 +503,7 @@ export function CEHFApp() {
     if (!firebaseUser || role === "student") return;
     let active = true;
     queueMicrotask(() => setManagedAccountsLoading(true));
-    void listManagedAccounts()
+    void listManagedAccounts(profile.institutionId)
       .then((accounts) => {
         if (active) setManagedAccounts(accounts);
       })
@@ -495,7 +516,7 @@ export function CEHFApp() {
     return () => {
       active = false;
     };
-  }, [firebaseUser, role]);
+  }, [firebaseUser, profile, role]);
 
   useEffect(() => {
     if (firebaseUser) return;
@@ -587,6 +608,18 @@ export function CEHFApp() {
       <LoginScreen
         configured={firebaseConfigured}
         onDemo={() => setDemoStarted(true)}
+      />
+    );
+  }
+
+  if (firebaseUser && authFailure) {
+    return (
+      <GuidedState
+        icon={AlertCircle}
+        title="No pudimos cargar tu acceso"
+        description={authFailure}
+        actionLabel="Reintentar"
+        onAction={() => window.location.reload()}
       />
     );
   }
@@ -961,6 +994,7 @@ export function CEHFApp() {
           <AccountRegistrationModal
             accounts={managedAccounts}
             firebaseReady={firebaseConfigured && Boolean(firebaseUser)}
+            institutionId={currentProfile.institutionId}
             onClose={() => setCreateOpen(false)}
             onCreated={addManagedAccount}
           />
@@ -3531,11 +3565,13 @@ function NotificationPanel({
 function AccountRegistrationModal({
   accounts,
   firebaseReady,
+  institutionId,
   onClose,
   onCreated,
 }: {
   accounts: ManagedAccount[];
   firebaseReady: boolean;
+  institutionId: string;
   onClose: () => void;
   onCreated: (account: ManagedAccount) => void;
 }) {
@@ -3675,17 +3711,20 @@ function AccountRegistrationModal({
     setSubmitting(true);
     try {
       const result = firebaseReady
-        ? await createManagedAccount({
-            firstName,
-            lastName,
-            email,
-            role: accountRole,
-            grade: accountRole === "student" ? grade : undefined,
-            group: accountRole === "student" ? group : undefined,
-            subjects,
-            teacherIds,
-            photo,
-          })
+        ? await createManagedAccount(
+            {
+              firstName,
+              lastName,
+              email,
+              role: accountRole,
+              grade: accountRole === "student" ? grade : undefined,
+              group: accountRole === "student" ? group : undefined,
+              subjects,
+              teacherIds,
+              photo,
+            },
+            institutionId,
+          )
         : await new Promise<{ account: ManagedAccount; password: string }>(
             (resolve) =>
               window.setTimeout(() => {

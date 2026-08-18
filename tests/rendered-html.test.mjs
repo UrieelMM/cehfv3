@@ -124,8 +124,12 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firebaseSource, /createManagedAccount/);
   assert.match(firebaseSource, /cehf-account-creator/);
   assert.match(firebaseSource, /refreshPortalAccess/);
+  assert.match(firebaseSource, /await user\.getIdToken\(true\)/);
+  assert.match(firebaseSource, /sharedStateRef\(profile\.institutionId\)/);
   assert.match(appSource, /account-registration-modal/);
   assert.match(appSource, /Contraseña temporal/);
+  assert.match(appSource, /setAuthReady\(false\)/);
+  assert.match(appSource, /No pudimos cargar tu acceso/);
   assert.doesNotMatch(appSource, /Activar portal/);
   assert.match(taskSource, /createTaskAssignment/);
   assert.match(taskSource, /isFirebaseTaskAssignment/);

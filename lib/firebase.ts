@@ -128,12 +128,14 @@ function accountDate(value: unknown) {
   return typeof value === "string" ? value : new Date().toISOString();
 }
 
-export async function listManagedAccounts(): Promise<ManagedAccount[]> {
+export async function listManagedAccounts(
+  institutionId: string,
+): Promise<ManagedAccount[]> {
   if (!db) return [];
   const snapshot = await getDocs(
     query(
       collection(db, "users"),
-      where("institutionId", "==", "cehf-primaria"),
+      where("institutionId", "==", institutionId),
     ),
   );
   const accounts: ManagedAccount[] = [];
@@ -167,7 +169,10 @@ export async function listManagedAccounts(): Promise<ManagedAccount[]> {
   );
 }
 
-export async function createManagedAccount(input: ManagedAccountInput) {
+export async function createManagedAccount(
+  input: ManagedAccountInput,
+  institutionId: string,
+) {
   if (!app || !auth || !db || !storage) {
     throw new Error("Firebase no está configurado.");
   }
@@ -198,7 +203,7 @@ export async function createManagedAccount(input: ManagedAccountInput) {
     const extension = input.photo.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
     const photoReference = ref(
       storage,
-      `institutions/cehf-primaria/profiles/${createdUser.uid}/profile.${extension}`,
+      `institutions/${institutionId}/profiles/${createdUser.uid}/profile.${extension}`,
     );
     await uploadBytes(photoReference, input.photo, {
       contentType: input.photo.type,
@@ -222,7 +227,7 @@ export async function createManagedAccount(input: ManagedAccountInput) {
     };
     await setDoc(doc(db, "users", createdUser.uid), {
       ...account,
-      institutionId: "cehf-primaria",
+      institutionId,
       createdBy: director.uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -271,6 +276,7 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
   const data = snapshot.data();
   return {
     uid: user.uid,
+    institutionId: String(data.institutionId ?? ""),
     name: String(data.name ?? user.displayName ?? "Usuario"),
     email: String(data.email ?? user.email ?? ""),
     role: (data.role ?? "student") as Role,
@@ -284,36 +290,28 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
 }
 
 export async function refreshPortalAccess(user: User) {
-  if (!functions) return false;
+  if (!functions) throw new Error("Firebase Functions no está configurado.");
   const callable = httpsCallable<
     Record<string, never>,
     { changed: boolean; role: Role; institutionId: string }
   >(functions, "refreshPortalAccess");
-  try {
-    const result = await callable({});
-    if (result.data.changed) await user.getIdToken(true);
-    return result.data.changed;
-  } catch (error) {
-    const code =
-      typeof error === "object" && error && "code" in error
-        ? String(error.code)
-        : "";
-    if (code === "functions/not-found" || code === "functions/unavailable") {
-      return false;
-    }
-    throw error;
-  }
+  const result = await callable({});
+  // Aunque Admin ya tenga las claims correctas, la sesión abierta puede
+  // conservar un ID token anterior. Siempre se fuerza su renovación antes
+  // de iniciar listeners protegidos de Firestore y Storage.
+  await user.getIdToken(true);
+  return result.data;
 }
 
-const sharedStateRef = () =>
-  db ? doc(db, "institutions", "cehf-primaria", "portal", "shared") : null;
+const sharedStateRef = (institutionId: string) =>
+  db ? doc(db, "institutions", institutionId, "portal", "shared") : null;
 const privateStateRef = (uid: string) =>
   db ? doc(db, "users", uid, "privateState", "portal") : null;
 
 export async function loadPortalState(
   profile: UserProfile,
 ): Promise<PortalState> {
-  const sharedRef = sharedStateRef();
+  const sharedRef = sharedStateRef(profile.institutionId);
   if (!db || !sharedRef) return createDemoState();
   const initial = createDemoState();
   const sharedSnapshot = await getDoc(sharedRef);
@@ -356,7 +354,7 @@ export async function savePortalState(
   const target =
     profile.role === "student"
       ? privateStateRef(profile.uid)
-      : sharedStateRef();
+      : sharedStateRef(profile.institutionId);
   if (!target) return;
   await setDoc(target, {
     ...state,

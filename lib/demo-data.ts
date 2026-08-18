@@ -3,6 +3,7 @@ import type { ManagedAccount, PortalState, Role, UserProfile } from "./types";
 export const demoProfiles: Record<Role, UserProfile> = {
   student: {
     uid: "demo-student",
+    institutionId: "cehf-primaria",
     name: "Sofía Martínez",
     email: "sofia@cehf.edu.mx",
     role: "student",
@@ -12,6 +13,7 @@ export const demoProfiles: Record<Role, UserProfile> = {
   },
   teacher: {
     uid: "demo-teacher",
+    institutionId: "cehf-primaria",
     name: "Mariana López",
     email: "mariana.lopez@cehf.edu.mx",
     role: "teacher",
@@ -21,6 +23,7 @@ export const demoProfiles: Record<Role, UserProfile> = {
   },
   director: {
     uid: "demo-director",
+    institutionId: "cehf-primaria",
     name: "Alejandra Torres",
     email: "direccion@cehf.edu.mx",
     role: "director",

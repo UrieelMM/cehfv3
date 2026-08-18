@@ -2,6 +2,7 @@ export type Role = "director" | "teacher" | "student";
 
 export type UserProfile = {
   uid: string;
+  institutionId: string;
   name: string;
   email: string;
   role: Role;
