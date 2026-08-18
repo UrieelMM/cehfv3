@@ -536,6 +536,471 @@ async function writeNotifications(
   }
 }
 
+const MURAL_CATEGORIES = [
+  "Ciencia y curiosidades",
+  "Comunidad",
+  "Lecturas",
+  "Arte y creatividad",
+  "Deportes",
+  "Medio ambiente",
+  "Historia",
+  "Vida escolar",
+  "Salud y bienestar",
+  "Música",
+  "Proyectos",
+  "Opinión",
+  "Entrevistas",
+] as const;
+
+type MuralRole = "director" | "teacher" | "student";
+
+type MuralUser = {
+  uid: string;
+  institutionId: string;
+  name: string;
+  role: MuralRole;
+  group: string;
+};
+
+type MuralSubmission = {
+  title: string;
+  category: typeof MURAL_CATEGORIES[number];
+  section: string;
+  lead: string;
+  paragraphs: string[];
+  quote: string;
+};
+
+function compactMuralText(value: unknown) {
+  return String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function muralText(
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+) {
+  const normalized = compactMuralText(value);
+  if (normalized.length < minimum || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${label} debe tener entre ${minimum} y ${maximum.toLocaleString("es-MX")} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function muralSubmission(value: unknown): MuralSubmission {
+  const input = (value ?? {}) as Record<string, unknown>;
+  if (input.authorshipConfirmed !== true) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Confirma que la historia es tuya y puede compartirse en CEHF.",
+    );
+  }
+  const category = compactMuralText(input.category);
+  if (!MURAL_CATEGORIES.includes(category as typeof MURAL_CATEGORIES[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona una categoría válida.");
+  }
+  const normalizedBody = String(input.body ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim();
+  if (normalizedBody.length < 180 || normalizedBody.length > 8_000) {
+    throw new HttpsError(
+      "invalid-argument",
+      "La historia debe tener entre 180 y 8,000 caracteres.",
+    );
+  }
+  const paragraphs = normalizedBody
+    .split(/\n\s*\n/)
+    .map(compactMuralText)
+    .filter(Boolean);
+  if (paragraphs.length < 2) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Separa la historia en al menos dos párrafos con una línea en blanco.",
+    );
+  }
+  return {
+    title: muralText(input.title, "El título", 8, 120),
+    category: category as typeof MURAL_CATEGORIES[number],
+    section: muralText(input.section, "La sección", 3, 60),
+    lead: muralText(input.lead, "La entrada", 20, 180),
+    paragraphs,
+    quote: muralText(input.quote, "La frase destacada", 10, 240),
+  };
+}
+
+function muralStoryId(value: unknown) {
+  const id = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+    throw new HttpsError("invalid-argument", "La historia seleccionada no es válida.");
+  }
+  return id;
+}
+
+async function requireMuralUser(
+  auth: CallableRequest<unknown>["auth"],
+): Promise<MuralUser> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const profileSnapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = profileSnapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  if (
+    !profileSnapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher", "student"].includes(role) ||
+    !institutionId
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil institucional no está activo o está incompleto.",
+    );
+  }
+  const group = `${String(profile?.grade ?? "")} ${String(profile?.group ?? "")}`.trim();
+  return {
+    uid: auth.uid,
+    institutionId,
+    name: String(profile?.name ?? "Integrante CEHF"),
+    role: role as MuralRole,
+    group: group || "Comunidad CEHF",
+  };
+}
+
+function muralReadingTime(story: MuralSubmission) {
+  const words = [story.title, story.lead, ...story.paragraphs, story.quote]
+    .join(" ")
+    .split(/\s+/)
+    .filter(Boolean).length;
+  return `${Math.max(2, Math.ceil(words / 180))} min de lectura`;
+}
+
+function muralAccent(id: string) {
+  const accents = ["violet", "coral", "mint", "gold"] as const;
+  const index = [...id].reduce((total, character) => total + character.charCodeAt(0), 0);
+  return accents[index % accents.length];
+}
+
+function muralIso(value: unknown) {
+  return value instanceof Timestamp ? value.toDate().toISOString() : "";
+}
+
+function muralStoryResponse(id: string, story: DocumentData) {
+  return {
+    id,
+    institutionId: String(story.institutionId ?? ""),
+    title: String(story.title ?? ""),
+    excerpt: String(story.lead ?? ""),
+    category: String(story.category ?? "Comunidad"),
+    author: String(story.author ?? "Alumno CEHF"),
+    authorId: String(story.authorId ?? ""),
+    group: String(story.group ?? "Comunidad CEHF"),
+    publishedAt: muralIso(story.publishedAt),
+    accent: String(story.accent ?? "violet"),
+    status: String(story.status ?? "submitted"),
+    favorite: false,
+    section: String(story.section ?? ""),
+    lead: String(story.lead ?? ""),
+    paragraphs: Array.isArray(story.paragraphs) ? story.paragraphs.map(String) : [],
+    quote: String(story.quote ?? ""),
+    readingTime: String(story.readingTime ?? "3 min de lectura"),
+    version: Number(story.version ?? 1),
+    reviewNote: String(story.reviewNote ?? ""),
+    reviewedById: String(story.reviewedById ?? ""),
+    reviewedByName: String(story.reviewedByName ?? ""),
+    reviewedByRole: String(story.reviewedByRole ?? ""),
+    reviewedAt: muralIso(story.reviewedAt),
+    approvedById: String(story.approvedById ?? ""),
+    approvedByName: String(story.approvedByName ?? ""),
+    approvedByRole: String(story.approvedByRole ?? ""),
+    approvedAt: muralIso(story.approvedAt),
+    createdAt: muralIso(story.createdAt),
+    updatedAt: muralIso(story.updatedAt),
+    submittedAt: muralIso(story.submittedAt),
+  };
+}
+
+export const submitWallStory = onCall(async (request) => {
+  const student = await requireMuralUser(request.auth);
+  if (student.role !== "student") {
+    throw new HttpsError("permission-denied", "Sólo los alumnos pueden enviar historias.");
+  }
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const submission = muralSubmission(input);
+  const requestedStoryId = input.storyId ? muralStoryId(input.storyId) : "";
+  const storyReference = requestedStoryId
+    ? db.doc(`wallPosts/${requestedStoryId}`)
+    : db.collection("wallPosts").doc();
+  const now = Timestamp.now();
+  const content = {
+    title: submission.title,
+    excerpt: submission.lead,
+    category: submission.category,
+    section: submission.section,
+    lead: submission.lead,
+    paragraphs: submission.paragraphs,
+    quote: submission.quote,
+    readingTime: muralReadingTime(submission),
+  };
+
+  let savedStory: DocumentData;
+  if (requestedStoryId) {
+    savedStory = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(storyReference);
+      const previous = snapshot.data();
+      if (
+        !snapshot.exists ||
+        previous?.institutionId !== student.institutionId ||
+        previous.authorId !== student.uid
+      ) {
+        throw new HttpsError("not-found", "La historia no está disponible para tu cuenta.");
+      }
+      if (previous.status !== "changes_requested") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Esta historia ya no está disponible para correcciones.",
+        );
+      }
+      const nextStory = {
+        ...previous,
+        ...content,
+        status: "submitted",
+        version: Number(previous.version ?? 1) + 1,
+        submittedAt: now,
+        updatedAt: now,
+        updatedBy: student.uid,
+      };
+      transaction.set(storyReference, nextStory);
+      transaction.set(db.collection("auditEvents").doc(), {
+        entityType: "wallPost",
+        entityId: storyReference.id,
+        institutionId: student.institutionId,
+        action: "wall.story.resubmitted",
+        actorId: student.uid,
+        actorName: student.name,
+        actorRole: student.role,
+        before: { status: previous.status, version: previous.version ?? 1 },
+        after: { status: "submitted", version: nextStory.version },
+        createdAt: now,
+      });
+      return nextStory;
+    });
+  } else {
+    savedStory = {
+      ...content,
+      institutionId: student.institutionId,
+      author: student.name,
+      authorId: student.uid,
+      group: student.group,
+      accent: muralAccent(storyReference.id),
+      status: "submitted",
+      version: 1,
+      reviewNote: "",
+      reviewedById: "",
+      reviewedByName: "",
+      reviewedByRole: "",
+      approvedById: "",
+      approvedByName: "",
+      approvedByRole: "",
+      createdAt: now,
+      createdBy: student.uid,
+      submittedAt: now,
+      updatedAt: now,
+      updatedBy: student.uid,
+    };
+    const batch = db.batch();
+    batch.create(storyReference, savedStory);
+    batch.create(db.collection("auditEvents").doc(), {
+      entityType: "wallPost",
+      entityId: storyReference.id,
+      institutionId: student.institutionId,
+      action: "wall.story.submitted",
+      actorId: student.uid,
+      actorName: student.name,
+      actorRole: student.role,
+      after: { status: "submitted", version: 1 },
+      createdAt: now,
+    });
+    await batch.commit();
+  }
+
+  logger.info("Mural story submitted", {
+    storyId: storyReference.id,
+    institutionId: student.institutionId,
+    version: savedStory.version,
+  });
+  return { story: muralStoryResponse(storyReference.id, savedStory) };
+});
+
+export const reviewWallStory = onCall(async (request) => {
+  const reviewer = await requireMuralUser(request.auth);
+  if (reviewer.role !== "teacher" && reviewer.role !== "director") {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo un maestro o Dirección puede revisar historias.",
+    );
+  }
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const storyId = muralStoryId(input.storyId);
+  const decision = String(input.decision ?? "");
+  if (decision !== "approve" && decision !== "request_changes") {
+    throw new HttpsError("invalid-argument", "Selecciona una decisión editorial válida.");
+  }
+  const rawReviewNote = compactMuralText(input.reviewNote);
+  if (rawReviewNote.length > 500) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Las observaciones pueden tener hasta 500 caracteres.",
+    );
+  }
+  if (decision === "request_changes" && rawReviewNote.length < 8) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Explica en al menos 8 caracteres qué debe corregir el alumno.",
+    );
+  }
+
+  const storyReference = db.doc(`wallPosts/${storyId}`);
+  const now = Timestamp.now();
+  const savedStory = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(storyReference);
+    const previous = snapshot.data();
+    if (!snapshot.exists || previous?.institutionId !== reviewer.institutionId) {
+      throw new HttpsError("not-found", "La historia ya no está disponible.");
+    }
+    if (previous.status !== "submitted") {
+      throw new HttpsError(
+        "already-exists",
+        "La historia ya fue revisada por otra persona. Actualiza la bandeja.",
+      );
+    }
+    const approved = decision === "approve";
+    const nextStory = {
+      ...previous,
+      status: approved ? "published" : "changes_requested",
+      reviewNote: rawReviewNote,
+      reviewedById: reviewer.uid,
+      reviewedByName: reviewer.name,
+      reviewedByRole: reviewer.role,
+      reviewedAt: now,
+      approvedById: approved ? reviewer.uid : "",
+      approvedByName: approved ? reviewer.name : "",
+      approvedByRole: approved ? reviewer.role : "",
+      approvedAt: approved ? now : null,
+      publishedAt: approved ? now : null,
+      updatedAt: now,
+      updatedBy: reviewer.uid,
+    };
+    transaction.set(storyReference, nextStory);
+    transaction.create(db.collection("auditEvents").doc(), {
+      entityType: "wallPost",
+      entityId: storyId,
+      institutionId: reviewer.institutionId,
+      action: approved ? "wall.story.published" : "wall.story.changes_requested",
+      actorId: reviewer.uid,
+      actorName: reviewer.name,
+      actorRole: reviewer.role,
+      before: { status: previous.status, version: previous.version ?? 1 },
+      after: {
+        status: nextStory.status,
+        version: previous.version ?? 1,
+        reviewNote: rawReviewNote,
+      },
+      createdAt: now,
+    });
+    return nextStory;
+  });
+
+  logger.info("Mural story reviewed", {
+    storyId,
+    institutionId: reviewer.institutionId,
+    reviewerId: reviewer.uid,
+    decision,
+  });
+  return { story: muralStoryResponse(storyId, savedStory) };
+});
+
+async function muralReviewers(institutionId: string) {
+  const snapshot = await db
+    .collection("users")
+    .where("institutionId", "==", institutionId)
+    .get();
+  return snapshot.docs
+    .filter((entry) => {
+      const profile = entry.data();
+      return profile.active === true && ["teacher", "director"].includes(profile.role);
+    })
+    .map((entry) => entry.id);
+}
+
+export const onWallStoryCreated = onDocumentCreated(
+  { document: "wallPosts/{storyId}", retry: true },
+  async (event) => {
+    const story = event.data?.data();
+    if (!story || story.status !== "submitted") return;
+    const recipients = await muralReviewers(String(story.institutionId ?? ""));
+    await writeNotifications(recipients, `wall-review-${event.params.storyId}-v1`, {
+      category: "wall",
+      title: "Nueva historia por revisar",
+      detail: `${String(story.author ?? "Un alumno")} envió “${String(story.title ?? "Nueva historia")}”.`,
+      storyId: event.params.storyId,
+      url: "/wall-newspaper",
+      eventType: "wall_story_submitted",
+    });
+  },
+);
+
+export const onWallStoryChanged = onDocumentWritten(
+  { document: "wallPosts/{storyId}", retry: true },
+  async (event) => {
+    const beforeSnapshot = event.data?.before;
+    const afterSnapshot = event.data?.after;
+    if (!beforeSnapshot?.exists || !afterSnapshot?.exists) return;
+    const before = beforeSnapshot.data();
+    const after = afterSnapshot.data();
+    if (!before || !after) return;
+    if (before.status === after.status) return;
+    const storyId = event.params.storyId;
+    const version = Number(after.version ?? 1);
+    if (before.status === "changes_requested" && after.status === "submitted") {
+      const recipients = await muralReviewers(String(after.institutionId ?? ""));
+      await writeNotifications(recipients, `wall-review-${storyId}-v${version}`, {
+        category: "wall",
+        title: "Historia corregida por revisar",
+        detail: `${String(after.author ?? "Un alumno")} envió una nueva versión de “${String(after.title ?? "su historia")}”.`,
+        storyId,
+        url: "/wall-newspaper",
+        eventType: "wall_story_resubmitted",
+      });
+      return;
+    }
+    if (!["published", "changes_requested"].includes(String(after.status))) return;
+    const authorId = String(after.authorId ?? "");
+    if (!authorId) return;
+    const published = after.status === "published";
+    await writeNotifications(
+      [authorId],
+      `wall-decision-${storyId}-v${version}-${after.status}`,
+      {
+        category: "wall",
+        title: published ? "Tu historia fue publicada" : "Tu historia necesita correcciones",
+        detail: published
+          ? `“${String(after.title ?? "Tu historia")}” ya está en el Periódico mural.`
+          : String(after.reviewNote ?? "Revisa las observaciones de tu maestro."),
+        storyId,
+        url: "/wall-newspaper",
+        eventType: published ? "wall_story_published" : "wall_story_changes_requested",
+      },
+    );
+  },
+);
+
 export const onTaskStateChanged = onDocumentWritten(
   { document: TASK_PATH, retry: true },
   async (event) => {

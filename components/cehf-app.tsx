@@ -9,8 +9,6 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleHelp,
   ClipboardCheck,
   Clock3,
@@ -18,7 +16,6 @@ import {
   FileBarChart,
   FileText,
   GraduationCap,
-  Heart,
   Home,
   Eye,
   EyeOff,
@@ -49,10 +46,11 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
+import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import {
   AcademicConfigurationCard,
   TaskCreateModal,
@@ -107,7 +105,6 @@ import type {
   Role,
   SectionKey,
   UserProfile,
-  WallPost,
   TaskAssignment,
   TaskCreateInput,
 } from "@/lib/types";
@@ -506,7 +503,7 @@ export function CEHFApp() {
   }, [state.settings]);
 
   useEffect(() => {
-    if (!firebaseUser || role === "student") return;
+    if (!firebaseUser || !profile || role === "student") return;
     let active = true;
     queueMicrotask(() => setManagedAccountsLoading(true));
     void listManagedAccounts(profile.institutionId)
@@ -896,7 +893,6 @@ export function CEHFApp() {
                   "weekly-review",
                   "tasks",
                   "weekly-materials",
-                  "wall-newspaper",
                   "forum",
                   "users",
                 ].includes(activeSection) && (
@@ -954,6 +950,7 @@ export function CEHFApp() {
               }}
               managedAccounts={managedAccounts}
               managedAccountsLoading={managedAccountsLoading}
+              firebaseReady={Boolean(firebaseUser && profile)}
             />
           </motion.div>
         </main>
@@ -1110,27 +1107,6 @@ export function CEHFApp() {
                         replies: [],
                       },
                       ...previous.forumTopics,
-                    ],
-                  };
-                }
-                if (activeSection === "wall-newspaper") {
-                  return {
-                    ...previous,
-                    wallPosts: [
-                      {
-                        id,
-                        title: titleValue,
-                        excerpt:
-                          "Borrador editorial listo para completar y enviar a revisión.",
-                        category: subject,
-                        author: currentProfile.name,
-                        group: currentProfile.group ?? "Comunidad CEHF",
-                        publishedAt: "Borrador",
-                        accent: "violet",
-                        status: "draft",
-                        favorite: false,
-                      },
-                      ...previous.wallPosts,
                     ],
                   };
                 }
@@ -1466,6 +1442,7 @@ function SectionContent({
   saveAcademicCalendarConfiguration,
   managedAccounts,
   managedAccountsLoading,
+  firebaseReady,
 }: {
   section: SectionKey;
   role: Role;
@@ -1486,6 +1463,7 @@ function SectionContent({
   ) => Promise<void>;
   managedAccounts: ManagedAccount[];
   managedAccountsLoading: boolean;
+  firebaseReady: boolean;
 }) {
   switch (section) {
     case "dashboard":
@@ -1547,7 +1525,12 @@ function SectionContent({
       );
     case "wall-newspaper":
       return (
-        <WallPage state={state} updateState={updateState} role={role} />
+        <WallNewspaperPage
+          state={state}
+          updateState={updateState}
+          profile={profile}
+          firebaseReady={firebaseReady}
+        />
       );
     case "forum":
       return (
@@ -2666,436 +2649,6 @@ function MaterialsPage({
           </article>
         ))}
       </section>
-    </div>
-  );
-}
-
-type WallReaderPage =
-  | { kind: "intro" }
-  | {
-      kind: "content";
-      paragraphs: string[];
-      first: boolean;
-      last: boolean;
-    };
-
-function wallStoryParagraphs(post: WallPost) {
-  if (post.paragraphs?.length) return post.paragraphs;
-  return [
-    post.excerpt,
-    `Esta historia fue preparada por ${post.author} para compartir una experiencia de ${post.category.toLocaleLowerCase("es-MX")} con la comunidad de Campus CEHF.`,
-    "Cada publicación del Periódico mural reúne observaciones, preguntas y aprendizajes que nacen dentro de nuestra escuela.",
-  ];
-}
-
-function WallStoryReader({
-  post,
-  onClose,
-  onFavorite,
-}: {
-  post: WallPost;
-  onClose: () => void;
-  onFavorite: () => void;
-}) {
-  const [readingPosition, setReadingPosition] = useState({
-    postId: post.id,
-    spread: 0,
-  });
-  const [pageTurn, setPageTurn] = useState<{
-    id: number;
-    direction: 1 | -1;
-  } | null>(null);
-  const pageTurnSequence = useRef(0);
-  const reduceMotion = useReducedMotion();
-  const paragraphs = useMemo(() => wallStoryParagraphs(post), [post]);
-  const physicalPages = useMemo<WallReaderPage[]>(() => {
-    const contentPages: WallReaderPage[] = [];
-    for (let index = 0; index < paragraphs.length; index += 2) {
-      contentPages.push({
-        kind: "content",
-        paragraphs: paragraphs.slice(index, index + 2),
-        first: index === 0,
-        last: index + 2 >= paragraphs.length,
-      });
-    }
-    return [{ kind: "intro" }, ...contentPages];
-  }, [paragraphs]);
-  const spreadCount = Math.max(1, Math.ceil(physicalPages.length / 2));
-  const requestedSpread =
-    readingPosition.postId === post.id ? readingPosition.spread : 0;
-  const spread = Math.min(Math.max(requestedSpread, 0), spreadCount - 1);
-  const firstVisiblePage = spread * 2;
-  const visiblePages = physicalPages.slice(
-    firstVisiblePage,
-    firstVisiblePage + 2,
-  );
-  const progress = Math.round(((spread + 1) / spreadCount) * 100);
-
-  const moveSpread = useCallback(
-    (delta: number) => {
-      if (pageTurn) return;
-      const next = spread + delta;
-      if (next < 0 || next >= spreadCount) return;
-      if (!reduceMotion) {
-        pageTurnSequence.current += 1;
-        setPageTurn({
-          id: pageTurnSequence.current,
-          direction: delta > 0 ? 1 : -1,
-        });
-      }
-      setReadingPosition({ postId: post.id, spread: next });
-    },
-    [pageTurn, post.id, reduceMotion, spread, spreadCount],
-  );
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "ArrowRight") moveSpread(1);
-      if (event.key === "ArrowLeft") moveSpread(-1);
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [moveSpread, onClose]);
-
-  function renderPage(
-    page: WallReaderPage | undefined,
-    physicalIndex: number,
-    side: "left" | "right",
-  ) {
-    if (!page) {
-      return (
-        <section
-          className={`reader-page reader-page-${side} reader-page-blank`}
-          aria-hidden="true"
-        >
-          <span className="reader-blank-mark">CE</span>
-          <span>Entre líneas</span>
-          <small>Campus CEHF</small>
-        </section>
-      );
-    }
-
-    if (page.kind === "intro") {
-      return (
-        <section
-          className={`reader-page reader-page-${side} reader-intro-page`}
-        >
-          <div className="reader-running-head">
-            <span>{post.category}</span>
-            <span>PERIÓDICO MURAL · 07</span>
-          </div>
-          <span className="reader-section-label">
-            {post.section ?? post.category}
-          </span>
-          <h1>{post.title}</h1>
-          <p className="reader-lead">{post.lead ?? post.excerpt}</p>
-          <div className="reader-byline">
-            <span>Texto</span>
-            <strong>{post.author}</strong>
-            <small>
-              <Clock3 size={12} /> {post.readingTime ?? "3 min de lectura"}
-            </small>
-          </div>
-          <div className="reader-page-number">{physicalIndex + 1}</div>
-        </section>
-      );
-    }
-
-    return (
-      <section
-        className={`reader-page reader-page-${side} reader-content-page ${
-          page.first ? "is-first" : ""
-        } ${page.last ? "is-last" : ""}`}
-      >
-        <div className="reader-running-head">
-          <span>{post.category}</span>
-          <span>{post.section ?? "Historias de nuestra comunidad"}</span>
-        </div>
-        {page.first && (
-          <div className={`reader-story-art ${post.accent}`}>
-            <span>
-              EDICIÓN
-              <br />
-              07
-            </span>
-            <Newspaper size={48} />
-            <i />
-          </div>
-        )}
-        <div className="reader-content-copy">
-          {page.paragraphs.map((paragraph, index) => (
-            <p
-              className={page.first && index === 0 ? "reader-first-paragraph" : ""}
-              key={`${physicalIndex}-${index}`}
-            >
-              {paragraph}
-            </p>
-          ))}
-        </div>
-        {page.last && (
-          <blockquote>
-            “{post.quote ?? "Cada historia nos ayuda a mirar nuestra escuela de una forma nueva."}”
-          </blockquote>
-        )}
-        <div className="reader-content-footer">
-          <span>{page.last ? "CAMPUS CEHF" : "CONTINÚA EN LA SIGUIENTE PÁGINA"}</span>
-          {page.last && (
-            <button
-              type="button"
-              className={post.favorite ? "favorite" : ""}
-              onClick={onFavorite}
-              aria-pressed={post.favorite}
-            >
-              <Heart size={13} fill={post.favorite ? "currentColor" : "none"} />
-              {post.favorite ? "Guardada" : "Guardar"}
-            </button>
-          )}
-        </div>
-        <div className="reader-page-number">{physicalIndex + 1}</div>
-        {side === "right" && <span className="reader-page-curl" />}
-      </section>
-    );
-  }
-
-  return (
-    <motion.section
-      className="magazine-reader-shell"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Lectura de ${post.title}`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: reduceMotion ? 0 : 0.3 }}
-    >
-      <div className="reader-paper-grain" />
-      <header className="reader-header">
-        <div className="reader-identity">
-          <span className="reader-brand-mark">CE</span>
-          <span />
-          <div>
-            <strong>Entre líneas</strong>
-            <small>Periódico mural · Julio 2026</small>
-          </div>
-        </div>
-        <div className="reader-status">
-          <span>{progress}% leído</span>
-          <div>
-            <i style={{ width: `${progress}%` }} />
-          </div>
-          <button
-            type="button"
-            autoFocus
-            onClick={onClose}
-            aria-label="Cerrar la revista"
-          >
-            <X size={19} />
-          </button>
-        </div>
-      </header>
-
-      <div className="reader-scene">
-        <div className="reader-desk-light" />
-        <div className="reader-book-shadow" />
-        <div className="reader-book">
-          <div className="reader-page-stack reader-page-stack-left" />
-          <div className="reader-page-stack reader-page-stack-right" />
-          <div className="reader-spine" />
-          <AnimatePresence mode="wait">
-            <motion.article
-              className="reader-spread"
-              key={`${post.id}-${spread}`}
-              initial={{ opacity: reduceMotion ? 1 : 0.72 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: reduceMotion ? 1 : 0.72 }}
-              transition={{ duration: reduceMotion ? 0 : 0.18 }}
-              aria-live="polite"
-            >
-              {renderPage(visiblePages[0], firstVisiblePage, "left")}
-              {renderPage(visiblePages[1], firstVisiblePage + 1, "right")}
-            </motion.article>
-          </AnimatePresence>
-          {pageTurn && (
-            <motion.div
-              key={pageTurn.id}
-              className={`reader-turn-sheet ${
-                pageTurn.direction > 0 ? "forward" : "backward"
-              }`}
-              initial={{ rotateY: 0 }}
-              animate={{
-                rotateY:
-                  pageTurn.direction > 0 ? [0, -92, -180] : [0, 92, 180],
-              }}
-              transition={{ duration: 0.76, ease: [0.45, 0, 0.2, 1] }}
-              style={{
-                transformOrigin:
-                  pageTurn.direction > 0 ? "left center" : "right center",
-              }}
-              onAnimationComplete={() =>
-                setPageTurn((active) =>
-                  active?.id === pageTurn.id ? null : active,
-                )
-              }
-              aria-hidden="true"
-            >
-              <div className="reader-turn-front">
-                <span />
-              </div>
-              <div className="reader-turn-back">
-                <span />
-              </div>
-            </motion.div>
-          )}
-        </div>
-      </div>
-
-      <nav className="reader-controls" aria-label="Navegación de páginas">
-        <button
-          type="button"
-          onClick={() => moveSpread(-1)}
-          disabled={spread === 0 || Boolean(pageTurn)}
-          aria-label="Página anterior"
-        >
-          <ChevronLeft size={19} /> <span>Anterior</span>
-        </button>
-        <div className="reader-position">
-          <small>
-            Páginas {firstVisiblePage + 1}–
-            {Math.min(firstVisiblePage + 2, physicalPages.length)} de {physicalPages.length}
-          </small>
-        </div>
-        <button
-          type="button"
-          onClick={() => moveSpread(1)}
-          disabled={spread === spreadCount - 1 || Boolean(pageTurn)}
-          aria-label="Página siguiente"
-        >
-          <span>Siguiente</span> <ChevronRight size={19} />
-        </button>
-      </nav>
-      <div className="reader-key-hint">
-        <kbd>←</kbd>
-        <kbd>→</kbd> pasar página <span /> <kbd>ESC</kbd> cerrar
-      </div>
-    </motion.section>
-  );
-}
-
-function WallPage({
-  state,
-  updateState,
-  role,
-}: {
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-  role: Role;
-}) {
-  const [readerPostId, setReaderPostId] = useState<string | null>(null);
-  const featured = state.wallPosts[0];
-  const readerPost = state.wallPosts.find((post) => post.id === readerPostId);
-  const toggleFavorite = (postId: string) =>
-    updateState((previous) => ({
-      ...previous,
-      wallPosts: previous.wallPosts.map((item) =>
-        item.id === postId ? { ...item, favorite: !item.favorite } : item,
-      ),
-    }));
-  return (
-    <div>
-      <section className="wall-feature">
-        <div className="wall-art" aria-hidden="true">
-          <span className="wall-circle" />
-          <span className="wall-arch" />
-          <span className="wall-leaf one" />
-          <span className="wall-leaf two" />
-        </div>
-        <div className="wall-feature-copy">
-          <span className="pill pill-light">Historia destacada</span>
-          <span className="wall-category">{featured.category}</span>
-          <h2>{featured.title}</h2>
-          <p>{featured.excerpt}</p>
-          <button
-            className="light-button"
-            onClick={() => setReaderPostId(featured.id)}
-          >
-            Leer historia <ArrowRight size={17} />
-          </button>
-        </div>
-      </section>
-      <div className="filter-row">
-        <div className="filter-pills">
-          <button className="active">Todo el mural</button>
-          <button>Ciencia</button>
-          <button>Lecturas</button>
-          <button>Comunidad</button>
-        </div>
-      </div>
-      <section className="wall-grid">
-        {state.wallPosts.slice(1).map((post) => (
-          <article className="wall-card" key={post.id}>
-            <div className={`wall-card-art ${post.accent}`}>
-              <span>{post.category}</span>
-              <Newspaper size={31} />
-            </div>
-            <div className="wall-card-copy">
-              <div className="wall-byline">
-                <span>{post.author}</span>
-                <span>{post.publishedAt}</span>
-              </div>
-              <h3>{post.title}</h3>
-              <p>{post.excerpt}</p>
-              <div className="wall-actions">
-                <button
-                  className="text-link"
-                  onClick={() => setReaderPostId(post.id)}
-                >
-                  Leer <ArrowRight size={15} />
-                </button>
-                <button
-                  className={`favorite-button ${post.favorite ? "active" : ""}`}
-                  aria-label={
-                    post.favorite ? "Quitar de favoritos" : "Añadir a favoritos"
-                  }
-                  onClick={() => toggleFavorite(post.id)}
-                >
-                  <Heart size={18} fill={post.favorite ? "currentColor" : "none"} />
-                </button>
-              </div>
-            </div>
-          </article>
-        ))}
-      </section>
-      {role === "student" && (
-        <div className="proposal-note">
-          <Sparkles size={21} />
-          <div>
-            <strong>¿Tienes una historia para compartir?</strong>
-            <p>
-              Puedes proponerla. Una persona adulta la revisará antes de
-              publicarla.
-            </p>
-          </div>
-          <button className="secondary-button">Proponer historia</button>
-        </div>
-      )}
-      <AnimatePresence>
-        {readerPost && (
-          <WallStoryReader
-            post={readerPost}
-            onClose={() => setReaderPostId(null)}
-            onFavorite={() => toggleFavorite(readerPost.id)}
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -4597,7 +4150,6 @@ function createLabel(section: SectionKey) {
     "weekly-review": "Nuevo repaso",
     tasks: "Nueva tarea",
     "weekly-materials": "Nuevo material",
-    "wall-newspaper": "Nueva publicación",
     forum: "Nuevo tema",
     users: "Registrar cuenta",
   };

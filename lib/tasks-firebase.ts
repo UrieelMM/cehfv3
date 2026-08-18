@@ -318,12 +318,6 @@ export function watchAcademicCalendar(
     callback(defaultAcademicCalendar);
     return () => undefined;
   }
-  const cyclePath = [
-    "institutions",
-    config.institutionId,
-    "ciclosEscolares",
-    config.schoolYearId,
-  ];
   let weeks: AcademicWeek[] = [];
   let terms: AcademicTerm[] = [];
   let weeksReady = false;
@@ -338,7 +332,14 @@ export function watchAcademicCalendar(
     });
   };
   const stopWeeks = onSnapshot(
-    collection(firebase.db, ...cyclePath, "semanas"),
+    collection(
+      firebase.db,
+      "institutions",
+      config.institutionId,
+      "ciclosEscolares",
+      config.schoolYearId,
+      "semanas",
+    ),
     (snapshot) => {
       weeks = snapshot.docs
         .map((entry) => weekFromData(entry.id, entry.data()))
@@ -354,7 +355,14 @@ export function watchAcademicCalendar(
     (error) => onError?.(error),
   );
   const stopTerms = onSnapshot(
-    collection(firebase.db, ...cyclePath, "trimestres"),
+    collection(
+      firebase.db,
+      "institutions",
+      config.institutionId,
+      "ciclosEscolares",
+      config.schoolYearId,
+      "trimestres",
+    ),
     (snapshot) => {
       terms = snapshot.docs
         .map((entry) => termFromData(entry.id, entry.data()))

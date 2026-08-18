@@ -88,6 +88,32 @@
       ]
     },
     {
+      "collectionGroup": "wallPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "institutionId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "wallPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "institutionId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "wallPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "institutionId", "order": "ASCENDING" },
+        { "fieldPath": "authorId", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "messageOutbox",
       "queryScope": "COLLECTION",
       "fields": [

@@ -2612,6 +2612,473 @@ code {
   font-size: 0.7rem;
 }
 
+.wall-page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.wall-page-stack .wall-feature {
+  margin-bottom: 0;
+}
+
+.mural-editorial-desk,
+.mural-my-stories {
+  padding: 24px;
+}
+
+.mural-desk-heading,
+.mural-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.mural-desk-heading h2,
+.mural-section-heading h2 {
+  margin: 5px 0 6px;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+}
+
+.mural-desk-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.mural-pending-count {
+  display: grid;
+  min-width: 76px;
+  min-height: 68px;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.mural-pending-count small {
+  margin-top: -10px;
+  font-family: inherit;
+  font-size: 0.61rem;
+  font-weight: 750;
+}
+
+.mural-review-empty,
+.mural-empty {
+  display: flex;
+  min-height: 160px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 18px;
+  color: var(--muted);
+  text-align: center;
+  flex-direction: column;
+}
+
+.mural-review-empty strong,
+.mural-empty strong {
+  color: var(--foreground);
+  font-size: 0.82rem;
+}
+
+.mural-review-empty span,
+.mural-empty p {
+  margin: 0;
+  font-size: 0.68rem;
+}
+
+.mural-review-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.mural-review-card {
+  display: grid;
+  grid-template-columns: 145px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface-soft);
+}
+
+.mural-review-card .wall-card-art {
+  min-height: 230px;
+}
+
+.mural-review-copy {
+  display: flex;
+  min-width: 0;
+  padding: 20px;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.mural-review-copy > div:first-child > span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.mural-review-copy h3 {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+}
+
+.mural-review-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
+.mural-review-copy .text-link {
+  width: fit-content;
+}
+
+.mural-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.mural-submission-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.mural-submission-list article {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-soft);
+}
+
+.mural-submission-list article > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mural-submission-list article strong {
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+
+.mural-submission-list article small,
+.mural-submission-list article p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.45;
+}
+
+.mural-status {
+  width: fit-content;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 0.61rem;
+  font-weight: 800;
+}
+
+.mural-status.changes_requested {
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+
+.mural-status.published {
+  background: var(--mint-soft);
+  color: var(--mint);
+}
+
+.mural-discovery {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) 190px 180px auto;
+  gap: 9px;
+  padding: 11px;
+}
+
+.mural-search,
+.mural-filter {
+  position: relative;
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.mural-search {
+  gap: 9px;
+  padding: 0 12px;
+  color: var(--muted);
+}
+
+.mural-search:focus-within,
+.mural-filter:focus-within {
+  border-color: color-mix(in srgb, var(--violet) 45%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 8%, transparent);
+}
+
+.mural-search input {
+  min-width: 0;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  flex: 1;
+}
+
+.mural-search button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.mural-filter {
+  padding: 6px 30px 6px 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.mural-filter > span {
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mural-filter select {
+  width: 100%;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--foreground);
+  font-size: 0.67rem;
+  font-weight: 750;
+  appearance: none;
+}
+
+.mural-filter > svg {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  color: var(--muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.mural-favorites {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 750;
+}
+
+.mural-favorites.active {
+  border-color: color-mix(in srgb, var(--coral) 40%, var(--border));
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+
+.mural-results-meta,
+.mural-pagination {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.mural-results-meta strong {
+  color: var(--foreground);
+}
+
+.mural-results-meta button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  color: var(--violet);
+  font-size: inherit;
+  font-weight: 750;
+}
+
+.mural-pagination {
+  padding: 12px 15px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.mural-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mural-pagination strong {
+  min-width: 95px;
+  color: var(--foreground);
+  text-align: center;
+}
+
+.mural-approved {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 0;
+  color: var(--mint);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.mural-submission-modal {
+  width: min(780px, 100%);
+}
+
+.mural-form-intro,
+.mural-form-error {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.mural-form-intro p,
+.mural-form-error {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.mural-form-error {
+  border: 1px solid color-mix(in srgb, var(--coral) 28%, var(--border));
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+
+.mural-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.mural-form-grid label,
+.mural-review-modal label {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 0.68rem;
+  font-weight: 750;
+  flex-direction: column;
+}
+
+.mural-form-grid label small,
+.mural-review-modal label small {
+  align-self: flex-end;
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 650;
+}
+
+.mural-field-wide {
+  grid-column: 1 / -1;
+}
+
+.mural-body-field {
+  min-height: 190px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.mural-authorship-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.mural-authorship-check input {
+  margin-top: 3px;
+  accent-color: var(--violet);
+}
+
+.mural-authorship-check span {
+  display: flex;
+  gap: 2px;
+  flex-direction: column;
+}
+
+.mural-authorship-check strong {
+  font-size: 0.69rem;
+}
+
+.mural-authorship-check small {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.mural-review-modal p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.mural-review-modal textarea {
+  min-height: 130px;
+  resize: vertical;
+}
+
 /* Editorial story reader */
 .magazine-reader-shell {
   position: fixed;
@@ -2900,6 +3367,14 @@ code {
   box-shadow: inset 0 0 30px rgb(83 63 42 / 0.055);
 }
 
+.reader-intro-page {
+  display: flex;
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex-direction: column;
+  scrollbar-gutter: stable;
+}
+
 .reader-page::before {
   position: absolute;
   z-index: 0;
@@ -2943,7 +3418,7 @@ code {
   position: relative;
   z-index: 1;
   display: block;
-  margin-top: clamp(35px, 6vh, 72px);
+  margin-top: clamp(24px, 4vh, 45px);
   color: #7a6951;
   font-size: 0.62rem;
   font-weight: 850;
@@ -2961,6 +3436,13 @@ code {
   font-weight: 600;
   letter-spacing: -0.055em;
   line-height: 0.92;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.reader-intro-page.long-title h1 {
+  font-size: clamp(1.65rem, 3.3vw, 3.25rem);
+  line-height: 1;
 }
 
 .reader-lead {
@@ -2976,17 +3458,27 @@ code {
 }
 
 .reader-byline {
-  position: absolute;
+  position: relative;
   z-index: 1;
-  right: clamp(30px, 4vw, 58px);
-  bottom: 42px;
-  left: clamp(30px, 4vw, 58px);
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 9px;
+  margin-top: auto;
   padding-top: 13px;
   border-top: 1px solid rgb(48 43 33 / 0.18);
+}
+
+.reader-approval {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  color: #397362;
+  font-size: 0.58rem;
+  font-weight: 750;
 }
 
 .reader-byline > span,
@@ -3033,7 +3525,10 @@ code {
   display: flex;
   gap: 12px;
   padding: clamp(25px, 3.2vw, 46px);
+  overflow-x: hidden;
+  overflow-y: auto;
   flex-direction: column;
+  scrollbar-gutter: stable;
 }
 
 .reader-story-art {
@@ -3097,11 +3592,12 @@ code {
   z-index: 1;
   min-height: 0;
   color: #474338;
-  columns: 2;
-  column-gap: 24px;
+  columns: 1;
   font-family: var(--font-display);
   font-size: clamp(0.7rem, 0.82vw, 0.84rem);
   line-height: 1.58;
+  hyphens: auto;
+  overflow-wrap: anywhere;
 }
 
 .reader-content-copy p {
@@ -9265,5 +9761,114 @@ code {
 @media (max-width: 980px) {
   .forum-social-layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1020px) {
+  .mural-discovery {
+    grid-template-columns: minmax(240px, 1fr) minmax(150px, 0.55fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .mural-editorial-desk,
+  .mural-my-stories {
+    padding: 18px;
+  }
+
+  .mural-desk-heading,
+  .mural-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mural-pending-count {
+    min-width: 0;
+    min-height: 54px;
+    grid-template-columns: auto auto;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .mural-pending-count small {
+    margin-top: 0;
+  }
+
+  .mural-review-card {
+    grid-template-columns: 1fr;
+  }
+
+  .mural-review-card .wall-card-art {
+    min-height: 120px;
+  }
+
+  .mural-review-actions,
+  .mural-pagination,
+  .mural-pagination > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mural-review-actions button {
+    justify-content: center;
+  }
+
+  .mural-submission-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .mural-submission-list article > button {
+    justify-self: stretch;
+    justify-content: center;
+  }
+
+  .mural-discovery,
+  .mural-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mural-field-wide {
+    grid-column: auto;
+  }
+
+  .mural-pagination > span,
+  .mural-pagination strong {
+    text-align: center;
+  }
+
+  .proposal-note {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .proposal-note > button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .reader-intro-page .reader-byline {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    margin-top: auto;
+  }
+
+  .reader-intro-page.long-title h1 {
+    font-size: clamp(2rem, 10vw, 3.2rem);
+  }
+}
+
+@media (max-width: 420px) {
+  .mural-review-copy {
+    padding: 16px;
+  }
+
+  .mural-results-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mural-submission-modal {
+    padding: 18px;
   }
 }

@@ -520,22 +520,13 @@ service cloud.firestore {
 
     match /wallPosts/{postId} {
       allow read: if sameInstitution(resource.data) && (
-        isStaff() || resource.data.status == "published"
+        isStaff() ||
+        resource.data.status == "published" ||
+        (roleIs("student") && resource.data.authorId == request.auth.uid)
       );
-      allow create: if isActive()
-        && sameInstitution(request.resource.data)
-        && (
-          isStaff() ||
-          (
-            roleIs("student") &&
-            request.resource.data.createdBy == request.auth.uid &&
-            request.resource.data.status == "submitted"
-          )
-        );
-      allow update: if isStaff()
-        && sameInstitution(resource.data)
-        && sameInstitution(request.resource.data);
-      allow delete: if false;
+      // Las transiciones editoriales, la identidad del aprobador y la auditoría
+      // se escriben únicamente mediante Cloud Functions.
+      allow create, update, delete: if false;
     }
 
     match /forums/{forumId} {
