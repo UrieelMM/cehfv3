@@ -23,7 +23,15 @@ service cloud.firestore {
     }
 
     function roleIs(role) {
-      return isActive() && profile().role == role;
+      return isActive()
+        && profile().role == role
+        && (
+          role != "director" || (
+            request.auth.token.role == "director"
+            && request.auth.token.institutionId == profile().institutionId
+            && request.auth.token.allPermissions == true
+          )
+        );
     }
 
     function isStaff() {
@@ -39,31 +47,45 @@ service cloud.firestore {
     }
 
     match /system/bootstrap {
-      allow get: if signedIn();
-      allow create: if signedIn()
-        && !exists(/databases/$(database)/documents/system/bootstrap)
-        && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if false;
+      allow read: if isDirector();
+      allow write: if false;
     }
 
     match /users/{userId} {
-      allow get: if isActive() && (
+      allow get: if isActive()
+        && resource.data.institutionId == profile().institutionId
+        && (
         request.auth.uid == userId ||
         isDirector() ||
         (roleIs("teacher") && resource.data.role == "student")
       );
-      allow list: if isDirector() || roleIs("teacher");
-      allow create: if signedIn() && (
-        isDirector() ||
-        (
-          request.auth.uid == userId &&
-          !exists(/databases/$(database)/documents/system/bootstrap) &&
-          request.resource.data.role == "director" &&
-          request.resource.data.active == true
+      allow list: if resource.data.institutionId == profile().institutionId
+        && (isDirector() || roleIs("teacher"));
+      allow create: if isDirector()
+        && request.resource.data.role in ["student", "teacher"]
+        && request.resource.data.active == true
+        && request.resource.data.institutionId == profile().institutionId;
+      allow update: if (
+        isDirector()
+        && resource.data.institutionId == profile().institutionId
+        && request.resource.data.institutionId == profile().institutionId
+        && (
+          (
+            request.auth.uid == userId
+            && request.resource.data.role == "director"
+            && request.resource.data.active == true
+          ) || (
+            request.auth.uid != userId
+            && request.resource.data.role in ["student", "teacher"]
+          )
         )
-      );
-      allow update: if isDirector() || (
-        request.auth.uid == userId &&
+      ) || (
+        isActive()
+        && request.auth.uid == userId
+        && request.resource.data.institutionId == resource.data.institutionId
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.active == resource.data.active
+        &&
         request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["name", "initials", "updatedAt"])
       );
@@ -81,6 +103,7 @@ service cloud.firestore {
     match /institutions/{institutionId} {
       allow read: if isActive() && profile().institutionId == institutionId;
       allow create, update: if isDirector()
+        && profile().institutionId == institutionId
         && request.resource.data.institutionId == institutionId;
       allow delete: if false;
 
@@ -94,6 +117,7 @@ service cloud.firestore {
       match /{collectionName}/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
         allow create, update: if isDirector()
+          && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;
         allow delete: if false;
       }
@@ -114,17 +138,27 @@ service cloud.firestore {
       allow read: if sameInstitution(resource.data) && (
         isStaff() || resource.data.status in ["published", "closed"]
       );
-      allow create, update: if isStaff()
+      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
         && sameInstitution(request.resource.data);
       allow delete: if false;
 
       match /attempts/{attemptId} {
-        allow read: if isStaff() || (
-          isActive() && resource.data.studentId == request.auth.uid
+        function parentReviewIsVisible() {
+          return sameInstitution(
+            get(/databases/$(database)/documents/weeklyReviews/$(reviewId)).data
+          );
+        }
+
+        allow read: if parentReviewIsVisible() && (
+          isStaff() || resource.data.studentId == request.auth.uid
         );
         allow create: if roleIs("student")
+          && parentReviewIsVisible()
           && request.resource.data.studentId == request.auth.uid;
         allow update: if roleIs("student")
+          && parentReviewIsVisible()
           && resource.data.studentId == request.auth.uid
           && request.resource.data.studentId == request.auth.uid;
         allow delete: if false;
@@ -135,21 +169,33 @@ service cloud.firestore {
       allow read: if sameInstitution(resource.data) && (
         isStaff() || resource.data.status in ["published", "closed", "archived"]
       );
-      allow create, update: if isStaff()
+      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
         && sameInstitution(request.resource.data);
       allow delete: if false;
 
       match /submissions/{submissionId} {
-        allow read: if isStaff() || (
-          isActive() && resource.data.studentId == request.auth.uid
+        function parentTaskIsVisible() {
+          return sameInstitution(
+            get(/databases/$(database)/documents/tasks/$(taskId)).data
+          );
+        }
+
+        allow read: if parentTaskIsVisible() && (
+          isStaff() || resource.data.studentId == request.auth.uid
         );
         allow create: if roleIs("student")
+          && parentTaskIsVisible()
           && request.resource.data.studentId == request.auth.uid;
-        allow update: if isStaff() || (
+        allow update: if parentTaskIsVisible() && (isStaff() || (
           roleIs("student")
           && resource.data.studentId == request.auth.uid
           && request.resource.data.studentId == request.auth.uid
-        );
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "answers", "attachments", "content", "status", "submittedAt", "updatedAt"
+          ])
+        ));
         allow delete: if false;
       }
     }
@@ -158,7 +204,9 @@ service cloud.firestore {
       allow read: if sameInstitution(resource.data) && (
         isStaff() || resource.data.status in ["published", "archived"]
       );
-      allow create, update: if isStaff()
+      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
         && sameInstitution(request.resource.data);
       allow delete: if false;
     }
@@ -171,7 +219,9 @@ service cloud.firestore {
           resource.data.status in ["published", "corrected"]
         )
       );
-      allow create, update: if isStaff()
+      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
         && sameInstitution(request.resource.data);
       allow delete: if false;
     }
@@ -184,7 +234,9 @@ service cloud.firestore {
           resource.data.status == "published"
         )
       );
-      allow create, update: if isStaff()
+      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
         && sameInstitution(request.resource.data);
       allow delete: if false;
     }
@@ -203,7 +255,9 @@ service cloud.firestore {
             request.resource.data.status == "submitted"
           )
         );
-      allow update: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
+        && sameInstitution(request.resource.data);
       allow delete: if false;
     }
 
@@ -212,21 +266,30 @@ service cloud.firestore {
         isStaff() ||
         request.auth.uid in resource.data.participantIds
       );
-      allow create, update: if isStaff()
+      allow create: if isStaff() && sameInstitution(request.resource.data);
+      allow update: if isStaff()
+        && sameInstitution(resource.data)
         && sameInstitution(request.resource.data);
       allow delete: if false;
 
       match /topics/{topicId} {
-        allow read: if isActive();
-        allow create, update: if isStaff();
+        function parentForumIsVisible() {
+          return sameInstitution(
+            get(/databases/$(database)/documents/forums/$(forumId)).data
+          );
+        }
+
+        allow read: if parentForumIsVisible();
+        allow create, update: if isStaff() && parentForumIsVisible();
         allow delete: if false;
 
         match /posts/{postId} {
-          allow read: if isActive() && resource.data.status != "hidden";
-          allow create: if isActive()
+          allow read: if parentForumIsVisible()
+            && resource.data.status != "hidden";
+          allow create: if parentForumIsVisible()
             && request.resource.data.authorId == request.auth.uid
             && request.resource.data.status == "published";
-          allow update: if isStaff();
+          allow update: if isStaff() && parentForumIsVisible();
           allow delete: if false;
         }
       }

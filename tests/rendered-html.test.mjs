@@ -33,8 +33,7 @@ test("server-renders the CEHF Primaria entry experience", async () => {
   const html = await response.text();
   assert.match(html, /<title>CEHF Primaria<\/title>/i);
   assert.match(html, /Una semana clara para aprender mejor/i);
-  assert.match(html, /Qué bueno verte/i);
-  assert.match(html, /Explorar la demostración/i);
+  assert.match(html, /Preparando tu semana/i);
   assert.match(html, /manifest\.webmanifest/i);
   assert.match(html, /og\.png/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
@@ -90,7 +89,14 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firestoreRules, /match \/weeklyProgress/);
   assert.match(firestoreRules, /match \/weeklyReports/);
   assert.match(firestoreRules, /match \/messageOutbox/);
+  assert.match(firestoreRules, /request\.auth\.token\.role == "director"/);
+  assert.match(firestoreRules, /request\.auth\.token\.allPermissions == true/);
+  assert.match(
+    firestoreRules,
+    /match \/system\/bootstrap\s*{\s*allow read: if isDirector\(\);\s*allow write: if false;/,
+  );
   assert.match(storageRules, /safeUpload/);
+  assert.match(storageRules, /function isDirector/);
   assert.match(indexes, /weeklyMaterials/);
   assert.match(manifest, /CEHF Primaria/);
   assert.match(css, /--brand-primary:\s*#1f2985/i);
@@ -101,6 +107,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firebaseSource, /cehf-account-creator/);
   assert.match(appSource, /account-registration-modal/);
   assert.match(appSource, /Contraseña temporal/);
+  assert.doesNotMatch(appSource, /Activar portal/);
   await access(new URL("public/og.png", projectRoot));
   await access(new URL("public/login-campus.jpg", projectRoot));
   await access(new URL("public/sw.js", projectRoot));

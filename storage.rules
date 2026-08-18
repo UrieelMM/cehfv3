@@ -16,8 +16,20 @@ service firebase.storage {
       return signedIn() && profile().active == true;
     }
 
+    function isDirector() {
+      return active()
+        && profile().role == "director"
+        && request.auth.token.role == "director"
+        && request.auth.token.institutionId == profile().institutionId
+        && request.auth.token.allPermissions == true;
+    }
+
     function isStaff() {
-      return active() && profile().role in ["director", "teacher"];
+      return isDirector() || (active() && profile().role == "teacher");
+    }
+
+    function sameInstitution(institutionId) {
+      return active() && profile().institutionId == institutionId;
     }
 
     function safeUpload() {
@@ -28,53 +40,54 @@ service firebase.storage {
     }
 
     match /institutions/{institutionId}/tasks/{taskId}/resources/{assetId} {
-      allow read: if active() && profile().institutionId == institutionId;
-      allow write: if isStaff()
-        && profile().institutionId == institutionId
+      allow read: if sameInstitution(institutionId);
+      allow create, update: if isStaff()
+        && sameInstitution(institutionId)
         && safeUpload();
+      allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
     match /institutions/{institutionId}/materials/{materialId}/{assetId} {
-      allow read: if active() && profile().institutionId == institutionId;
-      allow write: if isStaff()
-        && profile().institutionId == institutionId
+      allow read: if sameInstitution(institutionId);
+      allow create, update: if isStaff()
+        && sameInstitution(institutionId)
         && safeUpload();
+      allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
     match /institutions/{institutionId}/submissions/{studentId}/{submissionId}/{assetId} {
-      allow read: if active()
-        && profile().institutionId == institutionId
+      allow read: if sameInstitution(institutionId)
         && (request.auth.uid == studentId || isStaff());
-      allow create, update: if active()
-        && profile().institutionId == institutionId
-        && request.auth.uid == studentId
+      allow create, update: if sameInstitution(institutionId)
+        && (request.auth.uid == studentId || isDirector())
         && safeUpload();
-      allow delete: if false;
+      allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
     match /institutions/{institutionId}/wall/{postId}/{assetId} {
-      allow read: if active() && profile().institutionId == institutionId;
+      allow read: if sameInstitution(institutionId);
       allow write: if isStaff()
-        && profile().institutionId == institutionId
+        && sameInstitution(institutionId)
         && safeUpload();
+      allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
     match /institutions/{institutionId}/forum/{topicId}/{postId}/{assetId} {
-      allow read: if active() && profile().institutionId == institutionId;
-      allow create: if active()
-        && profile().institutionId == institutionId
+      allow read: if sameInstitution(institutionId);
+      allow create: if sameInstitution(institutionId)
         && safeUpload();
       allow update, delete: if isStaff()
-        && profile().institutionId == institutionId;
+        && sameInstitution(institutionId)
+        && (request.resource == null || safeUpload());
     }
 
     match /institutions/{institutionId}/profiles/{userId}/{assetId} {
-      allow read: if active() && profile().institutionId == institutionId;
-      allow write: if active()
-        && profile().institutionId == institutionId
-        && (request.auth.uid == userId || profile().role == "director")
+      allow read: if sameInstitution(institutionId);
+      allow create, update: if sameInstitution(institutionId)
+        && (request.auth.uid == userId || isDirector())
         && request.resource.size < 4 * 1024 * 1024
         && request.resource.contentType.matches("image/.*");
+      allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
     match /{allPaths=**} {

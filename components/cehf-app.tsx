@@ -55,7 +55,6 @@ import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
 import {
-  createFirstDirector,
   createManagedAccount,
   firebaseConfigured,
   friendlyFirebaseError,
@@ -866,8 +865,6 @@ function LoginScreen({
   configured: boolean;
   onDemo: () => void;
 }) {
-  const [mode, setMode] = useState<"login" | "bootstrap">("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -886,7 +883,7 @@ function LoginScreen({
       );
       return;
     }
-    if (!email.trim() || !password || (mode === "bootstrap" && !name.trim())) {
+    if (!email.trim() || !password) {
       setError("Completa los datos solicitados para continuar.");
       return;
     }
@@ -897,12 +894,7 @@ function LoginScreen({
 
     setBusy(true);
     try {
-      if (mode === "bootstrap") {
-        await createFirstDirector(name, email, password);
-        toast.success("Portal inicializado. Ya puedes comenzar.");
-      } else {
-        await loginWithEmail(email, password, remember);
-      }
+      await loginWithEmail(email, password, remember);
     } catch (submitError) {
       setError(friendlyFirebaseError(submitError));
     } finally {
@@ -1003,15 +995,13 @@ function LoginScreen({
           </div>
           <span className="login-kicker">
             <span />
-            {mode === "login" ? "ACCESO INSTITUCIONAL" : "PRIMER ACCESO"}
+            ACCESO INSTITUCIONAL
           </span>
           <h2>
-            {mode === "login" ? "Qué bueno verte." : "Activa CEHF Primaria."}
+            Qué bueno verte.
           </h2>
           <p>
-            {mode === "login"
-              ? "Ingresa con la cuenta que Dirección creó para ti."
-              : "Crea la primera cuenta de Dirección y prepara el portal."}
+            Ingresa con la cuenta que Dirección creó para ti.
           </p>
 
           {(!configured || error) && (
@@ -1022,26 +1012,6 @@ function LoginScreen({
                   "El acceso institucional no está disponible en este entorno. Puedes explorar la demostración."}
               </span>
             </div>
-          )}
-
-          {mode === "bootstrap" && (
-            <>
-              <label className="login-field-label" htmlFor="login-name">
-                Nombre completo
-              </label>
-              <div className="login-input-wrap">
-                <UserRound size={17} />
-                <input
-                  id="login-name"
-                  autoComplete="name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Alejandra Torres"
-                  disabled={busy || resetting}
-                  required
-                />
-              </div>
-            </>
           )}
 
           <label className="login-field-label" htmlFor="login-email">
@@ -1071,9 +1041,7 @@ function LoginScreen({
             <input
               id="login-password"
               type={showPassword ? "text" : "password"}
-              autoComplete={
-                mode === "login" ? "current-password" : "new-password"
-              }
+              autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Al menos 8 caracteres"
@@ -1091,44 +1059,42 @@ function LoginScreen({
             </button>
           </div>
 
-          {mode === "login" && (
-            <div className="login-options">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(event) => setRemember(event.target.checked)}
-                  disabled={busy || resetting}
-                />
-                Mantener mi sesión
-              </label>
-              <button
-                type="button"
-                disabled={busy || resetting || !configured}
-                onClick={async () => {
-                  if (!email.trim()) {
-                    setError("Escribe primero tu correo institucional.");
-                    return;
-                  }
-                  setResetting(true);
-                  setError("");
-                  try {
-                    await resetPassword(email.trim());
-                    toast.success("Revisa tu correo", {
-                      description:
-                        "Te enviamos instrucciones para recuperar el acceso.",
-                    });
-                  } catch (resetError) {
-                    setError(friendlyFirebaseError(resetError));
-                  } finally {
-                    setResetting(false);
-                  }
-                }}
-              >
-                {resetting ? "Enviando…" : "¿Olvidaste tu contraseña?"}
-              </button>
-            </div>
-          )}
+          <div className="login-options">
+            <label>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(event) => setRemember(event.target.checked)}
+                disabled={busy || resetting}
+              />
+              Mantener mi sesión
+            </label>
+            <button
+              type="button"
+              disabled={busy || resetting || !configured}
+              onClick={async () => {
+                if (!email.trim()) {
+                  setError("Escribe primero tu correo institucional.");
+                  return;
+                }
+                setResetting(true);
+                setError("");
+                try {
+                  await resetPassword(email.trim());
+                  toast.success("Revisa tu correo", {
+                    description:
+                      "Te enviamos instrucciones para recuperar el acceso.",
+                  });
+                } catch (resetError) {
+                  setError(friendlyFirebaseError(resetError));
+                } finally {
+                  setResetting(false);
+                }
+              }}
+            >
+              {resetting ? "Enviando…" : "¿Olvidaste tu contraseña?"}
+            </button>
+          </div>
 
           <button
             className="login-button"
@@ -1138,24 +1104,7 @@ function LoginScreen({
             {busy ? <span className="button-spinner" /> : <LogIn size={17} />}
             {busy
               ? "Verificando acceso…"
-              : mode === "login"
-                ? "Entrar a CEHF"
-                : "Crear portal"}
-          </button>
-
-          <button
-            type="button"
-            className="text-button mode-button"
-            onClick={() => {
-              setError("");
-              setMode((current) =>
-                current === "login" ? "bootstrap" : "login",
-              );
-            }}
-          >
-            {mode === "login"
-              ? "¿Es la primera vez? Activar portal"
-              : "Ya existe una cuenta · Iniciar sesión"}
+              : "Entrar a CEHF"}
           </button>
 
           <div className="demo-divider">

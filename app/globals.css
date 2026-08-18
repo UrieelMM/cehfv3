@@ -13,6 +13,7 @@
   --border-strong: #c8d3df;
   --brand-primary: #1f2985;
   --on-primary: #ffffff;
+  --on-mint: #ffffff;
   --violet: #1f2985;
   --violet-dark: #151c63;
   --violet-soft: #e9eafa;
@@ -39,6 +40,7 @@
   color-scheme: dark;
   --background: #0b1520;
   --on-primary: #111744;
+  --on-mint: #0c1735;
   --surface: #111f2d;
   --surface-soft: #172838;
   --surface-raised: #142434;
@@ -52,12 +54,12 @@
   --violet-soft: #252b5d;
   --coral: #ef6b7d;
   --coral-soft: #44212a;
-  --mint: #67adc2;
-  --mint-soft: #173840;
+  --mint: #8db4ff;
+  --mint-soft: #1c3159;
   --gold: #d0a068;
   --gold-soft: #3f3223;
-  --blue: #7caad2;
-  --blue-soft: #1d344a;
+  --blue: #a7c7ff;
+  --blue-soft: #1b3155;
   --danger: #ff7888;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.18);
   --shadow-md: 0 16px 42px rgb(0 0 0 / 0.2);
@@ -69,6 +71,7 @@
     color-scheme: dark;
     --background: #0b1520;
     --on-primary: #111744;
+    --on-mint: #0c1735;
     --surface: #111f2d;
     --surface-soft: #172838;
     --surface-raised: #142434;
@@ -82,13 +85,27 @@
     --violet-soft: #252b5d;
     --coral: #ef6b7d;
     --coral-soft: #44212a;
-    --mint: #67adc2;
-    --mint-soft: #173840;
+    --mint: #8db4ff;
+    --mint-soft: #1c3159;
     --gold: #d0a068;
     --gold-soft: #3f3223;
-    --blue: #7caad2;
-    --blue-soft: #1d344a;
+    --blue: #a7c7ff;
+    --blue-soft: #1b3155;
     --danger: #ff7888;
+  }
+}
+
+:root[data-theme="dark"] [data-sonner-toaster][data-sonner-theme] {
+  --success-bg: #172b52;
+  --success-border: #4268a8;
+  --success-text: #dbe7ff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] [data-sonner-toaster][data-sonner-theme] {
+    --success-bg: #172b52;
+    --success-border: #4268a8;
+    --success-text: #dbe7ff;
   }
 }
 
@@ -1108,7 +1125,7 @@ code {
 .mint-card .subject-icon,
 .metric-icon.mint {
   background: var(--mint);
-  color: white;
+  color: var(--on-mint);
 }
 
 .metric-icon.gold {
@@ -2964,6 +2981,16 @@ code {
 
 .reader-story-art.mint {
   background: linear-gradient(145deg, #174d62, #32758d 58%, #70adbb);
+}
+
+:root[data-theme="dark"] .reader-story-art.mint {
+  background: linear-gradient(145deg, #18276f, #2946a7 58%, #6587e8);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .reader-story-art.mint {
+    background: linear-gradient(145deg, #18276f, #2946a7 58%, #6587e8);
+  }
 }
 
 .reader-story-art.gold {

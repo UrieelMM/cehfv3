@@ -29,8 +29,10 @@ import {
   getDoc,
   getDocs,
   getFirestore,
+  query,
   serverTimestamp,
   setDoc,
+  where,
 } from "firebase/firestore";
 import {
   getDownloadURL,
@@ -125,7 +127,12 @@ function accountDate(value: unknown) {
 
 export async function listManagedAccounts(): Promise<ManagedAccount[]> {
   if (!db) return [];
-  const snapshot = await getDocs(collection(db, "users"));
+  const snapshot = await getDocs(
+    query(
+      collection(db, "users"),
+      where("institutionId", "==", "cehf-primaria"),
+    ),
+  );
   const accounts: ManagedAccount[] = [];
   for (const entry of snapshot.docs) {
     const data = entry.data();
@@ -243,43 +250,6 @@ export async function loginWithEmail(
     remember ? browserLocalPersistence : browserSessionPersistence,
   );
   return signInWithEmailAndPassword(auth, email, password);
-}
-
-export async function createFirstDirector(
-  name: string,
-  email: string,
-  password: string,
-) {
-  if (!auth || !db) throw new Error("Firebase no está configurado.");
-  const credential = await createUserWithEmailAndPassword(auth, email, password);
-  const initials = name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-  const profile: UserProfile = {
-    uid: credential.user.uid,
-    name,
-    email,
-    role: "director",
-    initials,
-  };
-
-  await setDoc(doc(db, "users", credential.user.uid), {
-    ...profile,
-    active: true,
-    institutionId: "cehf-primaria",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  await setDoc(doc(db, "system", "bootstrap"), {
-    institutionId: "cehf-primaria",
-    createdBy: credential.user.uid,
-    createdAt: serverTimestamp(),
-    version: 1,
-  });
-  await savePortalState(createDemoState(), profile);
-  return credential;
 }
 
 export async function resetPassword(email: string) {
