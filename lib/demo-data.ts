@@ -237,6 +237,17 @@ export const createDemoState = (): PortalState => ({
       accent: "mint",
       status: "published",
       favorite: false,
+      section: "Crónica ambiental",
+      readingTime: "4 min de lectura",
+      lead:
+        "Una mañana de observación se convirtió en una guía hecha por niñas y niños para proteger a quienes hacen florecer nuestro entorno.",
+      paragraphs: [
+        "Todo comenzó cuando el grupo de 5.º salió al jardín con una libreta y una pregunta: ¿quién visita las flores mientras estamos en clase? Durante varios días registramos abejas, mariposas y pequeños escarabajos que se detenían entre los pétalos.",
+        "Aprendimos que observar también significa esperar. Anotamos colores, horarios y movimientos, y después comparamos nuestras notas. Cada equipo encontró algo distinto, pero al reunir las evidencias entendimos que el jardín funciona como una comunidad.",
+        "Con lo aprendido preparamos una guía para cuidar a los polinizadores: conservar flores locales, evitar tocar sus refugios y dejar pequeños recipientes con agua limpia. La colocamos junto al jardín para que otras personas puedan sumarse.",
+      ],
+      quote:
+        "Cuando cuidamos a un polinizador, también cuidamos todas las historias que pueden crecer después de una flor.",
     },
     {
       id: "wall-reading",
@@ -250,6 +261,17 @@ export const createDemoState = (): PortalState => ({
       accent: "violet",
       status: "published",
       favorite: true,
+      section: "Club de lectura",
+      readingTime: "3 min de lectura",
+      lead:
+        "El club de lectura eligió tres libros capaces de abrir puertas a lugares lejanos sin abandonar el salón.",
+      paragraphs: [
+        "Para preparar esta selección cada integrante llevó un libro que le hubiera hecho imaginar un lugar nuevo. Había viajes por el espacio, caminatas en bosques imposibles y aventuras que comenzaban en una casa muy parecida a la nuestra.",
+        "No elegimos los libros más largos ni los más conocidos. Buscamos historias que dieran ganas de conversar: una por sus personajes, otra por la forma de describir el paisaje y una más porque su final nos hizo cambiar de opinión.",
+        "Las recomendaciones quedaron disponibles en la biblioteca del salón. Junto a cada libro colocamos una tarjeta para que la siguiente persona pueda escribir qué lugar visitó con su imaginación.",
+      ],
+      quote:
+        "Leer es viajar con alguien más y regresar con preguntas que antes no teníamos.",
     },
     {
       id: "wall-science",
@@ -263,6 +285,17 @@ export const createDemoState = (): PortalState => ({
       accent: "coral",
       status: "published",
       favorite: false,
+      section: "Ciencia cotidiana",
+      readingTime: "4 min de lectura",
+      lead:
+        "Una manzana partida nos ayudó a descubrir que los cambios más interesantes también ocurren en las cosas de todos los días.",
+      paragraphs: [
+        "Partimos una manzana y dejamos una mitad sobre la mesa. En pocos minutos comenzó a oscurecerse. El cambio era fácil de ver, pero queríamos entender qué lo provocaba y si podíamos hacerlo más lento.",
+        "Probamos tres ideas: cubrir una pieza, agregar unas gotas de limón y dejar otra sin protección. Registramos el color a intervalos iguales y tomamos fotografías para comparar sin depender solamente de la memoria.",
+        "La pieza con limón conservó su color durante más tiempo. Descubrimos que el oxígeno participa en el oscurecimiento y que la acidez puede retrasar esa reacción. Una fruta cotidiana terminó siendo nuestro pequeño laboratorio.",
+      ],
+      quote:
+        "La ciencia aparece cuando dejamos de decir ‘así pasa’ y empezamos a preguntar por qué.",
     },
   ],
   forumTopics: [

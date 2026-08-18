@@ -102,6 +102,11 @@ export type WallPost = {
   accent: "violet" | "coral" | "mint" | "gold";
   status: "draft" | "submitted" | "published";
   favorite: boolean;
+  section?: string;
+  lead?: string;
+  paragraphs?: string[];
+  quote?: string;
+  readingTime?: string;
 };
 
 export type ForumReactionKind = "helpful" | "interesting" | "celebrate";
