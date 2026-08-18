@@ -173,17 +173,36 @@ export function UsersPage({
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ delay: Math.min(index, 6) * 0.035 }}
               >
-                <div className="user-cell">
-                  <span
-                    className="avatar small account-avatar"
-                    style={account.photoURL ? { backgroundImage: `url(${account.photoURL})` } : undefined}
+                {role === "director" ? (
+                  <button
+                    className="user-cell account-user-trigger"
+                    type="button"
+                    aria-label={`Editar cuenta de ${account.name}`}
+                    onClick={() => setEditing(account)}
                   >
-                    {!account.photoURL && account.initials}
-                  </span>
-                  <span className="user-identity">
-                    <strong>{account.name}</strong><small>{account.email}</small>
-                  </span>
-                </div>
+                    <span
+                      className="avatar small account-avatar"
+                      style={account.photoURL ? { backgroundImage: `url(${account.photoURL})` } : undefined}
+                    >
+                      {!account.photoURL && account.initials}
+                    </span>
+                    <span className="user-identity">
+                      <strong>{account.name}</strong><small>{account.email}</small>
+                    </span>
+                  </button>
+                ) : (
+                  <div className="user-cell">
+                    <span
+                      className="avatar small account-avatar"
+                      style={account.photoURL ? { backgroundImage: `url(${account.photoURL})` } : undefined}
+                    >
+                      {!account.photoURL && account.initials}
+                    </span>
+                    <span className="user-identity">
+                      <strong>{account.name}</strong><small>{account.email}</small>
+                    </span>
+                  </div>
+                )}
                 <span>{account.role === "student" ? "Estudiante" : "Maestro"}</span>
                 <span>
                   {account.role === "student"

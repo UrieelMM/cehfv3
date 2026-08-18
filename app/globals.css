@@ -4220,6 +4220,29 @@ code {
   gap: 10px;
 }
 
+.account-user-trigger {
+  min-width: 0;
+  padding: 3px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.account-user-trigger:hover,
+.account-user-trigger:focus-visible {
+  background: var(--surface-soft);
+  outline: none;
+}
+
+.account-user-trigger:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--violet) 35%, transparent);
+}
+
 .account-avatar {
   background-position: center;
   background-size: cover;
@@ -4420,6 +4443,11 @@ code {
   margin-top: 11px;
 }
 
+.account-editor-section label {
+  font-size: 0.56rem;
+  letter-spacing: 0.01em;
+}
+
 .account-editor-section input,
 .account-editor-section select {
   width: 100%;
@@ -4429,6 +4457,13 @@ code {
   border-radius: 10px;
   background: var(--surface-raised);
   color: var(--foreground);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.account-editor-section input::placeholder {
+  color: var(--muted);
+  font-size: 0.62rem;
 }
 
 .account-editor-assignment {

@@ -178,6 +178,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /No pudimos cargar tu acceso/);
   assert.match(appSource, /\[Campus CEHF\] registrar cuenta/);
   assert.match(usersSource, /Editar cuenta/);
+  assert.match(usersSource, /Editar cuenta de \$\{account\.name\}/);
   assert.match(usersSource, /Desactivar acceso/);
   assert.match(usersSource, /Eliminar cuenta definitivamente/);
   assert.match(functionsSource, /Sólo Dirección puede administrar cuentas/);
