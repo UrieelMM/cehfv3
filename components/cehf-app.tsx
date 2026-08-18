@@ -15,6 +15,7 @@ import {
   CircleHelp,
   ClipboardCheck,
   Clock3,
+  Copy,
   FileBarChart,
   FileText,
   GraduationCap,
@@ -42,7 +43,9 @@ import {
   Sparkles,
   Sun,
   Target,
+  UploadCloud,
   UserRound,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -53,9 +56,12 @@ import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
 import {
   createFirstDirector,
+  createManagedAccount,
   firebaseConfigured,
   friendlyFirebaseError,
+  generateTemporaryPassword,
   getProfile,
+  listManagedAccounts,
   loadPortalState,
   loginWithEmail,
   logoutFirebase,
@@ -65,6 +71,7 @@ import {
 } from "@/lib/firebase";
 import {
   createDemoState,
+  demoManagedAccounts,
   demoProfiles,
   roleLabel,
   subjectColors,
@@ -72,6 +79,7 @@ import {
 import type {
   ForumTopic,
   ForumTopicKind,
+  ManagedAccount,
   PortalState,
   ProgressLevel,
   Role,
@@ -93,6 +101,18 @@ type ForumDraftDetails = {
   allowReplies: boolean;
   allowAttachments: boolean;
 };
+
+const primarySubjectOptions = [
+  "Español",
+  "Matemáticas",
+  "Ciencias",
+  "Historia",
+  "Geografía",
+  "Formación Cívica",
+  "Inglés",
+  "Artes",
+  "Educación Física",
+];
 
 const routes: Record<SectionKey, string> = {
   dashboard: "/dashboard",
@@ -196,6 +216,10 @@ export function CEHFApp() {
   const [detailOpen, setDetailOpen] = useState<string | null>(null);
   const [mobileMore, setMobileMore] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
+  const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>(
+    demoManagedAccounts,
+  );
+  const [managedAccountsLoading, setManagedAccountsLoading] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
   const currentProfile = profile ?? demoProfiles[demoRole];
@@ -298,6 +322,39 @@ export function CEHFApp() {
   }, [state.settings]);
 
   useEffect(() => {
+    if (!firebaseUser || role === "student") return;
+    let active = true;
+    queueMicrotask(() => setManagedAccountsLoading(true));
+    void listManagedAccounts()
+      .then((accounts) => {
+        if (active) setManagedAccounts(accounts);
+      })
+      .catch((error) => {
+        if (active) toast.error(friendlyFirebaseError(error));
+      })
+      .finally(() => {
+        if (active) setManagedAccountsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [firebaseUser, role]);
+
+  useEffect(() => {
+    if (firebaseUser) return;
+    const savedAccounts = window.localStorage.getItem("cehf-demo-accounts");
+    if (!savedAccounts) return;
+    try {
+      const restored = JSON.parse(savedAccounts) as ManagedAccount[];
+      if (Array.isArray(restored)) {
+        queueMicrotask(() => setManagedAccounts(restored));
+      }
+    } catch {
+      window.localStorage.removeItem("cehf-demo-accounts");
+    }
+  }, [firebaseUser]);
+
+  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const syncPreference = () => setSystemPrefersDark(media.matches);
     syncPreference();
@@ -339,6 +396,18 @@ export function CEHFApp() {
         theme: darkModeActive ? "light" : "dark",
       },
     }));
+  }
+
+  function addManagedAccount(account: ManagedAccount) {
+    setManagedAccounts((previous) => {
+      const next = [account, ...previous].sort((first, second) =>
+        first.name.localeCompare(second.name, "es"),
+      );
+      if (usingDemo) {
+        window.localStorage.setItem("cehf-demo-accounts", JSON.stringify(next));
+      }
+      return next;
+    });
   }
 
   if (!authReady) return <LoadingScreen />;
@@ -561,6 +630,7 @@ export function CEHFApp() {
               </h1>
             </div>
             {["teacher", "director"].includes(role) &&
+              (activeSection !== "users" || role === "director") &&
               [
                 "my-week",
                 "weekly-review",
@@ -594,6 +664,8 @@ export function CEHFApp() {
               navigate={navigate}
               updateState={updateState}
               openDetail={setDetailOpen}
+              managedAccounts={managedAccounts}
+              managedAccountsLoading={managedAccountsLoading}
             />
           </motion.div>
         </main>
@@ -613,7 +685,14 @@ export function CEHFApp() {
             onNavigate={navigate}
           />
         )}
-        {createOpen && (
+        {createOpen && activeSection === "users" ? (
+          <AccountRegistrationModal
+            accounts={managedAccounts}
+            firebaseReady={firebaseConfigured && Boolean(firebaseUser)}
+            onClose={() => setCreateOpen(false)}
+            onCreated={addManagedAccount}
+          />
+        ) : createOpen ? (
           <CreateModal
             section={activeSection}
             onClose={() => setCreateOpen(false)}
@@ -767,7 +846,7 @@ export function CEHFApp() {
               setCreateOpen(false);
             }}
           />
-        )}
+        ) : null}
         {detailOpen && (
           <DetailDrawer
             itemId={detailOpen}
@@ -1111,6 +1190,8 @@ function SectionContent({
   navigate,
   updateState,
   openDetail,
+  managedAccounts,
+  managedAccountsLoading,
 }: {
   section: SectionKey;
   role: Role;
@@ -1122,6 +1203,8 @@ function SectionContent({
     message?: string,
   ) => void;
   openDetail: (id: string) => void;
+  managedAccounts: ManagedAccount[];
+  managedAccountsLoading: boolean;
 }) {
   switch (section) {
     case "dashboard":
@@ -1194,7 +1277,13 @@ function SectionContent({
         />
       );
     case "users":
-      return <UsersPage role={role} />;
+      return (
+        <UsersPage
+          role={role}
+          accounts={managedAccounts}
+          loading={managedAccountsLoading}
+        />
+      );
     case "settings":
       return (
         <SettingsPage state={state} updateState={updateState} role={role} />
@@ -2800,7 +2889,17 @@ function WallPage({
   );
 }
 
-function UsersPage({ role }: { role: Role }) {
+function UsersPage({
+  role,
+  accounts,
+  loading,
+}: {
+  role: Role;
+  accounts: ManagedAccount[];
+  loading: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "student" | "teacher">("all");
   if (role === "student") {
     return (
       <GuidedState
@@ -2810,78 +2909,84 @@ function UsersPage({ role }: { role: Role }) {
       />
     );
   }
-  const users = [
-    {
-      name: "Sofía Martínez",
-      initials: "SM",
-      role: "Estudiante",
-      assignment: "5.º A",
-      status: "Activa",
-    },
-    {
-      name: "Diego Ramírez",
-      initials: "DR",
-      role: "Estudiante",
-      assignment: "5.º A",
-      status: "Activa",
-    },
-    {
-      name: "Mariana López",
-      initials: "ML",
-      role: "Docente",
-      assignment: "5.º A · Ciencias y Español",
-      status: "Activa",
-    },
-    {
-      name: "Roberto Díaz",
-      initials: "RD",
-      role: "Docente",
-      assignment: "4.º B · Matemáticas",
-      status: "Activa",
-    },
-  ];
+  const normalizedQuery = query.trim().toLocaleLowerCase("es-MX");
+  const visibleAccounts = accounts.filter(
+    (account) =>
+      (filter === "all" || account.role === filter) &&
+      (!normalizedQuery ||
+        `${account.name} ${account.email}`
+          .toLocaleLowerCase("es-MX")
+          .includes(normalizedQuery)),
+  );
+  const students = accounts.filter((account) => account.role === "student");
+  const teachers = accounts.filter((account) => account.role === "teacher");
+  const groups = new Set(
+    students
+      .map((account) => `${account.grade ?? ""} ${account.group ?? ""}`.trim())
+      .filter(Boolean),
+  );
   return (
-    <div>
+    <div className="account-directory-page">
       <section className="metric-grid compact-metrics">
-        <article className="metric-card">
+        <motion.article className="metric-card" whileHover={{ y: -3 }}>
           <span className="metric-icon violet">
             <Users size={20} />
           </span>
-          <strong>186</strong>
+          <strong>{students.length}</strong>
           <p>Estudiantes activos</p>
-        </article>
-        <article className="metric-card">
+        </motion.article>
+        <motion.article className="metric-card" whileHover={{ y: -3 }}>
           <span className="metric-icon mint">
             <GraduationCap size={20} />
           </span>
-          <strong>14</strong>
-          <p>Docentes</p>
-        </article>
-        <article className="metric-card">
+          <strong>{teachers.length}</strong>
+          <p>Maestros</p>
+        </motion.article>
+        <motion.article className="metric-card" whileHover={{ y: -3 }}>
           <span className="metric-icon gold">
             <Library size={20} />
           </span>
-          <strong>9</strong>
+          <strong>{groups.size}</strong>
           <p>Grupos</p>
-        </article>
-        <article className="metric-card">
+        </motion.article>
+        <motion.article className="metric-card" whileHover={{ y: -3 }}>
           <span className="metric-icon coral">
             <ShieldCheck size={20} />
           </span>
-          <strong>0</strong>
-          <p>Cuentas por revisar</p>
-        </article>
+          <strong>{accounts.filter((account) => !account.active).length}</strong>
+          <p>Accesos pausados</p>
+        </motion.article>
       </section>
       <section className="panel user-table-card">
         <div className="table-toolbar">
           <div className="small-search">
             <Search size={17} />
-            <input aria-label="Buscar personas" placeholder="Buscar por nombre…" />
+            <input
+              type="search"
+              aria-label="Buscar personas"
+              placeholder="Buscar por nombre o correo…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
           </div>
-          <div className="filter-pills">
-            <button className="active">Todos</button>
-            <button>Estudiantes</button>
-            <button>Personal</button>
+          <div className="filter-pills" aria-label="Filtrar cuentas">
+            {(
+              [
+                ["all", "Todos"],
+                ["student", "Estudiantes"],
+                ["teacher", "Maestros"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                type="button"
+                className={filter === value ? "active" : ""}
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+                key={value}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="user-table">
@@ -2892,20 +2997,67 @@ function UsersPage({ role }: { role: Role }) {
             <span>Estado</span>
             <span />
           </div>
-          {users.map((user) => (
-            <div className="user-row" key={user.name}>
-              <div className="user-cell">
-                <span className="avatar small">{user.initials}</span>
-                <strong>{user.name}</strong>
-              </div>
-              <span>{user.role}</span>
-              <span>{user.assignment}</span>
-              <span className="status-tag status-achieved">{user.status}</span>
-              <button className="plain-icon" aria-label={`Opciones de ${user.name}`}>
-                <MoreHorizontal size={18} />
-              </button>
+          <AnimatePresence mode="popLayout">
+            {visibleAccounts.map((account, index) => (
+              <motion.div
+                className="user-row"
+                key={account.uid}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ delay: Math.min(index, 6) * 0.035 }}
+              >
+                <div className="user-cell">
+                  <span
+                    className="avatar small account-avatar"
+                    style={
+                      account.photoURL
+                        ? { backgroundImage: `url(${account.photoURL})` }
+                        : undefined
+                    }
+                  >
+                    {!account.photoURL && account.initials}
+                  </span>
+                  <span className="user-identity">
+                    <strong>{account.name}</strong>
+                    <small>{account.email}</small>
+                  </span>
+                </div>
+                <span>{account.role === "student" ? "Estudiante" : "Maestro"}</span>
+                <span>
+                  {account.role === "student"
+                    ? `${account.grade ?? "Sin grado"} ${account.group ?? ""}`
+                    : account.subjects.join(" · ") || "Sin materias"}
+                </span>
+                <span
+                  className={`status-tag ${
+                    account.active ? "status-achieved" : "status-neutral"
+                  }`}
+                >
+                  {account.active ? "Activa" : "Pausada"}
+                </span>
+                <button
+                  className="plain-icon"
+                  aria-label={`Opciones de ${account.name}`}
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {!loading && visibleAccounts.length === 0 && (
+            <div className="account-empty-state">
+              <Search size={22} />
+              <strong>No encontramos cuentas</strong>
+              <span>Prueba con otro nombre o cambia el filtro.</span>
             </div>
-          ))}
+          )}
+          {loading && (
+            <div className="account-loading-state">
+              <span className="button-spinner" /> Sincronizando cuentas…
+            </div>
+          )}
         </div>
       </section>
     </div>
@@ -3201,6 +3353,511 @@ function NotificationPanel({
       <button className="text-button notification-mark" onClick={onMarkAll}>
         <Check size={16} /> Marcar todas como leídas
       </button>
+    </motion.div>
+  );
+}
+
+function AccountRegistrationModal({
+  accounts,
+  firebaseReady,
+  onClose,
+  onCreated,
+}: {
+  accounts: ManagedAccount[];
+  firebaseReady: boolean;
+  onClose: () => void;
+  onCreated: (account: ManagedAccount) => void;
+}) {
+  const [accountRole, setAccountRole] = useState<"student" | "teacher">(
+    "student",
+  );
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [grade, setGrade] = useState("5.º");
+  const [group, setGroup] = useState("A");
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [teacherIds, setTeacherIds] = useState<string[]>([]);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [credentials, setCredentials] = useState<{
+    account: ManagedAccount;
+    password: string;
+  } | null>(null);
+  const teachers = accounts.filter((account) => account.role === "teacher");
+  const compatibleTeachers = teachers.filter(
+    (teacher) =>
+      subjects.length === 0 ||
+      teacher.subjects.some((subject) => subjects.includes(subject)),
+  );
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const identityComplete = Boolean(
+    firstName.trim() && lastName.trim() && validEmail && photo,
+  );
+  const assignmentComplete =
+    subjects.length > 0 &&
+    (accountRole === "teacher" || teacherIds.length > 0);
+  const ready = identityComplete && assignmentComplete;
+  const displayName =
+    `${firstName.trim()} ${lastName.trim()}`.trim() ||
+    (accountRole === "student" ? "Nuevo alumno" : "Nuevo maestro");
+
+  useEffect(
+    () => () => {
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+    },
+    [photoPreview],
+  );
+
+  useEffect(() => {
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !submitting) onClose();
+    };
+    window.addEventListener("keydown", closeWithEscape);
+    return () => window.removeEventListener("keydown", closeWithEscape);
+  }, [onClose, submitting]);
+
+  function selectRole(nextRole: "student" | "teacher") {
+    setAccountRole(nextRole);
+    setTeacherIds([]);
+  }
+
+  function selectPhoto(file?: File) {
+    if (!file) return;
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+      file.size >= 4 * 1024 * 1024
+    ) {
+      toast.error("Fotografía no válida", {
+        description: "Selecciona un JPG, PNG o WEBP menor a 4 MB.",
+      });
+      return;
+    }
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhoto(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  function generateAvatar() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const gradient = context.createLinearGradient(0, 0, 256, 256);
+    gradient.addColorStop(0, "#1F2985");
+    gradient.addColorStop(1, "#C62E45");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 256, 256);
+    context.fillStyle = "#FFFFFF";
+    context.font = "700 92px Georgia";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    const initials =
+      `${firstName.trim()[0] ?? ""}${lastName.trim()[0] ?? ""}`.toUpperCase() ||
+      (accountRole === "student" ? "A" : "M");
+    context.fillText(initials, 128, 134);
+    canvas.toBlob((blob) => {
+      if (blob) selectPhoto(new File([blob], `avatar-${initials}.png`, { type: "image/png" }));
+    }, "image/png");
+  }
+
+  function toggleSubject(subject: string) {
+    const nextSubjects = subjects.includes(subject)
+      ? subjects.filter((item) => item !== subject)
+      : [...subjects, subject];
+    setSubjects(nextSubjects);
+    setTeacherIds((current) =>
+      current.filter((teacherId) => {
+        const teacher = teachers.find((account) => account.uid === teacherId);
+        return teacher?.subjects.some((item) => nextSubjects.includes(item));
+      }),
+    );
+  }
+
+  function resetRegistration() {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setFirstName("");
+    setLastName("");
+    setEmail("");
+    setGrade("5.º");
+    setGroup("A");
+    setSubjects([]);
+    setTeacherIds([]);
+    setPhoto(null);
+    setPhotoPreview("");
+    setCredentials(null);
+  }
+
+  async function submitRegistration(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!ready || !photo) {
+      toast.error("Completa el registro", {
+        description:
+          accountRole === "student"
+            ? "Agrega identidad, fotografía, materias y al menos un maestro."
+            : "Agrega identidad, fotografía y al menos una materia.",
+      });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const result = firebaseReady
+        ? await createManagedAccount({
+            firstName,
+            lastName,
+            email,
+            role: accountRole,
+            grade: accountRole === "student" ? grade : undefined,
+            group: accountRole === "student" ? group : undefined,
+            subjects,
+            teacherIds,
+            photo,
+          })
+        : await new Promise<{ account: ManagedAccount; password: string }>(
+            (resolve) =>
+              window.setTimeout(() => {
+                const cleanFirstName = firstName.trim();
+                const cleanLastName = lastName.trim();
+                resolve({
+                  account: {
+                    uid: `demo-account-${Date.now()}`,
+                    firstName: cleanFirstName,
+                    lastName: cleanLastName,
+                    name: `${cleanFirstName} ${cleanLastName}`,
+                    email: email.trim().toLowerCase(),
+                    role: accountRole,
+                    initials:
+                      `${cleanFirstName[0] ?? ""}${cleanLastName[0] ?? ""}`.toUpperCase(),
+                    active: true,
+                    grade: accountRole === "student" ? grade : undefined,
+                    group: accountRole === "student" ? group : undefined,
+                    subjects,
+                    teacherIds: accountRole === "student" ? teacherIds : [],
+                    createdAt: new Date().toISOString(),
+                  },
+                  password: generateTemporaryPassword(),
+                });
+              }, 720),
+          );
+      onCreated(result.account);
+      setCredentials(result);
+      toast.success(
+        accountRole === "student"
+          ? "Alumno registrado"
+          : "Maestro registrado",
+        {
+          description: firebaseReady
+            ? "La cuenta institucional ya puede iniciar sesión."
+            : "Cuenta agregada a la demostración; Firebase está listo para conectarse.",
+        },
+      );
+    } catch (error) {
+      toast.error("No pudimos crear la cuenta", {
+        description: friendlyFirebaseError(error),
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function copyCredentials() {
+    if (!credentials) return;
+    try {
+      await navigator.clipboard.writeText(
+        `CEHF Primaria · ${credentials.account.name}\nCorreo: ${credentials.account.email}\nContraseña temporal: ${credentials.password}\nIngreso: ${window.location.origin}/login`,
+      );
+      toast.success("Credenciales copiadas");
+    } catch {
+      toast.error("Selecciona y copia las credenciales manualmente.");
+    }
+  }
+
+  return (
+    <motion.div
+      className="modal-backdrop account-registration-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !submitting) onClose();
+      }}
+    >
+      <motion.section
+        className={`account-registration-modal ${
+          credentials ? "is-complete" : ""
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={credentials ? "Credenciales listas" : "Registrar una cuenta"}
+        initial={{ opacity: 0, y: 22, scale: 0.975 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 14, scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 320, damping: 30 }}
+      >
+        <header className="account-registration-header">
+          <div>
+            <span className="account-registration-mark">
+              {credentials ? <Check size={20} /> : <UserPlus size={20} />}
+            </span>
+            <div>
+              <span className="eyebrow">
+                {credentials ? "CUENTA CREADA" : "GESTIÓN DE ACCESOS"}
+              </span>
+              <h2>{credentials ? "Credenciales listas" : "Registrar una cuenta"}</h2>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            aria-label="Cerrar registro"
+          >
+            <X size={19} />
+          </button>
+        </header>
+
+        <AnimatePresence mode="wait">
+          {credentials ? (
+            <motion.div
+              className="account-credentials-success"
+              key="success"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+            >
+              <motion.span
+                className="account-success-orbit"
+                initial={{ scale: 0.55, rotate: -35 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 18 }}
+              >
+                <Check size={34} />
+              </motion.span>
+              <span className="role-chip">
+                {credentials.account.role === "student" ? "Alumno" : "Maestro"}
+              </span>
+              <h3>{credentials.account.name}</h3>
+              <p>
+                {firebaseReady
+                  ? "La cuenta ya puede ingresar al portal con estas credenciales."
+                  : "Esta vista demuestra el flujo completo. Al conectar Firebase, la cuenta se creará realmente."}
+              </p>
+              <div className="account-credential-grid">
+                <div>
+                  <span>Correo institucional</span>
+                  <strong>{credentials.account.email}</strong>
+                </div>
+                <div>
+                  <span>Contraseña temporal</span>
+                  <code>{credentials.password}</code>
+                </div>
+              </div>
+              <div className="credential-security-note">
+                <LockKeyhole size={17} />
+                <span>
+                  Guarda la contraseña ahora. Por seguridad no volverá a mostrarse
+                  al cerrar esta ventana.
+                </span>
+              </div>
+              <div className="account-success-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={resetRegistration}
+                >
+                  <UserPlus size={16} /> Registrar otra cuenta
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void copyCredentials()}
+                >
+                  <Copy size={16} /> Copiar credenciales
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.form
+              className="account-registration-form"
+              key="form"
+              onSubmit={(event) => void submitRegistration(event)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <div className="account-registration-main">
+                <div className="registration-progress" aria-label="Progreso del registro">
+                  {[
+                    ["1", "Identidad", identityComplete],
+                    ["2", "Asignación", assignmentComplete],
+                    ["3", "Acceso", false],
+                  ].map(([number, label, complete]) => (
+                    <span className={complete ? "complete" : ""} key={String(number)}>
+                      <i>{complete ? <Check size={12} /> : number}</i>
+                      <b>{label}</b>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="account-role-picker" role="radiogroup" aria-label="Tipo de cuenta">
+                  {(
+                    [
+                      {
+                        value: "student",
+                        label: "Alumno",
+                        copy: "Aprende, entrega actividades y consulta su avance",
+                        icon: UserRound,
+                      },
+                      {
+                        value: "teacher",
+                        label: "Maestro",
+                        copy: "Gestiona materias y acompaña a sus alumnos",
+                        icon: GraduationCap,
+                      },
+                    ] as const
+                  ).map((option) => (
+                    <motion.button
+                      type="button"
+                      role="radio"
+                      aria-checked={accountRole === option.value}
+                      className={accountRole === option.value ? "selected" : ""}
+                      onClick={() => selectRole(option.value)}
+                      whileHover={{ y: -2 }}
+                      whileTap={{ scale: 0.985 }}
+                      key={option.value}
+                    >
+                      <span><option.icon size={20} /></span>
+                      <div>
+                        <strong>{option.label}</strong>
+                        <small>{option.copy}</small>
+                      </div>
+                      <i>{accountRole === option.value && <Check size={13} />}</i>
+                    </motion.button>
+                  ))}
+                </div>
+
+                <section className="registration-section">
+                  <div className="registration-section-heading">
+                    <span>01</span>
+                    <div><strong>Datos de identidad</strong><small>Información visible dentro del portal escolar</small></div>
+                  </div>
+                  <div className="registration-name-grid">
+                    <label>Nombre<input autoFocus value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="Ej. Mariana" autoComplete="off" required /></label>
+                    <label>Apellidos<input value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Ej. Flores Hernández" autoComplete="off" required /></label>
+                  </div>
+                  <label className="registration-field">Correo institucional<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={accountRole === "student" ? "alumno@cehf.edu.mx" : "maestro@cehf.edu.mx"} autoComplete="off" required /></label>
+                  <div className={`registration-photo ${photo ? "has-photo" : ""}`}>
+                    <motion.span
+                      className="registration-photo-preview"
+                      animate={{ scale: photo ? [0.94, 1.03, 1] : 1 }}
+                      style={photoPreview ? { backgroundImage: `url(${photoPreview})` } : undefined}
+                    >
+                      {!photoPreview && <UserRound size={28} />}
+                    </motion.span>
+                    <div><strong>Fotografía de perfil</strong><p>JPG, PNG o WEBP · máximo 4 MB.</p><label className="secondary-button"><UploadCloud size={15} /> {photo ? "Cambiar fotografía" : "Seleccionar fotografía"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => selectPhoto(event.target.files?.[0])} /></label><button type="button" className="registration-avatar-generate" onClick={generateAvatar}><Sparkles size={14} /> Generar avatar</button>{photo && <small>{photo.name}</small>}</div>
+                  </div>
+                </section>
+
+                <AnimatePresence mode="wait">
+                  <motion.section
+                    className="registration-section"
+                    key={accountRole}
+                    initial={{ opacity: 0, x: accountRole === "student" ? -10 : 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: accountRole === "student" ? 10 : -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className="registration-section-heading">
+                      <span>02</span>
+                      <div><strong>{accountRole === "student" ? "Asignación académica" : "Materias que imparte"}</strong><small>{accountRole === "student" ? "Define su grupo, materias y acompañamiento" : "Selecciona los espacios que podrá administrar"}</small></div>
+                    </div>
+                    {accountRole === "student" && (
+                      <div className="registration-grade-grid">
+                        <label>Grado<select value={grade} onChange={(event) => setGrade(event.target.value)}>{["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                        <label>Grupo<select value={group} onChange={(event) => setGroup(event.target.value)}>{["A", "B", "C"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                      </div>
+                    )}
+                    <fieldset className="registration-multiselect">
+                      <legend>Materias</legend>
+                      <p>Selecciona una o varias opciones.</p>
+                      <div>
+                        {primarySubjectOptions.map((subject) => (
+                          <motion.button
+                            type="button"
+                            className={subjects.includes(subject) ? "selected" : ""}
+                            aria-pressed={subjects.includes(subject)}
+                            onClick={() => toggleSubject(subject)}
+                            whileTap={{ scale: 0.96 }}
+                            key={subject}
+                          >
+                            <i>{subjects.includes(subject) && <Check size={11} />}</i>
+                            {subject}
+                          </motion.button>
+                        ))}
+                      </div>
+                    </fieldset>
+                    {accountRole === "student" && (
+                      <fieldset className="registration-teachers">
+                        <legend>Maestros asignados</legend>
+                        <p>Mostramos únicamente maestros compatibles con las materias elegidas.</p>
+                        <div>
+                          {compatibleTeachers.map((teacher) => (
+                            <motion.button
+                              type="button"
+                              className={teacherIds.includes(teacher.uid) ? "selected" : ""}
+                              aria-pressed={teacherIds.includes(teacher.uid)}
+                              onClick={() => setTeacherIds((current) => current.includes(teacher.uid) ? current.filter((id) => id !== teacher.uid) : [...current, teacher.uid])}
+                              whileHover={{ x: 3 }}
+                              key={teacher.uid}
+                            >
+                              <span>{teacher.initials}</span>
+                              <div><strong>{teacher.name}</strong><small>{teacher.subjects.filter((subject) => subjects.length === 0 || subjects.includes(subject)).join(" · ")}</small></div>
+                              <i>{teacherIds.includes(teacher.uid) && <Check size={12} />}</i>
+                            </motion.button>
+                          ))}
+                          {compatibleTeachers.length === 0 && (
+                            <div className="registration-empty-option"><CircleHelp size={16} /> {subjects.length === 0 ? "Selecciona materias para ver maestros compatibles." : "Primero registra un maestro que imparta estas materias."}</div>
+                          )}
+                        </div>
+                      </fieldset>
+                    )}
+                  </motion.section>
+                </AnimatePresence>
+              </div>
+
+              <aside className="account-registration-aside">
+                <div className={`registration-connection ${firebaseReady ? "connected" : "demo"}`}>
+                  <span />
+                  <div><strong>{firebaseReady ? "Firebase conectado" : "Modo demostración"}</strong><small>{firebaseReady ? "La cuenta se guardará en Auth, Firestore y Storage" : "La interfaz ya está lista para tus variables .env"}</small></div>
+                </div>
+                <motion.article className="registration-summary-card" layout>
+                  <span className="registration-summary-avatar">{firstName[0]?.toUpperCase() || (accountRole === "student" ? "A" : "M")}{lastName[0]?.toUpperCase() || ""}</span>
+                  <span className="role-chip">{accountRole === "student" ? "Alumno" : "Maestro"}</span>
+                  <h3>{displayName}</h3>
+                  <p>{email.trim() || "correo@cehf.edu.mx"}</p>
+                  <div className="registration-summary-facts">
+                    {accountRole === "student" && <span><strong>{grade} {group}</strong><small>Grupo</small></span>}
+                    <span><strong>{subjects.length}</strong><small>Materias</small></span>
+                    {accountRole === "student" && <span><strong>{teacherIds.length}</strong><small>Maestros</small></span>}
+                  </div>
+                  <div className="registration-checklist">
+                    <span className={identityComplete ? "complete" : ""}><i>{identityComplete && <Check size={11} />}</i> Identidad y fotografía</span>
+                    <span className={assignmentComplete ? "complete" : ""}><i>{assignmentComplete && <Check size={11} />}</i> Asignación académica</span>
+                    <span className={firebaseReady ? "complete" : "prepared"}><i>{firebaseReady ? <Check size={11} /> : <Sparkles size={11} />}</i> {firebaseReady ? "Conexión disponible" : "Preparado para Firebase"}</span>
+                  </div>
+                  <button className="primary-button registration-submit" disabled={!ready || submitting}>
+                    {submitting ? <span className="button-spinner" /> : <UserPlus size={17} />}
+                    {submitting ? "Creando cuenta…" : `Crear cuenta de ${accountRole === "student" ? "alumno" : "maestro"}`}
+                  </button>
+                  <small className="registration-session-note"><ShieldCheck size={13} /> Tu sesión de Dirección permanecerá abierta.</small>
+                </motion.article>
+              </aside>
+            </motion.form>
+          )}
+        </AnimatePresence>
+      </motion.section>
     </motion.div>
   );
 }
@@ -3768,7 +4425,7 @@ function createLabel(section: SectionKey) {
     "weekly-materials": "Nuevo material",
     "wall-newspaper": "Nueva publicación",
     forum: "Nuevo tema",
-    users: "Nueva persona",
+    users: "Registrar cuenta",
   };
   return labels[section] ?? "Nuevo elemento";
 }

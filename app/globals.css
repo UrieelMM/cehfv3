@@ -3624,6 +3624,1046 @@ code {
   gap: 10px;
 }
 
+.account-avatar {
+  background-position: center;
+  background-size: cover;
+}
+
+.user-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.user-identity strong,
+.user-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-identity small {
+  color: var(--muted);
+  font-size: 0.61rem;
+}
+
+.account-empty-state,
+.account-loading-state {
+  display: flex;
+  min-height: 190px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  flex-direction: column;
+  font-size: 0.7rem;
+}
+
+.account-empty-state svg {
+  margin-bottom: 5px;
+  color: var(--violet);
+}
+
+.account-empty-state strong {
+  color: var(--foreground);
+  font-size: 0.82rem;
+}
+
+/* Account registration */
+.account-registration-backdrop {
+  z-index: 220;
+  padding: 16px;
+  background: color-mix(in srgb, #080d21 76%, transparent);
+  backdrop-filter: blur(13px);
+}
+
+.account-registration-modal {
+  display: flex;
+  width: min(1120px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--violet) 18%, var(--border));
+  border-radius: 24px;
+  background: var(--surface-raised);
+  box-shadow:
+    0 34px 100px rgb(5 10 34 / 0.42),
+    0 0 0 1px rgb(255 255 255 / 0.04);
+  flex-direction: column;
+}
+
+.account-registration-modal.is-complete {
+  width: min(650px, 100%);
+}
+
+.account-registration-header {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 21px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-raised) 91%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.account-registration-header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.account-registration-mark {
+  display: grid;
+  width: 43px;
+  height: 43px;
+  flex: 0 0 43px;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(145deg, var(--violet), var(--violet-dark));
+  color: var(--on-primary);
+  box-shadow: 0 9px 25px color-mix(in srgb, var(--violet) 24%, transparent);
+}
+
+.account-registration-header h2 {
+  margin: 3px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: -0.035em;
+}
+
+.account-registration-form {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 326px;
+  overflow: hidden;
+}
+
+.account-registration-main {
+  display: flex;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px clamp(22px, 3vw, 38px) 38px;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.registration-progress {
+  position: relative;
+  display: grid;
+  max-width: 520px;
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 2px;
+}
+
+.registration-progress::before {
+  position: absolute;
+  top: 14px;
+  right: 15%;
+  left: 15%;
+  height: 1px;
+  background: var(--border);
+  content: "";
+}
+
+.registration-progress > span {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.61rem;
+}
+
+.registration-progress > span:nth-child(2) {
+  justify-content: center;
+}
+
+.registration-progress > span:last-child {
+  justify-content: flex-end;
+}
+
+.registration-progress i {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 0.59rem;
+  font-style: normal;
+  transition: all 220ms ease;
+}
+
+.registration-progress > span.complete i {
+  border-color: var(--violet);
+  background: var(--violet);
+  color: var(--on-primary);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--violet) 22%, transparent);
+}
+
+.registration-progress b {
+  padding: 2px 5px;
+  background: var(--surface-raised);
+  font-weight: 760;
+}
+
+.account-role-picker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.account-role-picker > button {
+  position: relative;
+  display: grid;
+  min-height: 82px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface);
+  color: var(--foreground);
+  text-align: left;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.account-role-picker > button:hover {
+  border-color: color-mix(in srgb, var(--violet) 38%, var(--border));
+}
+
+.account-role-picker > button.selected {
+  border-color: color-mix(in srgb, var(--violet) 55%, var(--border));
+  background: linear-gradient(145deg, var(--violet-soft), var(--surface));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--violet) 10%, transparent);
+}
+
+.account-role-picker > button > span {
+  display: grid;
+  width: 41px;
+  height: 41px;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  transition: all 180ms ease;
+}
+
+.account-role-picker > button.selected > span {
+  background: var(--violet);
+  color: var(--on-primary);
+  transform: rotate(-3deg);
+}
+
+.account-role-picker > button > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.account-role-picker strong {
+  font-size: 0.77rem;
+}
+
+.account-role-picker small {
+  color: var(--muted);
+  font-size: 0.59rem;
+  line-height: 1.4;
+}
+
+.account-role-picker > button > i,
+.registration-teachers button > i {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--violet);
+  font-style: normal;
+}
+
+.account-role-picker > button.selected > i,
+.registration-teachers button.selected > i {
+  border-color: var(--violet);
+  background: var(--violet);
+  color: var(--on-primary);
+}
+
+.registration-section {
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 86%, var(--surface-soft));
+  box-shadow: var(--shadow-sm);
+}
+
+.registration-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.registration-section-heading > span {
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 750;
+}
+
+.registration-section-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.registration-section-heading strong {
+  font-size: 0.76rem;
+}
+
+.registration-section-heading small {
+  color: var(--muted);
+  font-size: 0.59rem;
+}
+
+.registration-name-grid,
+.registration-grade-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.registration-section label,
+.registration-multiselect legend,
+.registration-teachers legend {
+  color: var(--muted-strong);
+  font-size: 0.65rem;
+  font-weight: 760;
+}
+
+.registration-name-grid label,
+.registration-grade-grid label,
+.registration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.registration-field {
+  margin-top: 11px;
+}
+
+.registration-section input,
+.registration-section select {
+  width: 100%;
+  min-height: 43px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 0.73rem;
+  transition:
+    border-color 170ms ease,
+    box-shadow 170ms ease,
+    transform 170ms ease;
+}
+
+.registration-section input:focus,
+.registration-section select:focus {
+  border-color: color-mix(in srgb, var(--violet) 60%, var(--border));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 10%, transparent);
+  transform: translateY(-1px);
+}
+
+.registration-photo {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+
+.registration-photo.has-photo {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--violet) 34%, var(--border));
+  background: color-mix(in srgb, var(--violet-soft) 38%, var(--surface));
+}
+
+.registration-photo-preview {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  place-items: center;
+  border: 3px solid var(--surface);
+  border-radius: 18px;
+  background: var(--violet-soft) center / cover;
+  color: var(--violet);
+  box-shadow: 0 7px 18px rgb(10 18 48 / 0.13);
+}
+
+.registration-photo > div {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+}
+
+.registration-photo strong,
+.registration-photo p {
+  width: 100%;
+}
+
+.registration-photo strong {
+  color: var(--foreground);
+  font-size: 0.69rem;
+}
+
+.registration-photo p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.59rem;
+}
+
+.registration-photo label.secondary-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 0.59rem;
+}
+
+.registration-avatar-generate {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--violet);
+  font-size: 0.58rem;
+  font-weight: 760;
+}
+
+.registration-avatar-generate:hover {
+  color: var(--violet-dark);
+}
+
+.registration-photo input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.registration-photo > div > small {
+  max-width: 190px;
+  overflow: hidden;
+  align-self: center;
+  color: var(--violet);
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-grade-grid {
+  margin-bottom: 16px;
+}
+
+.registration-multiselect,
+.registration-teachers {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.registration-multiselect > p,
+.registration-teachers > p {
+  margin: 3px 0 10px;
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.registration-multiselect > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.registration-multiselect button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  font-size: 0.59rem;
+  font-weight: 720;
+  transition: all 160ms ease;
+}
+
+.registration-multiselect button:hover {
+  border-color: color-mix(in srgb, var(--violet) 42%, var(--border));
+  color: var(--violet);
+}
+
+.registration-multiselect button.selected {
+  border-color: color-mix(in srgb, var(--violet) 42%, var(--border));
+  background: var(--violet-soft);
+  color: var(--violet-dark);
+}
+
+.registration-multiselect button i {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  font-style: normal;
+}
+
+.registration-multiselect button.selected i {
+  border-color: var(--violet);
+  background: var(--violet);
+  color: var(--on-primary);
+}
+
+.registration-teachers {
+  margin-top: 16px;
+}
+
+.registration-teachers > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.registration-teachers button {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--foreground);
+  text-align: left;
+  transition: all 170ms ease;
+}
+
+.registration-teachers button.selected {
+  border-color: color-mix(in srgb, var(--violet) 50%, var(--border));
+  background: var(--violet-soft);
+}
+
+.registration-teachers button > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--violet);
+  font-size: 0.61rem;
+  font-weight: 850;
+}
+
+.registration-teachers button > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.registration-teachers button strong {
+  overflow: hidden;
+  font-size: 0.63rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-teachers button small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.53rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-empty-option {
+  display: flex;
+  min-height: 56px;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+  padding: 11px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.59rem;
+}
+
+.account-registration-aside {
+  display: flex;
+  min-height: 0;
+  padding: 22px;
+  border-left: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 90% 8%, color-mix(in srgb, var(--violet) 12%, transparent), transparent 32%),
+    var(--surface-soft);
+  flex-direction: column;
+  gap: 14px;
+}
+
+.registration-connection {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.registration-connection > span {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 4px var(--gold-soft);
+}
+
+.registration-connection.connected > span {
+  background: var(--mint);
+  box-shadow: 0 0 0 4px var(--mint-soft);
+  animation: registration-pulse 1.9s ease-in-out infinite;
+}
+
+.registration-connection > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.registration-connection strong {
+  font-size: 0.63rem;
+}
+
+.registration-connection small {
+  color: var(--muted);
+  font-size: 0.52rem;
+  line-height: 1.4;
+}
+
+.registration-summary-card {
+  position: sticky;
+  top: 0;
+  display: flex;
+  min-height: 420px;
+  align-items: center;
+  padding: 25px 20px 19px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--violet) 20%, var(--border));
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 0, color-mix(in srgb, var(--violet) 15%, transparent), transparent 36%),
+    var(--surface);
+  box-shadow: var(--shadow-md);
+  flex: 1;
+  flex-direction: column;
+  text-align: center;
+}
+
+.registration-summary-avatar {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 13px;
+  place-items: center;
+  border: 5px solid var(--surface);
+  border-radius: 23px;
+  background: linear-gradient(145deg, var(--violet), var(--violet-dark));
+  color: var(--on-primary);
+  box-shadow: 0 13px 28px color-mix(in srgb, var(--violet) 24%, transparent);
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.registration-summary-card h3 {
+  margin: 9px 0 3px;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  letter-spacing: -0.035em;
+}
+
+.registration-summary-card > p {
+  max-width: 100%;
+  overflow: hidden;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.61rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registration-summary-facts {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  gap: 3px;
+  margin: 20px 0 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.registration-summary-facts > span {
+  display: flex;
+  min-width: 74px;
+  padding: 0 8px;
+  border-left: 1px solid var(--border);
+  flex-direction: column;
+  gap: 2px;
+}
+
+.registration-summary-facts > span:first-child {
+  border-left: 0;
+}
+
+.registration-summary-facts strong {
+  color: var(--violet);
+  font-size: 0.78rem;
+}
+
+.registration-summary-facts small {
+  color: var(--muted);
+  font-size: 0.52rem;
+}
+
+.registration-checklist {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.registration-checklist > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.registration-checklist i {
+  display: grid;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-style: normal;
+}
+
+.registration-checklist > span.complete {
+  color: var(--mint);
+}
+
+.registration-checklist > span.complete i {
+  border-color: var(--mint);
+  background: var(--mint-soft);
+}
+
+.registration-checklist > span.prepared {
+  color: var(--gold);
+}
+
+.registration-checklist > span.prepared i {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+}
+
+.registration-submit {
+  width: 100%;
+  min-height: 46px;
+  justify-content: center;
+  margin-top: auto;
+}
+
+.registration-session-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.52rem;
+}
+
+.account-credentials-success {
+  display: flex;
+  align-items: center;
+  padding: 42px clamp(24px, 6vw, 58px) 48px;
+  background:
+    radial-gradient(circle at 50% 0, color-mix(in srgb, var(--violet) 13%, transparent), transparent 38%),
+    var(--surface-raised);
+  flex-direction: column;
+  text-align: center;
+}
+
+.account-success-orbit {
+  display: grid;
+  width: 86px;
+  height: 86px;
+  margin-bottom: 16px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--mint) 35%, var(--border));
+  border-radius: 29px;
+  background: var(--mint-soft);
+  color: var(--mint);
+  box-shadow:
+    0 0 0 10px color-mix(in srgb, var(--mint-soft) 45%, transparent),
+    0 18px 42px color-mix(in srgb, var(--mint) 16%, transparent);
+}
+
+.account-credentials-success h3 {
+  margin: 12px 0 6px;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  letter-spacing: -0.045em;
+}
+
+.account-credentials-success > p {
+  max-width: 480px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.account-credential-grid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 24px 0 12px;
+}
+
+.account-credential-grid > div {
+  display: flex;
+  min-width: 0;
+  min-height: 82px;
+  justify-content: center;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  flex-direction: column;
+  gap: 7px;
+}
+
+.account-credential-grid span {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.account-credential-grid strong,
+.account-credential-grid code {
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+}
+
+.account-credential-grid code {
+  align-self: center;
+  color: var(--violet-dark);
+  font-size: 0.86rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.credential-security-note {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--gold) 25%, var(--border));
+  border-radius: 12px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-size: 0.59rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.credential-security-note svg {
+  flex: 0 0 auto;
+}
+
+.account-success-actions {
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.account-success-actions button {
+  min-height: 42px;
+}
+
+@keyframes registration-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px var(--mint-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--mint-soft) 45%, transparent);
+  }
+}
+
+@media (max-width: 900px) {
+  .account-registration-form {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .account-registration-main {
+    overflow: visible;
+  }
+
+  .account-registration-aside {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .registration-summary-card {
+    position: static;
+    min-height: 370px;
+  }
+}
+
+@media (max-width: 620px) {
+  .account-registration-backdrop {
+    padding: 0;
+  }
+
+  .account-registration-modal {
+    width: 100%;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .account-registration-header {
+    min-height: 68px;
+    padding: 11px 15px;
+  }
+
+  .account-registration-mark {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .account-registration-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .account-registration-main {
+    padding: 18px 14px 26px;
+  }
+
+  .registration-progress b {
+    display: none;
+  }
+
+  .registration-progress > span:nth-child(2) {
+    justify-content: center;
+  }
+
+  .account-role-picker,
+  .registration-name-grid,
+  .registration-teachers > div,
+  .account-credential-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-role-picker > button {
+    min-height: 70px;
+  }
+
+  .registration-section {
+    padding: 16px;
+  }
+
+  .registration-photo {
+    grid-template-columns: 1fr;
+  }
+
+  .registration-photo-preview {
+    width: 72px;
+    height: 72px;
+  }
+
+  .account-registration-aside {
+    padding: 16px 14px 28px;
+  }
+
+  .account-success-actions {
+    flex-direction: column-reverse;
+  }
+
+  .account-success-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .account-credentials-success {
+    padding: 34px 18px;
+  }
+}
+
 /* Settings/profile */
 .settings-layout {
   display: grid;

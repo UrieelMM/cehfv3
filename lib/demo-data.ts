@@ -1,4 +1,4 @@
-import type { PortalState, Role, UserProfile } from "./types";
+import type { ManagedAccount, PortalState, Role, UserProfile } from "./types";
 
 export const demoProfiles: Record<Role, UserProfile> = {
   student: {
@@ -28,6 +28,67 @@ export const demoProfiles: Record<Role, UserProfile> = {
     initials: "AT",
   },
 };
+
+export const demoManagedAccounts: ManagedAccount[] = [
+  {
+    uid: "demo-student-sofia",
+    firstName: "Sofía",
+    lastName: "Martínez",
+    name: "Sofía Martínez",
+    email: "sofia@cehf.edu.mx",
+    role: "student",
+    initials: "SM",
+    active: true,
+    grade: "5.º",
+    group: "A",
+    subjects: ["Español", "Matemáticas", "Ciencias"],
+    teacherIds: ["demo-teacher-mariana"],
+    createdAt: "2026-07-15T14:00:00.000Z",
+  },
+  {
+    uid: "demo-student-diego",
+    firstName: "Diego",
+    lastName: "Ramírez",
+    name: "Diego Ramírez",
+    email: "diego@cehf.edu.mx",
+    role: "student",
+    initials: "DR",
+    active: true,
+    grade: "5.º",
+    group: "A",
+    subjects: ["Español", "Matemáticas", "Ciencias"],
+    teacherIds: ["demo-teacher-mariana"],
+    createdAt: "2026-07-16T14:00:00.000Z",
+  },
+  {
+    uid: "demo-teacher-mariana",
+    firstName: "Mariana",
+    lastName: "López",
+    name: "Mariana López",
+    email: "mariana.lopez@cehf.edu.mx",
+    role: "teacher",
+    initials: "ML",
+    active: true,
+    group: "5.º A",
+    subjects: ["Español", "Ciencias"],
+    teacherIds: [],
+    createdAt: "2026-07-10T14:00:00.000Z",
+  },
+  {
+    uid: "demo-teacher-roberto",
+    firstName: "Roberto",
+    lastName: "Díaz",
+    name: "Roberto Díaz",
+    email: "roberto.diaz@cehf.edu.mx",
+    role: "teacher",
+    initials: "RD",
+    active: true,
+    group: "4.º B",
+    subjects: ["Matemáticas"],
+    teacherIds: [],
+    createdAt: "2026-07-11T14:00:00.000Z",
+  },
+];
 
 export const createDemoState = (): PortalState => ({
   week: {

@@ -1,30 +1,51 @@
 "use client";
 
-import { FirebaseApp, getApp, getApps, initializeApp } from "firebase/app";
+import {
+  deleteApp,
+  FirebaseApp,
+  getApp,
+  getApps,
+  initializeApp,
+} from "firebase/app";
 import {
   Auth,
   browserLocalPersistence,
   browserSessionPersistence,
   createUserWithEmailAndPassword,
+  deleteUser,
   getAuth,
   onAuthStateChanged,
   sendPasswordResetEmail,
   setPersistence,
   signInWithEmailAndPassword,
   signOut,
+  updateProfile,
   type User,
 } from "firebase/auth";
 import {
+  collection,
   Firestore,
   doc,
   getDoc,
+  getDocs,
   getFirestore,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-import { getStorage, type FirebaseStorage } from "firebase/storage";
+import {
+  getDownloadURL,
+  getStorage,
+  ref,
+  uploadBytes,
+  type FirebaseStorage,
+} from "firebase/storage";
 import { createDemoState } from "./demo-data";
-import type { PortalState, Role, UserProfile } from "./types";
+import type {
+  ManagedAccount,
+  PortalState,
+  Role,
+  UserProfile,
+} from "./types";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -52,6 +73,159 @@ if (firebaseConfigured && typeof window !== "undefined") {
 }
 
 export const firebase = { app, auth, db, storage };
+
+export type ManagedAccountInput = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: "student" | "teacher";
+  grade?: string;
+  group?: string;
+  subjects: string[];
+  teacherIds: string[];
+  photo: File;
+};
+
+export function generateTemporaryPassword() {
+  const groups = [
+    "ABCDEFGHJKLMNPQRSTUVWXYZ",
+    "abcdefghijkmnopqrstuvwxyz",
+    "23456789",
+    "!@#$%",
+  ];
+  const all = groups.join("");
+  const bytes = crypto.getRandomValues(new Uint32Array(12));
+  const characters = groups.map(
+    (group, index) => group[bytes[index] % group.length],
+  );
+  for (let index = characters.length; index < 12; index += 1) {
+    characters.push(all[bytes[index] % all.length]);
+  }
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = bytes[index] % (index + 1);
+    [characters[index], characters[swapIndex]] = [
+      characters[swapIndex],
+      characters[index],
+    ];
+  }
+  return characters.join("");
+}
+
+function accountDate(value: unknown) {
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate().toISOString();
+  }
+  return typeof value === "string" ? value : new Date().toISOString();
+}
+
+export async function listManagedAccounts(): Promise<ManagedAccount[]> {
+  if (!db) return [];
+  const snapshot = await getDocs(collection(db, "users"));
+  const accounts: ManagedAccount[] = [];
+  for (const entry of snapshot.docs) {
+    const data = entry.data();
+    const name = String(data.name ?? "Cuenta CEHF");
+    const nameParts = name.trim().split(/\s+/);
+    const role = data.role;
+    if (role !== "student" && role !== "teacher") continue;
+    accounts.push({
+      uid: entry.id,
+      firstName: String(data.firstName ?? nameParts[0] ?? ""),
+      lastName: String(data.lastName ?? nameParts.slice(1).join(" ")),
+      name,
+      email: String(data.email ?? ""),
+      role,
+      initials: String(data.initials ?? "CE"),
+      active: data.active !== false,
+      grade: data.grade ? String(data.grade) : undefined,
+      group: data.group ? String(data.group) : undefined,
+      subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
+      teacherIds: Array.isArray(data.teacherIds)
+        ? data.teacherIds.map(String)
+        : [],
+      photoURL: data.photoURL ? String(data.photoURL) : undefined,
+      createdAt: accountDate(data.createdAt),
+    });
+  }
+  return accounts.sort((first, second) =>
+    first.name.localeCompare(second.name, "es"),
+  );
+}
+
+export async function createManagedAccount(input: ManagedAccountInput) {
+  if (!app || !auth || !db || !storage) {
+    throw new Error("Firebase no está configurado.");
+  }
+  const director = auth.currentUser;
+  if (!director) throw new Error("Inicia sesión como Dirección.");
+
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+  const name = `${firstName} ${lastName}`.trim();
+  const email = input.email.trim().toLowerCase();
+  const password = generateTemporaryPassword();
+  const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
+  const creatorApp = initializeApp(
+    firebaseConfig,
+    `cehf-account-creator-${crypto.randomUUID()}`,
+  );
+  const creatorAuth = getAuth(creatorApp);
+  let createdUser: User | null = null;
+
+  try {
+    const credential = await createUserWithEmailAndPassword(
+      creatorAuth,
+      email,
+      password,
+    );
+    createdUser = credential.user;
+    await updateProfile(createdUser, { displayName: name });
+    const extension = input.photo.type.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+    const photoReference = ref(
+      storage,
+      `institutions/cehf-primaria/profiles/${createdUser.uid}/profile.${extension}`,
+    );
+    await uploadBytes(photoReference, input.photo, {
+      contentType: input.photo.type,
+    });
+    const photoURL = await getDownloadURL(photoReference);
+    const account: ManagedAccount = {
+      uid: createdUser.uid,
+      firstName,
+      lastName,
+      name,
+      email,
+      role: input.role,
+      initials,
+      active: true,
+      grade: input.role === "student" ? input.grade : undefined,
+      group: input.role === "student" ? input.group : undefined,
+      subjects: input.subjects,
+      teacherIds: input.role === "student" ? input.teacherIds : [],
+      photoURL,
+      createdAt: new Date().toISOString(),
+    };
+    await setDoc(doc(db, "users", createdUser.uid), {
+      ...account,
+      institutionId: "cehf-primaria",
+      createdBy: director.uid,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return { account, password };
+  } catch (error) {
+    if (createdUser) await deleteUser(createdUser).catch(() => undefined);
+    throw error;
+  } finally {
+    await signOut(creatorAuth).catch(() => undefined);
+    await deleteApp(creatorApp).catch(() => undefined);
+  }
+}
 
 export function watchAuth(callback: (user: User | null) => void) {
   if (!auth) return () => undefined;
@@ -210,6 +384,12 @@ export function friendlyFirebaseError(error: unknown) {
     "auth/invalid-email": "Escribe un correo válido.",
     "auth/too-many-requests":
       "Hiciste varios intentos. Espera un momento y vuelve a probar.",
+    "auth/operation-not-allowed":
+      "Activa el proveedor Correo/Contraseña en Firebase Authentication.",
+    "auth/network-request-failed":
+      "No pudimos conectar con Firebase. Revisa la red e intenta nuevamente.",
+    "storage/unauthorized":
+      "Firebase Storage rechazó la fotografía. Publica las reglas incluidas en el proyecto.",
     "permission-denied":
       "Firebase rechazó la operación. Revisa que hayas publicado las reglas incluidas.",
   };

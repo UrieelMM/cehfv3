@@ -55,7 +55,16 @@ test("supports the documented application routes", async () => {
 });
 
 test("ships Firebase setup, rules, indexes, storage and PWA assets", async () => {
-  const [envExample, firestoreRules, storageRules, indexes, manifest, css] =
+  const [
+    envExample,
+    firestoreRules,
+    storageRules,
+    indexes,
+    manifest,
+    css,
+    firebaseSource,
+    appSource,
+  ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
       readFile(new URL("firestore.rules", projectRoot), "utf8"),
@@ -63,6 +72,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("firestore.indexes.json", projectRoot), "utf8"),
       readFile(new URL("public/manifest.webmanifest", projectRoot), "utf8"),
       readFile(new URL("app/globals.css", projectRoot), "utf8"),
+      readFile(new URL("lib/firebase.ts", projectRoot), "utf8"),
+      readFile(new URL("components/cehf-app.tsx", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -86,6 +97,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(css, /--violet:\s*#1f2985/i);
   assert.match(css, /--coral:\s*#c62e45/i);
   assert.match(css, /url\("\/login-campus\.jpg"\)/i);
+  assert.match(firebaseSource, /createManagedAccount/);
+  assert.match(firebaseSource, /cehf-account-creator/);
+  assert.match(appSource, /account-registration-modal/);
+  assert.match(appSource, /Contraseña temporal/);
   await access(new URL("public/og.png", projectRoot));
   await access(new URL("public/login-campus.jpg", projectRoot));
   await access(new URL("public/sw.js", projectRoot));

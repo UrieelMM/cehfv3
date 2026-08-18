@@ -11,6 +11,23 @@ export type UserProfile = {
   initials: string;
 };
 
+export type ManagedAccount = {
+  uid: string;
+  firstName: string;
+  lastName: string;
+  name: string;
+  email: string;
+  role: "student" | "teacher";
+  initials: string;
+  active: boolean;
+  grade?: string;
+  group?: string;
+  subjects: string[];
+  teacherIds: string[];
+  photoURL?: string;
+  createdAt: string;
+};
+
 export type WeekPlan = {
   id: string;
   label: string;
