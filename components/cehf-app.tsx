@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Bell,
@@ -17,10 +18,14 @@ import {
   GraduationCap,
   Heart,
   Home,
+  Eye,
+  EyeOff,
   LayoutDashboard,
   Library,
   LockKeyhole,
+  LogIn,
   LogOut,
+  Mail,
   Menu,
   MessageCircle,
   Moon,
@@ -704,11 +709,28 @@ function LoginScreen({
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError("");
+
+    if (!configured) {
+      setError(
+        "El acceso institucional no está disponible en este entorno. Puedes explorar la demostración.",
+      );
+      return;
+    }
+    if (!email.trim() || !password || (mode === "bootstrap" && !name.trim())) {
+      setError("Completa los datos solicitados para continuar.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+
     setBusy(true);
     try {
       if (mode === "bootstrap") {
@@ -725,9 +747,34 @@ function LoginScreen({
   }
 
   return (
-    <div className="login-page">
+    <>
       <Toaster position="top-center" richColors />
-      <section className="login-story">
+      <motion.div
+        className="login-page"
+        data-theme="light"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.35 }}
+      >
+        <motion.section
+        className="login-brand-panel"
+        initial={{ x: -24 }}
+        animate={{ x: 0 }}
+        transition={{ duration: 0.55, ease: [0.22, 0.8, 0.25, 1] }}
+      >
+        <div className="login-grid" />
+        <div className="login-orb login-orb-a" />
+        <div className="login-orb login-orb-b" />
+        <div className="login-campus-scene" aria-hidden="true">
+          <span className="login-campus-glow" />
+          <span className="login-floating-leaf leaf-a" />
+          <span className="login-floating-leaf leaf-b" />
+          <span className="login-floating-leaf leaf-c" />
+          <span className="login-floating-leaf leaf-d" />
+          <span className="login-campus-caption">
+            <i /> CAMPUS CEHF · IDEAS QUE CRECEN
+          </span>
+        </div>
         <div className="brand brand-light">
           <div className="brand-mark">
             <span>CE</span>
@@ -737,172 +784,237 @@ function LoginScreen({
             <span>Primaria</span>
           </div>
         </div>
-        <div className="story-content">
-          <span className="story-kicker">Una semana clara para aprender mejor</span>
-          <h1>Todo lo importante, justo donde lo necesitas.</h1>
-          <p>
-            Objetivos, tareas, repasos, materiales y avances reunidos en un
-            espacio sereno para estudiantes, docentes y dirección.
-          </p>
-          <div className="story-preview">
-            <span className="mini-label">Esta semana</span>
-            <strong>Exploramos cómo cambia nuestro entorno</strong>
-            <div className="mini-progress">
-              <span style={{ width: "68%" }} />
-            </div>
-            <div className="story-meta">
-              <span>
-                <CheckCircle2 size={16} /> 4 actividades listas
-              </span>
-              <span>
-                <Clock3 size={16} /> 1 pendiente
-              </span>
-            </div>
-          </div>
-        </div>
-        <small className="story-footer">
-          Comunidad educativa segura · Datos protegidos · Sin rankings
-        </small>
-      </section>
-      <section className="login-panel">
-        <div className="login-card">
-          <span className="login-icon">
-            <GraduationCap size={23} />
+        <div className="login-message">
+          <span className="glass-label">
+            <Sparkles size={14} /> Una semana clara para aprender mejor
           </span>
-          <div className="login-heading">
-            <span className="eyebrow">
-              {mode === "login" ? "Bienvenido de vuelta" : "Primer acceso"}
-            </span>
-            <h2>
-              {mode === "login" ? "Entra a tu portal" : "Activa CEHF Primaria"}
-            </h2>
-            <p>
-              {configured
-                ? mode === "login"
-                  ? "Usa tu correo institucional y contraseña."
-                  : "Crea la primera cuenta de Dirección y los datos iniciales."
-                : "Conecta Firebase o explora el MVP con datos de demostración."}
-            </p>
+          <h1>
+            Tu escuela,
+            <br />
+            en movimiento.
+          </h1>
+          <p>
+            Todo lo que necesitas para aprender, descubrir y compartir tus
+            logros en Primaria.
+          </p>
+        </div>
+        <div className="login-access-card">
+          <span>
+            <LockKeyhole size={18} />
+          </span>
+          <div>
+            <strong>Acceso exclusivo CEHF</strong>
+            <small>Estudiantes, maestros y Dirección</small>
           </div>
-          {configured ? (
-            <form onSubmit={handleSubmit} className="login-form">
-              {mode === "bootstrap" && (
-                <label>
-                  Nombre completo
-                  <input
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Alejandra Torres"
-                    required
-                  />
-                </label>
-              )}
-              <label>
-                Correo institucional
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="nombre@cehf.edu.mx"
-                  required
-                />
-              </label>
-              <label>
-                Contraseña
-                <span className="password-field">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Al menos 8 caracteres"
-                    minLength={8}
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((show) => !show)}
-                  >
-                    {showPassword ? "Ocultar" : "Mostrar"}
-                  </button>
-                </span>
-              </label>
-              {mode === "login" && (
-                <div className="form-row">
-                  <label className="check-row">
-                    <input
-                      type="checkbox"
-                      checked={remember}
-                      onChange={(event) => setRemember(event.target.checked)}
-                    />
-                    Recordarme en este dispositivo
-                  </label>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={async () => {
-                      if (!email) {
-                        setError("Escribe tu correo para recuperar el acceso.");
-                        return;
-                      }
-                      await resetPassword(email);
-                      toast.success(
-                        "Si la cuenta existe, recibirás un correo con instrucciones.",
-                      );
-                    }}
-                  >
-                    Recuperar acceso
-                  </button>
-                </div>
-              )}
-              {error && <div className="form-error">{error}</div>}
-              <button className="primary-button login-submit" disabled={busy}>
-                {busy
-                  ? "Conectando…"
-                  : mode === "login"
-                    ? "Entrar al portal"
-                    : "Crear portal"}
-                {!busy && <ArrowRight size={18} />}
-              </button>
-              <button
-                type="button"
-                className="text-button mode-button"
-                onClick={() =>
-                  setMode((current) =>
-                    current === "login" ? "bootstrap" : "login",
-                  )
-                }
-              >
-                {mode === "login"
-                  ? "¿Es la primera vez? Activar portal"
-                  : "Ya existe una cuenta · Iniciar sesión"}
-              </button>
-            </form>
-          ) : (
-            <div className="setup-note">
-              <LockKeyhole size={20} />
+          <ShieldCheck size={18} />
+        </div>
+        <div className="login-testimonial">
+          <p>
+            “Aquí encuentro mis actividades y puedo ver todo lo que voy
+            logrando.”
+          </p>
+          <span>— Comunidad CEHF Primaria</span>
+        </div>
+        </motion.section>
+
+        <section className="login-form-panel">
+          <motion.form
+          onSubmit={handleSubmit}
+          noValidate
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12, duration: 0.45 }}
+          aria-busy={busy || resetting}
+        >
+          <div className="mobile-login-brand">
+            <div className="brand">
+              <div className="brand-mark">
+                <span>CE</span>
+              </div>
               <div>
-                <strong>Firebase está pendiente</strong>
-                <p>
-                  Pega las seis variables públicas en <code>.env</code> y
-                  reinicia el portal.
-                </p>
+                <strong>CEHF</strong>
+                <span>Primaria</span>
               </div>
             </div>
+          </div>
+          <span className="login-kicker">
+            <span />
+            {mode === "login" ? "ACCESO INSTITUCIONAL" : "PRIMER ACCESO"}
+          </span>
+          <h2>
+            {mode === "login" ? "Qué bueno verte." : "Activa CEHF Primaria."}
+          </h2>
+          <p>
+            {mode === "login"
+              ? "Ingresa con la cuenta que Dirección creó para ti."
+              : "Crea la primera cuenta de Dirección y prepara el portal."}
+          </p>
+
+          {(!configured || error) && (
+            <div className="login-alert" role="alert">
+              <AlertCircle size={17} />
+              <span>
+                {error ||
+                  "El acceso institucional no está disponible en este entorno. Puedes explorar la demostración."}
+              </span>
+            </div>
           )}
+
+          {mode === "bootstrap" && (
+            <>
+              <label className="login-field-label" htmlFor="login-name">
+                Nombre completo
+              </label>
+              <div className="login-input-wrap">
+                <UserRound size={17} />
+                <input
+                  id="login-name"
+                  autoComplete="name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Alejandra Torres"
+                  disabled={busy || resetting}
+                  required
+                />
+              </div>
+            </>
+          )}
+
+          <label className="login-field-label" htmlFor="login-email">
+            Correo institucional
+          </label>
+          <div className="login-input-wrap">
+            <Mail size={17} />
+            <input
+              id="login-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="nombre@cehf.edu.mx"
+              disabled={busy || resetting}
+              aria-invalid={Boolean(error)}
+              required
+            />
+          </div>
+
+          <label className="login-field-label" htmlFor="login-password">
+            Contraseña
+          </label>
+          <div className="login-input-wrap login-password-field">
+            <LockKeyhole size={17} />
+            <input
+              id="login-password"
+              type={showPassword ? "text" : "password"}
+              autoComplete={
+                mode === "login" ? "current-password" : "new-password"
+              }
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Al menos 8 caracteres"
+              minLength={8}
+              disabled={busy || resetting}
+              aria-invalid={Boolean(error)}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((show) => !show)}
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+            >
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
+          </div>
+
+          {mode === "login" && (
+            <div className="login-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(event) => setRemember(event.target.checked)}
+                  disabled={busy || resetting}
+                />
+                Mantener mi sesión
+              </label>
+              <button
+                type="button"
+                disabled={busy || resetting || !configured}
+                onClick={async () => {
+                  if (!email.trim()) {
+                    setError("Escribe primero tu correo institucional.");
+                    return;
+                  }
+                  setResetting(true);
+                  setError("");
+                  try {
+                    await resetPassword(email.trim());
+                    toast.success("Revisa tu correo", {
+                      description:
+                        "Te enviamos instrucciones para recuperar el acceso.",
+                    });
+                  } catch (resetError) {
+                    setError(friendlyFirebaseError(resetError));
+                  } finally {
+                    setResetting(false);
+                  }
+                }}
+              >
+                {resetting ? "Enviando…" : "¿Olvidaste tu contraseña?"}
+              </button>
+            </div>
+          )}
+
+          <button
+            className="login-button"
+            type="submit"
+            disabled={busy || resetting || !configured}
+          >
+            {busy ? <span className="button-spinner" /> : <LogIn size={17} />}
+            {busy
+              ? "Verificando acceso…"
+              : mode === "login"
+                ? "Entrar a CEHF"
+                : "Crear portal"}
+          </button>
+
+          <button
+            type="button"
+            className="text-button mode-button"
+            onClick={() => {
+              setError("");
+              setMode((current) =>
+                current === "login" ? "bootstrap" : "login",
+              );
+            }}
+          >
+            {mode === "login"
+              ? "¿Es la primera vez? Activar portal"
+              : "Ya existe una cuenta · Iniciar sesión"}
+          </button>
+
           <div className="demo-divider">
             <span>o</span>
           </div>
-          <button className="secondary-button demo-button" onClick={onDemo}>
+          <button
+            className="secondary-button demo-button"
+            type="button"
+            onClick={onDemo}
+          >
             <Sparkles size={18} />
             Explorar la demostración
           </button>
-          <p className="privacy-copy">
-            <ShieldCheck size={15} /> Tus datos académicos nunca se comparten en
-            espacios sociales.
+          <div className="login-security">
+            <ShieldCheck size={15} /> Acceso cifrado y protegido por Firebase
+          </div>
+          <p className="login-help">
+            ¿Aún no tienes cuenta? Solicítala directamente en Dirección.
           </p>
-        </div>
-      </section>
-    </div>
+          </motion.form>
+        </section>
+      </motion.div>
+    </>
   );
 }
 

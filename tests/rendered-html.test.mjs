@@ -33,6 +33,7 @@ test("server-renders the CEHF Primaria entry experience", async () => {
   const html = await response.text();
   assert.match(html, /<title>CEHF Primaria<\/title>/i);
   assert.match(html, /Una semana clara para aprender mejor/i);
+  assert.match(html, /Qué bueno verte/i);
   assert.match(html, /Explorar la demostración/i);
   assert.match(html, /manifest\.webmanifest/i);
   assert.match(html, /og\.png/i);
@@ -54,13 +55,14 @@ test("supports the documented application routes", async () => {
 });
 
 test("ships Firebase setup, rules, indexes, storage and PWA assets", async () => {
-  const [envExample, firestoreRules, storageRules, indexes, manifest] =
+  const [envExample, firestoreRules, storageRules, indexes, manifest, css] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
       readFile(new URL("firestore.rules", projectRoot), "utf8"),
       readFile(new URL("storage.rules", projectRoot), "utf8"),
       readFile(new URL("firestore.indexes.json", projectRoot), "utf8"),
       readFile(new URL("public/manifest.webmanifest", projectRoot), "utf8"),
+      readFile(new URL("app/globals.css", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -80,6 +82,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(storageRules, /safeUpload/);
   assert.match(indexes, /weeklyMaterials/);
   assert.match(manifest, /CEHF Primaria/);
+  assert.match(css, /--violet:\s*#123b63/i);
+  assert.match(css, /--coral:\s*#c62e45/i);
+  assert.match(css, /url\("\/login-campus\.jpg"\)/i);
   await access(new URL("public/og.png", projectRoot));
+  await access(new URL("public/login-campus.jpg", projectRoot));
   await access(new URL("public/sw.js", projectRoot));
 });
