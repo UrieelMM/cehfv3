@@ -136,7 +136,24 @@ function academicTaskCollection(config: AcademicConfig, subjectId: string) {
   );
 }
 
+export function isFirebaseTaskAssignment(task: TaskAssignment) {
+  const segments = task.firestorePath.split("/").filter(Boolean);
+  return (
+    segments.length === 12 &&
+    segments[0] === "institutions" &&
+    segments[2] === "ciclosEscolares" &&
+    segments[4] === "trimestres" &&
+    segments[6] === "semanas" &&
+    segments[8] === "materias" &&
+    segments[10] === "tareas" &&
+    segments[11] === task.id
+  );
+}
+
 function taskRef(task: TaskAssignment) {
+  if (!isFirebaseTaskAssignment(task)) {
+    throw new Error("Esta tarea pertenece al modo demostración, no a Firebase.");
+  }
   const { db } = requireFirebase();
   return doc(db, task.firestorePath);
 }

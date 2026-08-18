@@ -123,10 +123,12 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(css, /url\("\/login-campus\.jpg"\)/i);
   assert.match(firebaseSource, /createManagedAccount/);
   assert.match(firebaseSource, /cehf-account-creator/);
+  assert.match(firebaseSource, /refreshPortalAccess/);
   assert.match(appSource, /account-registration-modal/);
   assert.match(appSource, /Contraseña temporal/);
   assert.doesNotMatch(appSource, /Activar portal/);
   assert.match(taskSource, /createTaskAssignment/);
+  assert.match(taskSource, /isFirebaseTaskAssignment/);
   assert.match(taskSource, /watchTaskAssignments/);
   assert.match(taskSource, /watchAcademicCalendar/);
   assert.match(taskSource, /resolveAcademicConfig/);
@@ -134,6 +136,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(taskSource, /submitTaskResponse/);
   assert.match(taskUiSource, /TaskCreateModal/);
   assert.match(taskUiSource, /TaskDetailModal/);
+  assert.match(taskUiSource, /liveFirebaseTask/);
   assert.match(taskUiSource, /Prórroga individual/);
   assert.match(taskUiSource, /Calendario académico/);
   assert.match(taskUiSource, /Agregar semana/);
@@ -144,6 +147,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /onTaskConversationEvent/);
   assert.match(functionsSource, /export const saveAcademicCalendar/);
   assert.match(functionsSource, /export const syncAcademicCalendar/);
+  assert.match(functionsSource, /export const refreshPortalAccess/);
+  assert.match(functionsSource, /setCustomUserClaims/);
   assert.match(functionsSource, /Cada semana sólo puede pertenecer a un trimestre/);
   assert.match(taskCss, /task-modern-grid/);
   await access(new URL("public/og-campus.png", projectRoot));

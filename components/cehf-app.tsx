@@ -69,6 +69,7 @@ import {
   loadPortalState,
   loginWithEmail,
   logoutFirebase,
+  refreshPortalAccess,
   resetPassword,
   savePortalState,
   watchAuth,
@@ -400,7 +401,10 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
-    queueMicrotask(() => setTaskRecordsLoading(true));
+    queueMicrotask(() => {
+      setTaskRecords([]);
+      setTaskRecordsLoading(true);
+    });
     return watchTaskAssignments(
       profile,
       academicConfig,
@@ -452,6 +456,7 @@ export function CEHFApp() {
       }
       try {
         const nextProfile = await getProfile(user);
+        if (nextProfile) await refreshPortalAccess(user);
         setProfile(nextProfile);
         if (nextProfile) {
           setState(await loadPortalState(nextProfile));

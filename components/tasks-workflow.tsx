@@ -39,6 +39,7 @@ import {
   extendTaskForGroup,
   getTaskAttachmentUrl,
   grantIndividualTaskExtension,
+  isFirebaseTaskAssignment,
   isTaskSubmissionOpen,
   markTaskSubmissionReviewed,
   publishTaskNow,
@@ -814,14 +815,15 @@ export function TaskDetailModal({
   onDemoTaskChange: (task: TaskAssignment) => void;
 }) {
   const staff = profile.role !== "student";
+  const liveFirebaseTask = firebaseReady && isFirebaseTaskAssignment(task);
   const [submissions, setSubmissions] = useState<TaskSubmission[]>(() =>
-    !firebaseReady && staff ? [demoSubmission(profile)] : [],
+    !liveFirebaseTask && staff ? [demoSubmission(profile)] : [],
   );
   const [selectedStudentId, setSelectedStudentId] = useState(
     profile.role === "student" ? profile.uid : "",
   );
   const [history, setHistory] = useState<TaskHistoryEvent[]>(() =>
-    !firebaseReady && staff ? demoHistory(demoSubmission(profile)) : [],
+    !liveFirebaseTask && staff ? demoHistory(demoSubmission(profile)) : [],
   );
   const [taskHistory, setTaskHistory] = useState<TaskHistoryEvent[]>([]);
   const [extension, setExtension] = useState<TaskExtension | null>(null);
@@ -871,30 +873,30 @@ export function TaskDetailModal({
   }, [onClose]);
 
   useEffect(() => {
-    if (!firebaseReady) return;
+    if (!liveFirebaseTask) return;
     return watchTaskSubmissions(task, profile, setSubmissions, (error) =>
       toast.error(error.message),
     );
-  }, [firebaseReady, profile, task]);
+  }, [liveFirebaseTask, profile, task]);
 
   useEffect(() => {
-    if (!activeSelectedStudentId || !firebaseReady) return;
+    if (!activeSelectedStudentId || !liveFirebaseTask) return;
     return watchSubmissionHistory(task, activeSelectedStudentId, setHistory, (error) =>
       toast.error(error.message),
     );
-  }, [activeSelectedStudentId, firebaseReady, task]);
+  }, [activeSelectedStudentId, liveFirebaseTask, task]);
 
   useEffect(() => {
-    if (!firebaseReady || !staff) return;
+    if (!liveFirebaseTask || !staff) return;
     return watchTaskHistory(task, setTaskHistory, (error) => toast.error(error.message));
-  }, [firebaseReady, staff, task]);
+  }, [liveFirebaseTask, staff, task]);
 
   useEffect(() => {
-    if (!activeSelectedStudentId || !firebaseReady) return;
+    if (!activeSelectedStudentId || !liveFirebaseTask) return;
     return watchTaskExtension(task, activeSelectedStudentId, setExtension, (error) =>
       toast.error(error.message),
     );
-  }, [activeSelectedStudentId, firebaseReady, task]);
+  }, [activeSelectedStudentId, liveFirebaseTask, task]);
 
   async function runAction(key: string, action: () => Promise<void>, success: string) {
     setBusy(key);
@@ -909,7 +911,7 @@ export function TaskDetailModal({
   }
 
   async function openAttachment(attachment: TaskAttachment) {
-    if (!firebaseReady) {
+    if (!liveFirebaseTask) {
       toast.info("Este archivo es parte de la demostración.");
       return;
     }
@@ -923,7 +925,7 @@ export function TaskDetailModal({
 
   async function submitResponse() {
     if (!response.trim() && !responseFiles.length) return;
-    if (!firebaseReady) {
+    if (!liveFirebaseTask) {
       const current = submissions.find((item) => item.studentId === profile.uid);
       const next: TaskSubmission = {
         id: profile.uid,
@@ -971,7 +973,7 @@ export function TaskDetailModal({
 
   async function sendFeedback() {
     if (!selectedSubmission || !feedback.trim()) return;
-    if (!firebaseReady) {
+    if (!liveFirebaseTask) {
       const now = new Date().toISOString();
       setSubmissions((current) =>
         current.map((item) =>
@@ -1128,7 +1130,7 @@ export function TaskDetailModal({
               sendFeedback={sendFeedback}
               busy={busy}
               runAction={runAction}
-              firebaseReady={firebaseReady}
+              firebaseReady={liveFirebaseTask}
               onDemoTaskChange={onDemoTaskChange}
               groupDueAt={groupDueAt}
               setGroupDueAt={setGroupDueAt}

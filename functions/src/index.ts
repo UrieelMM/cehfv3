@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import {
   FieldValue,
   Timestamp,
@@ -169,6 +170,48 @@ async function requireCalendarDirector(
     institutionId: String(profile?.institutionId),
   };
 }
+
+export const refreshPortalAccess = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  }
+  const profileSnapshot = await db.doc(`users/${request.auth.uid}`).get();
+  const profile = profileSnapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  if (
+    !profileSnapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher", "student"].includes(role) ||
+    !institutionId
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil institucional no está activo o está incompleto.",
+    );
+  }
+  const user = await getAuth().getUser(request.auth.uid);
+  const currentClaims = user.customClaims ?? {};
+  const desiredClaims = {
+    ...currentClaims,
+    role,
+    institutionId,
+    allPermissions: role === "director",
+  };
+  const changed =
+    currentClaims.role !== desiredClaims.role ||
+    currentClaims.institutionId !== desiredClaims.institutionId ||
+    currentClaims.allPermissions !== desiredClaims.allPermissions;
+  if (changed) {
+    await getAuth().setCustomUserClaims(request.auth.uid, desiredClaims);
+    logger.info("Portal access claims refreshed", {
+      uid: request.auth.uid,
+      role,
+      institutionId,
+    });
+  }
+  return { changed, role, institutionId };
+});
 
 export const saveAcademicCalendar = onCall(async (request) => {
   const director = await requireCalendarDirector(request.auth);

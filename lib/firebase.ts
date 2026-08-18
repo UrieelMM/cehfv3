@@ -34,7 +34,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { Functions, getFunctions } from "firebase/functions";
+import { Functions, getFunctions, httpsCallable } from "firebase/functions";
 import {
   getDownloadURL,
   getStorage,
@@ -281,6 +281,28 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
       : undefined,
     initials: String(data.initials ?? "CE"),
   };
+}
+
+export async function refreshPortalAccess(user: User) {
+  if (!functions) return false;
+  const callable = httpsCallable<
+    Record<string, never>,
+    { changed: boolean; role: Role; institutionId: string }
+  >(functions, "refreshPortalAccess");
+  try {
+    const result = await callable({});
+    if (result.data.changed) await user.getIdToken(true);
+    return result.data.changed;
+  } catch (error) {
+    const code =
+      typeof error === "object" && error && "code" in error
+        ? String(error.code)
+        : "";
+    if (code === "functions/not-found" || code === "functions/unavailable") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 const sharedStateRef = () =>
