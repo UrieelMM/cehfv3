@@ -128,6 +128,7 @@
 .task-repeatable-heading > button { border: 0; background: transparent; color: var(--violet); font-size: .62rem; font-weight: 720; cursor: pointer; }
 .task-repeatable-list, .task-file-slots { display: grid; gap: 8px; }
 .task-link-row { display: grid; grid-template-columns: .7fr 1.3fr auto; align-items: center; gap: 8px; }
+.task-link-row input::placeholder { font-size: .62rem; }
 .task-files-heading { margin-top: 8px; }
 .task-file-slots label, .task-response-upload { position: relative; display: flex; min-height: 62px; align-items: center; gap: 11px; padding: 10px 12px; border: 1px dashed color-mix(in srgb, var(--violet) 32%, var(--border)); border-radius: 11px; background: color-mix(in srgb, var(--violet-soft) 35%, var(--surface)); color: var(--violet); cursor: pointer; }
 .task-file-slots label.has-file { border-style: solid; border-color: color-mix(in srgb, var(--mint) 34%, var(--border)); }
