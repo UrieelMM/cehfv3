@@ -195,11 +195,16 @@ export function CEHFApp() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState<string | null>(null);
   const [mobileMore, setMobileMore] = useState(false);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   const currentProfile = profile ?? demoProfiles[demoRole];
   const usingDemo = !firebaseUser;
   const role = currentProfile.role;
   const unread = state.notifications.filter((item) => !item.read).length;
+  const darkModeActive =
+    state.settings.theme === "dark" ||
+    (state.settings.theme === "system" && systemPrefersDark);
 
   useEffect(() => {
     const onPopState = () =>
@@ -292,6 +297,14 @@ export function CEHFApp() {
     );
   }, [state.settings]);
 
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncPreference = () => setSystemPrefersDark(media.matches);
+    syncPreference();
+    media.addEventListener("change", syncPreference);
+    return () => media.removeEventListener("change", syncPreference);
+  }, []);
+
   function navigate(section: SectionKey) {
     window.history.pushState({}, "", routes[section]);
     setActiveSection(section);
@@ -316,6 +329,16 @@ export function CEHFApp() {
       return next;
     });
     if (successMessage) toast.success(successMessage);
+  }
+
+  function toggleTheme() {
+    updateState((previous) => ({
+      ...previous,
+      settings: {
+        ...previous.settings,
+        theme: darkModeActive ? "light" : "dark",
+      },
+    }));
   }
 
   if (!authReady) return <LoadingScreen />;
@@ -443,6 +466,47 @@ export function CEHFApp() {
           </div>
           <div className="topbar-actions">
             {usingDemo && <span className="demo-badge">Demo</span>}
+            <button
+              type="button"
+              className={`theme-switch ${darkModeActive ? "is-dark" : ""}`}
+              onClick={toggleTheme}
+              role="switch"
+              aria-checked={darkModeActive}
+              aria-label={
+                darkModeActive
+                  ? "Cambiar a modo claro"
+                  : "Cambiar a modo oscuro"
+              }
+              title={darkModeActive ? "Modo claro" : "Modo oscuro"}
+            >
+              <motion.span
+                className="theme-switch-thumb"
+                animate={{ x: darkModeActive ? 26 : 0 }}
+                transition={
+                  state.settings.reducedMotion || prefersReducedMotion
+                    ? { duration: 0 }
+                    : { type: "spring", stiffness: 520, damping: 30 }
+                }
+                aria-hidden="true"
+              >
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={darkModeActive ? "moon" : "sun"}
+                    initial={{ opacity: 0, rotate: -70, scale: 0.55 }}
+                    animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                    exit={{ opacity: 0, rotate: 70, scale: 0.55 }}
+                    transition={{
+                      duration:
+                        state.settings.reducedMotion || prefersReducedMotion
+                          ? 0
+                          : 0.18,
+                    }}
+                  >
+                    {darkModeActive ? <Moon size={15} /> : <Sun size={15} />}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.span>
+            </button>
             <div className="notification-wrap">
               <button
                 className="icon-button"

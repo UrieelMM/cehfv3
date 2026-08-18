@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --background: #f3f6fa;
   --surface: #ffffff;
   --surface-soft: #edf2f7;
@@ -10,9 +11,11 @@
   --muted-strong: #46566c;
   --border: #dce4ed;
   --border-strong: #c8d3df;
-  --violet: #123b63;
-  --violet-dark: #0a2947;
-  --violet-soft: #e5edf6;
+  --brand-primary: #1f2985;
+  --on-primary: #ffffff;
+  --violet: #1f2985;
+  --violet-dark: #151c63;
+  --violet-soft: #e9eafa;
   --coral: #c62e45;
   --coral-soft: #fbe8ec;
   --mint: #32758d;
@@ -33,7 +36,9 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --background: #0b1520;
+  --on-primary: #111744;
   --surface: #111f2d;
   --surface-soft: #172838;
   --surface-raised: #142434;
@@ -42,9 +47,9 @@
   --muted-strong: #c3cfda;
   --border: #283b4e;
   --border-strong: #3a5065;
-  --violet: #6ea3d1;
-  --violet-dark: #9bc0e1;
-  --violet-soft: #173452;
+  --violet: #aeb5ff;
+  --violet-dark: #d4d7ff;
+  --violet-soft: #252b5d;
   --coral: #ef6b7d;
   --coral-soft: #44212a;
   --mint: #67adc2;
@@ -61,7 +66,9 @@
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
+    color-scheme: dark;
     --background: #0b1520;
+    --on-primary: #111744;
     --surface: #111f2d;
     --surface-soft: #172838;
     --surface-raised: #142434;
@@ -70,9 +77,9 @@
     --muted-strong: #c3cfda;
     --border: #283b4e;
     --border-strong: #3a5065;
-    --violet: #6ea3d1;
-    --violet-dark: #9bc0e1;
-    --violet-soft: #173452;
+    --violet: #aeb5ff;
+    --violet-dark: #d4d7ff;
+    --violet-soft: #252b5d;
     --coral: #ef6b7d;
     --coral-soft: #44212a;
     --mint: #67adc2;
@@ -100,6 +107,18 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   text-rendering: optimizeLegibility;
+}
+
+body,
+.sidebar,
+.topbar,
+.panel,
+.mobile-nav,
+.icon-button {
+  transition:
+    background-color 280ms ease,
+    border-color 280ms ease,
+    color 220ms ease;
 }
 
 button,
@@ -194,8 +213,8 @@ code {
   overflow: hidden;
   border-radius: 13px 13px 19px 13px;
   background: var(--violet);
-  color: #fff;
-  box-shadow: 0 8px 20px rgb(18 59 99 / 0.24);
+  color: var(--on-primary);
+  box-shadow: 0 8px 20px rgb(31 41 133 / 0.24);
 }
 
 .brand-mark::after {
@@ -445,6 +464,81 @@ code {
   gap: 9px;
 }
 
+.theme-switch {
+  position: relative;
+  width: 58px;
+  height: 32px;
+  flex: 0 0 58px;
+  padding: 3px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--violet) 24%, var(--border));
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 76% 28%, rgb(255 255 255 / 0.88) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 86% 62%, rgb(255 255 255 / 0.62) 0 1px, transparent 1.5px),
+    var(--violet-soft);
+  color: var(--violet);
+  box-shadow: inset 0 1px 3px rgb(20 28 76 / 0.1);
+  transition:
+    border-color 260ms ease,
+    background-color 260ms ease,
+    box-shadow 260ms ease;
+}
+
+.theme-switch::before {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--violet);
+  box-shadow: 7px 7px 0 -1px var(--violet);
+  content: "";
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity 220ms ease,
+    transform 280ms ease;
+}
+
+.theme-switch.is-dark {
+  border-color: color-mix(in srgb, var(--violet) 30%, var(--border));
+  background-color: #171d4a;
+  box-shadow:
+    inset 0 1px 4px rgb(0 0 0 / 0.26),
+    0 0 18px rgb(107 118 255 / 0.1);
+}
+
+.theme-switch.is-dark::before {
+  opacity: 0.7;
+  transform: scale(1);
+}
+
+.theme-switch-thumb {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--violet);
+  box-shadow:
+    0 2px 7px rgb(17 28 77 / 0.24),
+    inset 0 0 0 1px rgb(255 255 255 / 0.34);
+}
+
+.theme-switch-thumb > span {
+  display: grid;
+  place-items: center;
+}
+
+.theme-switch:hover {
+  border-color: var(--violet);
+}
+
 .icon-button,
 .plain-icon {
   display: grid;
@@ -614,8 +708,8 @@ code {
 .primary-button {
   border: 1px solid var(--violet);
   background: var(--violet);
-  color: white;
-  box-shadow: 0 8px 20px rgb(18 59 99 / 0.16);
+  color: var(--on-primary);
+  box-shadow: 0 8px 20px rgb(31 41 133 / 0.16);
 }
 
 .primary-button:hover {
@@ -637,7 +731,7 @@ code {
 .light-button {
   border: 1px solid rgb(255 255 255 / 0.38);
   background: white;
-  color: #0a2947;
+  color: #151c63;
   box-shadow: 0 8px 22px rgb(7 31 54 / 0.18);
 }
 
@@ -749,7 +843,7 @@ code {
   background:
     radial-gradient(circle at 87% 13%, rgb(255 255 255 / 0.16) 0 84px, transparent 85px),
     radial-gradient(circle at 94% 83%, rgb(255 255 255 / 0.1) 0 150px, transparent 151px),
-    linear-gradient(135deg, #0a2947 0%, #164b78 58%, #27658f 100%);
+    linear-gradient(135deg, #151c63 0%, var(--brand-primary) 58%, #4855bd 100%);
   color: white;
   box-shadow: 0 18px 45px rgb(9 43 74 / 0.2);
 }
@@ -769,7 +863,7 @@ code {
   min-height: 270px;
   background:
     radial-gradient(circle at 82% 16%, rgb(255 255 255 / 0.14) 0 90px, transparent 91px),
-    linear-gradient(135deg, #082640, #1d537e);
+    linear-gradient(135deg, #151c63, #3644ad);
 }
 
 .hero-copy {
@@ -868,7 +962,7 @@ code {
   width: 102px;
   height: 102px;
   border-radius: 50%;
-  background: #164b78;
+  background: #26329d;
   content: "";
 }
 
@@ -1002,7 +1096,7 @@ code {
 .metric-icon.violet,
 .summary-icon.violet {
   background: var(--violet);
-  color: white;
+  color: var(--on-primary);
 }
 
 .coral-card .subject-icon,
@@ -2214,7 +2308,7 @@ code {
   margin-bottom: 24px;
   overflow: hidden;
   border-radius: var(--radius-lg);
-  background: linear-gradient(130deg, #0d355a, #1f557e);
+  background: linear-gradient(130deg, #151c63, #3644ad);
   color: white;
 }
 
@@ -2498,7 +2592,7 @@ code {
   height: 34px;
   place-items: center;
   border-radius: 10px 10px 14px 10px;
-  background: #123b63;
+  background: var(--brand-primary);
   color: white;
   font-family: var(--font-display);
   font-size: 0.75rem;
@@ -2861,7 +2955,7 @@ code {
   place-items: center;
   overflow: hidden;
   color: rgb(255 255 255 / 0.78);
-  background: linear-gradient(145deg, #123b63, #3b6f9e);
+  background: linear-gradient(145deg, var(--brand-primary), #4855bd);
 }
 
 .reader-story-art.coral {
@@ -2917,7 +3011,7 @@ code {
 .reader-first-paragraph::first-letter {
   float: left;
   margin: 3px 6px 0 0;
-  color: #123b63;
+  color: var(--brand-primary);
   font-size: 2.6rem;
   line-height: 0.72;
 }
@@ -3801,7 +3895,7 @@ code {
   isolation: isolate;
   padding: 45px clamp(38px, 6vw, 84px);
   flex-direction: column;
-  background: #0a2947;
+  background: #151c63;
   color: white;
 }
 
@@ -3872,7 +3966,7 @@ code {
 
 .brand-light .brand-mark {
   background: white;
-  color: #0a2947;
+  color: #151c63;
   box-shadow: none;
 }
 
@@ -4292,7 +4386,7 @@ code {
   border: 0;
   border-radius: 11px;
   background: linear-gradient(135deg, var(--violet), var(--violet-dark));
-  color: white;
+  color: var(--on-primary);
   box-shadow: 0 10px 24px color-mix(in srgb, var(--violet) 24%, transparent);
   font-size: 0.77rem;
   font-weight: 800;
@@ -5379,7 +5473,7 @@ code {
   background:
     radial-gradient(circle at 87% 18%, rgb(255 255 255 / 0.17) 0 52px, transparent 53px),
     radial-gradient(circle at 74% 126%, rgb(255 255 255 / 0.12) 0 150px, transparent 151px),
-    linear-gradient(126deg, #082640 0%, #174e78 57%, #2f668f 100%);
+    linear-gradient(126deg, #151c63 0%, #26329d 57%, #4a58c2 100%);
   color: #fff;
   box-shadow: 0 20px 50px rgb(7 35 61 / 0.22);
 }
@@ -5890,12 +5984,12 @@ code {
   height: 41px;
   place-items: center;
   border-radius: 13px;
-  background: linear-gradient(145deg, var(--violet-soft), var(--violet));
-  color: #fff;
+  background: linear-gradient(145deg, var(--violet), var(--violet-dark));
+  color: var(--on-primary);
   font-family: var(--font-display);
   font-size: 0.85rem;
   font-weight: 800;
-  box-shadow: 0 7px 18px rgb(18 59 99 / 0.2);
+  box-shadow: 0 7px 18px rgb(31 41 133 / 0.2);
 }
 
 .forum-post-author {
@@ -6506,7 +6600,7 @@ code {
   border: 1px solid var(--violet);
   border-radius: 9px;
   background: var(--violet);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 0.61rem;
   font-weight: 800;
 }

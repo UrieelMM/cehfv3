@@ -82,7 +82,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(storageRules, /safeUpload/);
   assert.match(indexes, /weeklyMaterials/);
   assert.match(manifest, /CEHF Primaria/);
-  assert.match(css, /--violet:\s*#123b63/i);
+  assert.match(css, /--brand-primary:\s*#1f2985/i);
+  assert.match(css, /--violet:\s*#1f2985/i);
   assert.match(css, /--coral:\s*#c62e45/i);
   assert.match(css, /url\("\/login-campus\.jpg"\)/i);
   await access(new URL("public/og.png", projectRoot));
