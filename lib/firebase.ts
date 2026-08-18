@@ -47,6 +47,7 @@ import type {
   ManagedAccount,
   PortalState,
   Role,
+  SchoolLevel,
   UserProfile,
 } from "./types";
 
@@ -84,6 +85,7 @@ export type ManagedAccountInput = {
   lastName: string;
   email: string;
   role: "student" | "teacher";
+  schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
   subjects: string[];
@@ -114,6 +116,15 @@ export function generateTemporaryPassword() {
     ];
   }
   return characters.join("");
+}
+
+const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
+  primary: ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"],
+  secondary: ["1.º", "2.º", "3.º"],
+};
+
+function readSchoolLevel(value: unknown): SchoolLevel {
+  return value === "secondary" ? "secondary" : "primary";
 }
 
 function accountDate(value: unknown) {
@@ -154,6 +165,7 @@ export async function listManagedAccounts(
       role,
       initials: String(data.initials ?? "CE"),
       active: data.active !== false,
+      schoolLevel: role === "student" ? readSchoolLevel(data.schoolLevel) : undefined,
       grade: data.grade ? String(data.grade) : undefined,
       group: data.group ? String(data.group) : undefined,
       subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
@@ -183,6 +195,28 @@ export async function createManagedAccount(
   const lastName = input.lastName.trim();
   const name = `${firstName} ${lastName}`.trim();
   const email = input.email.trim().toLowerCase();
+  const schoolLevel =
+    input.role === "student" &&
+    (input.schoolLevel === "primary" || input.schoolLevel === "secondary")
+      ? input.schoolLevel
+      : undefined;
+  const grade = input.grade?.trim();
+  const group = input.group?.trim();
+  if (
+    input.role === "student" &&
+    (!schoolLevel || !grade || !gradesBySchoolLevel[schoolLevel].includes(grade))
+  ) {
+    throw new Error("Selecciona un nivel y un grado válidos para el alumno.");
+  }
+  if (input.role === "student" && (!group || !["A", "B", "C"].includes(group))) {
+    throw new Error("Selecciona el grupo del alumno.");
+  }
+  if (input.subjects.length === 0) {
+    throw new Error("Selecciona al menos una materia.");
+  }
+  if (input.role === "student" && input.teacherIds.length === 0) {
+    throw new Error("Asigna al menos un maestro al alumno.");
+  }
   const password = generateTemporaryPassword();
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
   const creatorApp = initializeApp(
@@ -218,8 +252,9 @@ export async function createManagedAccount(
       role: input.role,
       initials,
       active: true,
-      grade: input.role === "student" ? input.grade : undefined,
-      group: input.role === "student" ? input.group : undefined,
+      schoolLevel,
+      grade: input.role === "student" ? grade : undefined,
+      group: input.role === "student" ? group : undefined,
       subjects: input.subjects,
       teacherIds: input.role === "student" ? input.teacherIds : [],
       photoURL,
@@ -280,6 +315,10 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
     name: String(data.name ?? user.displayName ?? "Usuario"),
     email: String(data.email ?? user.email ?? ""),
     role: (data.role ?? "student") as Role,
+    schoolLevel:
+      data.role === "student" || !data.role
+        ? readSchoolLevel(data.schoolLevel)
+        : undefined,
     grade: data.grade ? String(data.grade) : undefined,
     group: data.group ? String(data.group) : undefined,
     subjects: Array.isArray(data.subjects)

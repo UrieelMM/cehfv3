@@ -133,11 +133,15 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(css, /--coral:\s*#c62e45/i);
   assert.match(css, /url\("\/login-campus\.jpg"\)/i);
   assert.match(firebaseSource, /createManagedAccount/);
+  assert.match(firebaseSource, /schoolLevel/);
+  assert.match(firebaseSource, /gradesBySchoolLevel/);
   assert.match(firebaseSource, /cehf-account-creator/);
   assert.match(firebaseSource, /refreshPortalAccess/);
   assert.match(firebaseSource, /await user\.getIdToken\(true\)/);
   assert.match(firebaseSource, /sharedStateRef\(profile\.institutionId\)/);
   assert.match(appSource, /account-registration-modal/);
+  assert.match(appSource, /Nivel escolar/);
+  assert.match(appSource, /Alumno · \$\{schoolLevelLabels\[schoolLevel\]\}/);
   assert.match(appSource, /Contraseña temporal/);
   assert.match(appSource, /setAuthReady\(false\)/);
   assert.match(appSource, /No pudimos cargar tu acceso/);

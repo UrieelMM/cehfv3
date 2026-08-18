@@ -103,6 +103,7 @@ import type {
   PortalState,
   ProgressLevel,
   Role,
+  SchoolLevel,
   SectionKey,
   UserProfile,
   TaskAssignment,
@@ -134,6 +135,16 @@ const primarySubjectOptions = [
   "Artes",
   "Educación Física",
 ];
+
+const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
+  primary: ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"],
+  secondary: ["1.º", "2.º", "3.º"],
+};
+
+const schoolLevelLabels: Record<SchoolLevel, string> = {
+  primary: "Primaria",
+  secondary: "Secundaria",
+};
 
 const routes: Record<SectionKey, string> = {
   dashboard: "/dashboard",
@@ -2686,7 +2697,10 @@ function UsersPage({
   const teachers = accounts.filter((account) => account.role === "teacher");
   const groups = new Set(
     students
-      .map((account) => `${account.grade ?? ""} ${account.group ?? ""}`.trim())
+      .map(
+        (account) =>
+          `${schoolLevelLabels[account.schoolLevel ?? "primary"]} ${account.grade ?? ""} ${account.group ?? ""}`.trim(),
+      )
       .filter(Boolean),
   );
   return (
@@ -2791,7 +2805,7 @@ function UsersPage({
                 <span>{account.role === "student" ? "Estudiante" : "Maestro"}</span>
                 <span>
                   {account.role === "student"
-                    ? `${account.grade ?? "Sin grado"} ${account.group ?? ""}`
+                    ? `${schoolLevelLabels[account.schoolLevel ?? "primary"]} · ${account.grade ?? "Sin grado"} ${account.group ?? ""}`
                     : account.subjects.join(" · ") || "Sin materias"}
                 </span>
                 <span
@@ -3140,6 +3154,7 @@ function AccountRegistrationModal({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [schoolLevel, setSchoolLevel] = useState<SchoolLevel>("primary");
   const [grade, setGrade] = useState("5.º");
   const [group, setGroup] = useState("A");
   const [subjects, setSubjects] = useState<string[]>([]);
@@ -3158,10 +3173,14 @@ function AccountRegistrationModal({
       teacher.subjects.some((subject) => subjects.includes(subject)),
   );
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const validStudentAssignment =
+    accountRole === "teacher" ||
+    (gradesBySchoolLevel[schoolLevel].includes(grade) && Boolean(group));
   const identityComplete = Boolean(
     firstName.trim() && lastName.trim() && validEmail && photo,
   );
   const assignmentComplete =
+    validStudentAssignment &&
     subjects.length > 0 &&
     (accountRole === "teacher" || teacherIds.length > 0);
   const ready = identityComplete && assignmentComplete;
@@ -3187,6 +3206,11 @@ function AccountRegistrationModal({
   function selectRole(nextRole: "student" | "teacher") {
     setAccountRole(nextRole);
     setTeacherIds([]);
+  }
+
+  function selectSchoolLevel(nextLevel: SchoolLevel) {
+    setSchoolLevel(nextLevel);
+    setGrade(nextLevel === "primary" ? "5.º" : "1.º");
   }
 
   function selectPhoto(file?: File) {
@@ -3247,6 +3271,7 @@ function AccountRegistrationModal({
     setFirstName("");
     setLastName("");
     setEmail("");
+    setSchoolLevel("primary");
     setGrade("5.º");
     setGroup("A");
     setSubjects([]);
@@ -3276,6 +3301,7 @@ function AccountRegistrationModal({
               lastName,
               email,
               role: accountRole,
+              schoolLevel: accountRole === "student" ? schoolLevel : undefined,
               grade: accountRole === "student" ? grade : undefined,
               group: accountRole === "student" ? group : undefined,
               subjects,
@@ -3300,6 +3326,8 @@ function AccountRegistrationModal({
                     initials:
                       `${cleanFirstName[0] ?? ""}${cleanLastName[0] ?? ""}`.toUpperCase(),
                     active: true,
+                    schoolLevel:
+                      accountRole === "student" ? schoolLevel : undefined,
                     grade: accountRole === "student" ? grade : undefined,
                     group: accountRole === "student" ? group : undefined,
                     subjects,
@@ -3405,7 +3433,9 @@ function AccountRegistrationModal({
                 <Check size={34} />
               </motion.span>
               <span className="role-chip">
-                {credentials.account.role === "student" ? "Alumno" : "Maestro"}
+                {credentials.account.role === "student"
+                  ? `Alumno · ${schoolLevelLabels[credentials.account.schoolLevel ?? "primary"]}`
+                  : "Maestro"}
               </span>
               <h3>{credentials.account.name}</h3>
               <p>
@@ -3544,7 +3574,8 @@ function AccountRegistrationModal({
                     </div>
                     {accountRole === "student" && (
                       <div className="registration-grade-grid">
-                        <label>Grado<select value={grade} onChange={(event) => setGrade(event.target.value)}>{["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"].map((item) => <option key={item}>{item}</option>)}</select></label>
+                        <label>Nivel escolar<select value={schoolLevel} onChange={(event) => selectSchoolLevel(event.target.value as SchoolLevel)}><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
+                        <label>Grado<select value={grade} onChange={(event) => setGrade(event.target.value)}>{gradesBySchoolLevel[schoolLevel].map((item) => <option key={item}>{item}</option>)}</select></label>
                         <label>Grupo<select value={group} onChange={(event) => setGroup(event.target.value)}>{["A", "B", "C"].map((item) => <option key={item}>{item}</option>)}</select></label>
                       </div>
                     )}
@@ -3603,7 +3634,7 @@ function AccountRegistrationModal({
                 </div>
                 <motion.article className="registration-summary-card" layout>
                   <span className="registration-summary-avatar">{firstName[0]?.toUpperCase() || (accountRole === "student" ? "A" : "M")}{lastName[0]?.toUpperCase() || ""}</span>
-                  <span className="role-chip">{accountRole === "student" ? "Alumno" : "Maestro"}</span>
+                  <span className="role-chip">{accountRole === "student" ? `Alumno · ${schoolLevelLabels[schoolLevel]}` : "Maestro"}</span>
                   <h3>{displayName}</h3>
                   <p>{email.trim() || "correo@cehf.edu.mx"}</p>
                   <div className="registration-summary-facts">

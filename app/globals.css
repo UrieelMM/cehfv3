@@ -4689,6 +4689,7 @@ code {
 }
 
 .registration-grade-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 16px;
 }
 
@@ -5220,6 +5221,7 @@ code {
 
   .account-role-picker,
   .registration-name-grid,
+  .registration-grade-grid,
   .registration-teachers > div,
   .account-credential-grid {
     grid-template-columns: 1fr;

@@ -1,4 +1,5 @@
 export type Role = "director" | "teacher" | "student";
+export type SchoolLevel = "primary" | "secondary";
 
 export type UserProfile = {
   uid: string;
@@ -6,6 +7,7 @@ export type UserProfile = {
   name: string;
   email: string;
   role: Role;
+  schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
   subjects?: string[];
@@ -21,6 +23,7 @@ export type ManagedAccount = {
   role: "student" | "teacher";
   initials: string;
   active: boolean;
+  schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
   subjects: string[];
