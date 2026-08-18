@@ -60,6 +60,7 @@ import {
 import {
   createManagedAccount,
   firebaseConfigured,
+  firebaseErrorDetails,
   friendlyFirebaseError,
   generateTemporaryPassword,
   getProfile,
@@ -3352,6 +3353,10 @@ function AccountRegistrationModal({
         },
       );
     } catch (error) {
+      console.error(
+        "[Campus CEHF] registrar cuenta",
+        firebaseErrorDetails(error),
+      );
       toast.error("No pudimos crear la cuenta", {
         description: friendlyFirebaseError(error),
       });

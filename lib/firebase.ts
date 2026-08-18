@@ -146,6 +146,50 @@ function profilePhotoMetadata(type: string) {
   return null;
 }
 
+type ManagedAccountCreationStage =
+  | "validate"
+  | "refresh-access"
+  | "create-auth-user"
+  | "upload-photo"
+  | "read-photo"
+  | "save-profile";
+
+function firebaseErrorCode(error: unknown) {
+  return typeof error === "object" && error && "code" in error
+    ? String(error.code)
+    : "";
+}
+
+class ManagedAccountCreationError extends Error {
+  readonly code: string;
+  readonly stage: ManagedAccountCreationStage;
+  readonly causeCode: string;
+  readonly originalError: unknown;
+  readonly userMessage?: string;
+
+  constructor(
+    stage: ManagedAccountCreationStage,
+    originalError: unknown,
+    userMessage?: string,
+  ) {
+    super(
+      originalError instanceof Error
+        ? originalError.message
+        : "No pudimos crear la cuenta.",
+    );
+    this.name = "ManagedAccountCreationError";
+    this.code = `account/${stage}`;
+    this.stage = stage;
+    this.causeCode = firebaseErrorCode(originalError);
+    this.originalError = originalError;
+    this.userMessage = userMessage;
+  }
+}
+
+function accountValidationError(message: string) {
+  return new ManagedAccountCreationError("validate", new Error(message), message);
+}
+
 function accountDate(value: unknown) {
   if (
     value &&
@@ -208,14 +252,12 @@ export async function createManagedAccount(
     throw new Error("Firebase no está configurado.");
   }
   const director = auth.currentUser;
-  if (!director) throw new Error("Inicia sesión como Dirección.");
+  if (!director) throw accountValidationError("Inicia sesión como Dirección.");
   const photoMetadata = profilePhotoMetadata(input.photo.type);
   if (!photoMetadata || input.photo.size >= 4 * 1024 * 1024) {
-    throw new Error("Selecciona una fotografía JPG, JPEG, PNG o WEBP menor a 4 MB.");
-  }
-  const access = await refreshPortalAccess(director);
-  if (access.role !== "director" || access.institutionId !== institutionId) {
-    throw new Error("Tu sesión de Dirección no corresponde a esta institución.");
+    throw accountValidationError(
+      "Selecciona una fotografía JPG, JPEG, PNG o WEBP menor a 4 MB.",
+    );
   }
 
   const firstName = input.firstName.trim();
@@ -233,16 +275,18 @@ export async function createManagedAccount(
     input.role === "student" &&
     (!schoolLevel || !grade || !gradesBySchoolLevel[schoolLevel].includes(grade))
   ) {
-    throw new Error("Selecciona un nivel y un grado válidos para el alumno.");
+    throw accountValidationError(
+      "Selecciona un nivel y un grado válidos para el alumno.",
+    );
   }
   if (input.role === "student" && (!group || !["A", "B", "C"].includes(group))) {
-    throw new Error("Selecciona el grupo del alumno.");
+    throw accountValidationError("Selecciona el grupo del alumno.");
   }
   if (input.subjects.length === 0) {
-    throw new Error("Selecciona al menos una materia.");
+    throw accountValidationError("Selecciona al menos una materia.");
   }
   if (input.role === "student" && input.teacherIds.length === 0) {
-    throw new Error("Asigna al menos un maestro al alumno.");
+    throw accountValidationError("Asigna al menos un maestro al alumno.");
   }
   const password = generateTemporaryPassword();
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
@@ -253,8 +297,14 @@ export async function createManagedAccount(
   const creatorAuth = getAuth(creatorApp);
   let createdUser: User | null = null;
   let uploadedPhotoReference: StorageReference | null = null;
+  let creationStage: ManagedAccountCreationStage = "refresh-access";
 
   try {
+    const access = await refreshPortalAccess(director);
+    if (access.role !== "director" || access.institutionId !== institutionId) {
+      throw new Error("La sesión no corresponde a Dirección de esta institución.");
+    }
+    creationStage = "create-auth-user";
     const credential = await createUserWithEmailAndPassword(
       creatorAuth,
       email,
@@ -262,6 +312,7 @@ export async function createManagedAccount(
     );
     createdUser = credential.user;
     await updateProfile(createdUser, { displayName: name });
+    creationStage = "upload-photo";
     const photoReference = ref(
       storage,
       `institutions/${institutionId}/profiles/${createdUser.uid}/profile.${photoMetadata.extension}`,
@@ -270,6 +321,7 @@ export async function createManagedAccount(
     await uploadBytes(photoReference, input.photo, {
       contentType: photoMetadata.contentType,
     });
+    creationStage = "read-photo";
     const photoURL = await getDownloadURL(photoReference);
     const account: ManagedAccount = {
       uid: createdUser.uid,
@@ -288,12 +340,26 @@ export async function createManagedAccount(
       photoURL,
       createdAt: new Date().toISOString(),
     };
+    creationStage = "save-profile";
     await setDoc(doc(db, "users", createdUser.uid), {
-      ...account,
+      uid: account.uid,
+      firstName: account.firstName,
+      lastName: account.lastName,
+      name: account.name,
+      email: account.email,
+      role: account.role,
+      initials: account.initials,
+      active: account.active,
+      subjects: account.subjects,
+      teacherIds: account.teacherIds,
+      photoURL: account.photoURL,
       institutionId,
       createdBy: director.uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      ...(input.role === "student"
+        ? { schoolLevel, grade, group }
+        : {}),
     });
     return { account, password };
   } catch (error) {
@@ -301,7 +367,9 @@ export async function createManagedAccount(
       await deleteObject(uploadedPhotoReference).catch(() => undefined);
     }
     if (createdUser) await deleteUser(createdUser).catch(() => undefined);
-    throw error;
+    throw error instanceof ManagedAccountCreationError
+      ? error
+      : new ManagedAccountCreationError(creationStage, error);
   } finally {
     await signOut(creatorAuth).catch(() => undefined);
     await deleteApp(creatorApp).catch(() => undefined);
@@ -434,10 +502,7 @@ export async function savePortalState(
 }
 
 export function friendlyFirebaseError(error: unknown) {
-  const code =
-    typeof error === "object" && error && "code" in error
-      ? String(error.code)
-      : "";
+  const code = firebaseErrorCode(error);
   const messages: Record<string, string> = {
     "auth/invalid-credential":
       "El correo o la contraseña no coinciden. Revisa e intenta de nuevo.",
@@ -453,8 +518,57 @@ export function friendlyFirebaseError(error: unknown) {
       "No pudimos conectar con Firebase. Revisa la red e intenta nuevamente.",
     "storage/unauthorized":
       "Firebase Storage rechazó la fotografía. Publica las reglas incluidas en el proyecto.",
+    "storage/object-not-found":
+      "La fotografía ya no está disponible en Storage. Selecciónala nuevamente.",
+    "functions/unauthenticated":
+      "Tu sesión venció. Cierra sesión y vuelve a ingresar.",
+    "functions/permission-denied":
+      "Tu cuenta no tiene permisos de Dirección para realizar este registro.",
+    "invalid-argument":
+      "Firebase recibió datos inválidos. Revisa los campos del formulario.",
     "permission-denied":
       "Firebase rechazó la operación. Revisa que hayas publicado las reglas incluidas.",
   };
+  if (error instanceof ManagedAccountCreationError) {
+    if (error.userMessage) return error.userMessage;
+    if (
+      error.stage === "create-auth-user" &&
+      messages[error.causeCode]
+    ) {
+      return messages[error.causeCode];
+    }
+    const stageMessages: Record<ManagedAccountCreationStage, string> = {
+      validate: "Revisa los datos del formulario e intenta nuevamente.",
+      "refresh-access":
+        "No pudimos validar tu sesión de Dirección. Cierra sesión y vuelve a ingresar.",
+      "create-auth-user":
+        "Firebase Authentication no pudo crear el acceso. Revisa el correo e intenta nuevamente.",
+      "upload-photo":
+        "No pudimos subir la fotografía a Storage. Revisa el archivo y los permisos de carga.",
+      "read-photo":
+        "La fotografía se subió, pero Storage no permitió obtener su URL.",
+      "save-profile":
+        "Firestore no pudo guardar el perfil. La cuenta temporal y su fotografía fueron eliminadas.",
+    };
+    return stageMessages[error.stage];
+  }
   return messages[code] ?? "No pudimos completar la acción. Intenta nuevamente.";
+}
+
+export function firebaseErrorDetails(error: unknown) {
+  if (error instanceof ManagedAccountCreationError) {
+    return {
+      name: error.name,
+      code: error.code,
+      stage: error.stage,
+      causeCode: error.causeCode || undefined,
+      message: error.message,
+      originalError: error.originalError,
+    };
+  }
+  return {
+    code: firebaseErrorCode(error) || undefined,
+    message: error instanceof Error ? error.message : String(error),
+    originalError: error,
+  };
 }

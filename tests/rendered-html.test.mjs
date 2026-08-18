@@ -153,6 +153,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firebaseSource, /await refreshPortalAccess\(director\)/);
   assert.match(firebaseSource, /contentType: photoMetadata\.contentType/);
   assert.match(firebaseSource, /deleteObject\(uploadedPhotoReference\)/);
+  assert.match(firebaseSource, /creationStage = "save-profile"/);
+  assert.match(firebaseSource, /Firestore no pudo guardar el perfil/);
+  assert.match(firebaseSource, /firebaseErrorDetails/);
+  assert.doesNotMatch(firebaseSource, /\.\.\.account,\s*institutionId/);
   assert.match(firebaseSource, /schoolLevel/);
   assert.match(firebaseSource, /gradesBySchoolLevel/);
   assert.match(firebaseSource, /cehf-account-creator/);
@@ -167,6 +171,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /Contraseña temporal/);
   assert.match(appSource, /setAuthReady\(false\)/);
   assert.match(appSource, /No pudimos cargar tu acceso/);
+  assert.match(appSource, /\[Campus CEHF\] registrar cuenta/);
   assert.match(appSource, /Operación: \$\{operation\}/);
   assert.doesNotMatch(appSource, /Activar portal/);
   assert.match(taskSource, /createTaskAssignment/);
