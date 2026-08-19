@@ -59,6 +59,46 @@ service firebase.storage {
         && request.resource.contentType.matches("(application/pdf|image/.*)");
     }
 
+    function workshopSafeUpload() {
+      return request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches(
+          "(application/pdf|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-(excel|powerpoint)|application/(zip|x-zip-compressed)|image/.*|audio/.*|video/.*|text/(plain|csv))"
+        );
+    }
+
+    function workshop(institutionId, workshopId) {
+      return firestore.get(
+        /databases/(default)/documents/institutions/$(institutionId)/workshops/$(workshopId)
+      ).data;
+    }
+
+    function canReadWorkshop(institutionId, workshopId) {
+      let data = workshop(institutionId, workshopId);
+      return sameInstitution(institutionId)
+        && data.institutionId == institutionId
+        && (
+          isDirector()
+          || (
+            data.memberIds is list
+            && request.auth.uid in data.memberIds
+          )
+        );
+    }
+
+    function canManageWorkshop(institutionId, workshopId) {
+      let data = workshop(institutionId, workshopId);
+      return sameInstitution(institutionId)
+        && data.institutionId == institutionId
+        && (
+          isDirector()
+          || (
+            profile().role == "teacher"
+            && data.managerIds is list
+            && request.auth.uid in data.managerIds
+          )
+        );
+    }
+
     function forumParticipationEnabled(institutionId) {
       let banPath = /databases/(default)/documents/forumBans/$(institutionId)/users/$(request.auth.uid);
       return !firestore.exists(banPath) || firestore.get(banPath).data.active != true;
@@ -176,6 +216,14 @@ service firebase.storage {
       allow update, delete: if isStaff()
         && sameInstitution(institutionId)
         && (request.resource == null || safeUpload());
+    }
+
+    match /institutions/{institutionId}/workshops/{workshopId}/resources/{resourceId}/{fileName} {
+      allow read: if canReadWorkshop(institutionId, workshopId);
+      allow create: if canManageWorkshop(institutionId, workshopId)
+        && workshopSafeUpload();
+      allow update: if false;
+      allow delete: if canManageWorkshop(institutionId, workshopId);
     }
 
     match /institutions/{institutionId}/profiles/{userId}/{assetId} {

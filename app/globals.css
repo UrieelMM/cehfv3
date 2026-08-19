@@ -8681,6 +8681,14 @@ code {
   white-space: pre-wrap;
 }
 
+.forum-inline-mention {
+  padding: 1px 4px;
+  border-radius: 5px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-weight: 850;
+}
+
 .forum-marked-label {
   display: inline-flex;
   align-items: center;

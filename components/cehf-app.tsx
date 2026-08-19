@@ -52,6 +52,7 @@ import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
 import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
+import { WorkshopsPage } from "@/components/workshops-page";
 import {
   AcademicConfigurationCard,
   TaskCreateModal,
@@ -100,6 +101,7 @@ import {
   createForumTopic,
   watchForumWorkspace,
 } from "@/lib/forum-firebase";
+import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
 import type {
   AcademicCalendar,
   AcademicCalendarInput,
@@ -163,6 +165,7 @@ const routes: Record<SectionKey, string> = {
   "weekly-materials": "/weekly-materials",
   "wall-newspaper": "/wall-newspaper",
   forum: "/forum",
+  workshops: "/workshops",
   users: "/users",
   settings: "/settings",
   profile: "/profile",
@@ -236,6 +239,7 @@ const navigation: Array<{
   { key: "weekly-materials", label: "Materiales", icon: Library },
   { key: "wall-newspaper", label: "Periódico mural", icon: Newspaper },
   { key: "forum", label: "Foro", icon: MessageCircle },
+  { key: "workshops", label: "Talleres", icon: Sparkles },
   {
     key: "users",
     label: "Comunidad",
@@ -263,6 +267,7 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
     title: "Periódico mural",
   },
   forum: { eyebrow: "Conversaciones guiadas", title: "Foro" },
+  workshops: { eyebrow: "Explorar, crear y compartir", title: "Talleres" },
   users: { eyebrow: "Personas y asignaciones", title: "Comunidad escolar" },
   settings: { eyebrow: "Preferencias del portal", title: "Configuración" },
   profile: { eyebrow: "Tu espacio", title: "Perfil" },
@@ -306,6 +311,10 @@ export function CEHFApp() {
   const [state, setState] = useState<PortalState>(createDemoState);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationWrapRef = useOutsidePointerDismiss<HTMLDivElement>(
+    notificationsOpen,
+    setNotificationsOpen,
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState<string | null>(() =>
     typeof window === "undefined" ? null : taskIdFromPath(window.location.pathname),
@@ -865,7 +874,7 @@ export function CEHFApp() {
                 </AnimatePresence>
               </motion.span>
             </button>
-            <div className="notification-wrap">
+            <div className="notification-wrap" ref={notificationWrapRef}>
               <button
                 className="icon-button"
                 onClick={() => setNotificationsOpen((open) => !open)}
@@ -1636,6 +1645,15 @@ function SectionContent({
           firebaseReady={firebaseReady}
         />
       );
+    case "workshops":
+      return (
+        <WorkshopsPage
+          profile={profile}
+          role={role}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
+        />
+      );
     case "users":
       return (
         <CommunityUsersPage
@@ -1993,7 +2011,7 @@ function WeeklyVerseCard({
   ) => void;
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
-  const canEdit = role === "teacher" || role === "director";
+  const canEdit = role === "director";
 
   return (
     <>
@@ -2008,8 +2026,6 @@ function WeeklyVerseCard({
           </blockquote>
           <div className="weekly-verse-meta">
             <cite>{state.weeklyVerse.reference}</cite>
-            <span aria-hidden="true">·</span>
-            <span>Establecido por {state.weeklyVerse.updatedBy}</span>
           </div>
         </div>
         {canEdit && (
@@ -2030,6 +2046,7 @@ function WeeklyVerseCard({
             reference={state.weeklyVerse.reference}
             onClose={() => setEditorOpen(false)}
             onSave={(text, reference) => {
+              if (role !== "director") return;
               updateState(
                 (previous) => ({
                   ...previous,
@@ -3542,10 +3559,6 @@ function AccountRegistrationModal({
               </div>
 
               <aside className="account-registration-aside">
-                <div className={`registration-connection ${firebaseReady ? "connected" : "demo"}`}>
-                  <span />
-                  <div><strong>{firebaseReady ? "Firebase conectado" : "Modo demostración"}</strong><small>{firebaseReady ? "La cuenta se guardará en Auth, Firestore y Storage" : "La interfaz ya está lista para tus variables .env"}</small></div>
-                </div>
                 <motion.article className="registration-summary-card" layout>
                   <motion.span
                     className="registration-summary-avatar"

@@ -486,7 +486,7 @@ function AccountActionDialog({
     <motion.div className="modal-backdrop account-management-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <motion.section className={`account-confirm-modal ${deleting ? "is-danger" : ""}`} initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} role="alertdialog" aria-modal="true" aria-labelledby="account-action-title">
         <span className="account-confirm-icon">{deleting ? <Trash2 size={24} /> : activating ? <UserCheck size={24} /> : <UserX size={24} />}</span>
-        <span className="eyebrow">ACCESO FIREBASE</span>
+        <span className="eyebrow">ACCESO A CEHF</span>
         <h2 id="account-action-title">{deleting ? "Eliminar cuenta definitivamente" : activating ? "Activar cuenta" : "Desactivar cuenta"}</h2>
         <p>{deleting ? `Se eliminará el acceso de ${action.account.name}, su perfil y sus fotografías. Esta acción no se puede deshacer.` : activating ? `${action.account.name} podrá iniciar sesión nuevamente.` : `${action.account.name} perderá el acceso inmediatamente, pero sus datos se conservarán.`}</p>
         {deleting && <div className="account-delete-warning"><ShieldCheck size={16} /> Las tareas, historias y revisiones institucionales conservan su autoría.</div>}

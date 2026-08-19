@@ -432,9 +432,48 @@ export type AppNotification = {
     | "material"
     | "wall"
     | "forum"
+    | "workshop"
     | "system";
   createdAt: string;
   read: boolean;
+};
+
+export type WorkshopKind = "tics" | "reading";
+
+export type WorkshopResource = {
+  id: string;
+  workshopId: string;
+  institutionId: string;
+  title: string;
+  description: string;
+  fileName: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+  uploadedBy: string;
+  uploadedByName: string;
+  createdAt: string;
+};
+
+export type Workshop = {
+  id: string;
+  institutionId: string;
+  kind: WorkshopKind;
+  title: string;
+  shortTitle: string;
+  description: string;
+  studentIds: string[];
+  teacherIds: string[];
+  managerIds: string[];
+  memberIds: string[];
+  resources: WorkshopResource[];
+  updatedAt: string;
+};
+
+export type WorkshopAccessInput = {
+  studentIds: string[];
+  teacherIds: string[];
+  managerIds: string[];
 };
 
 export type PortalSettings = {
@@ -471,6 +510,7 @@ export type SectionKey =
   | "weekly-materials"
   | "wall-newspaper"
   | "forum"
+  | "workshops"
   | "users"
   | "settings"
   | "profile";

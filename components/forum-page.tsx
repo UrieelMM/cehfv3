@@ -63,6 +63,7 @@ import {
   updateForumTopic,
   watchForumFollowing,
 } from "@/lib/forum-firebase";
+import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
 import type {
   ForumAttachment,
   ForumBan,
@@ -202,6 +203,7 @@ export function ForumPage({
   const [sort, setSort] = useState<TopicSort>("recent");
   const [currentPage, setCurrentPage] = useState(1);
   const [reply, setReply] = useState("");
+  const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<ForumAttachment | null>(null);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -218,6 +220,10 @@ export function ForumPage({
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const mentionMenuRef = useOutsidePointerDismiss<HTMLDivElement>(
+    mentionMenuOpen,
+    setMentionMenuOpen,
+  );
   const publishCooldownRef = useRef(false);
   const staff = role !== "student";
   const pageSize = 5;
@@ -672,6 +678,7 @@ export function ForumPage({
             : "Tu aportación se publicó en el grupo",
         );
         setReply("");
+        setMentionMenuOpen(false);
         setReplyingTo(null);
         setAttachment(null);
         setAttachmentFile(null);
@@ -723,6 +730,7 @@ export function ForumPage({
         : "Tu aportación se publicó en el grupo",
     );
     setReply("");
+    setMentionMenuOpen(false);
     setReplyingTo(null);
     setAttachment(null);
     setAttachmentFile(null);
@@ -769,7 +777,7 @@ export function ForumPage({
         initials: initialsFor(name),
       }));
   const mentionMatch = reply.match(/(?:^|\s)@([\p{L}]*)$/u);
-  const mentionSuggestions = mentionMatch
+  const mentionSuggestions = mentionMenuOpen && mentionMatch
     ? mentionCandidates
         .filter((participant) =>
           participant.name
@@ -1218,6 +1226,9 @@ export function ForumPage({
                     nestedReplies={children}
                     role={role}
                     profile={profile}
+                    mentionNames={mentionCandidates.map(
+                      (participant) => participant.name,
+                    )}
                     onReact={reactToReply}
                     onReply={(replyId) => {
                       setReplyingTo(replyId);
@@ -1275,7 +1286,11 @@ export function ForumPage({
                       value={reply}
                       maxLength={600}
                       onChange={(event) => {
-                        setReply(event.target.value);
+                        const nextReply = event.target.value;
+                        setReply(nextReply);
+                        setMentionMenuOpen(
+                          /(?:^|\s)@[\p{L}]*$/u.test(nextReply),
+                        );
                         setComposerError("");
                       }}
                       placeholder="Comparte una idea, una pregunta o algo que aprendiste…"
@@ -1283,7 +1298,11 @@ export function ForumPage({
                       rows={3}
                     />
                     {mentionSuggestions.length > 0 && (
-                      <div className="forum-mention-menu" role="listbox">
+                      <div
+                        className="forum-mention-menu"
+                        role="listbox"
+                        ref={mentionMenuRef}
+                      >
                         <span>Mencionar participante</span>
                         {mentionSuggestions.map((participant) => (
                           <button
@@ -1296,6 +1315,7 @@ export function ForumPage({
                                   `@${participant.name} `,
                                 ),
                               );
+                              setMentionMenuOpen(false);
                               composerRef.current?.focus();
                             }}
                           >
@@ -1384,6 +1404,7 @@ export function ForumPage({
                           type="button"
                           onClick={() => {
                             setReply((current) => `${current}@`);
+                            setMentionMenuOpen(true);
                             composerRef.current?.focus();
                           }}
                           aria-label="Mencionar a un participante"
@@ -1612,11 +1633,41 @@ export function ForumPage({
   );
 }
 
+function highlightForumMentions(body: string, mentionNames: string[]) {
+  const uniqueNames = [...new Set(mentionNames.map((name) => name.trim()))]
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length);
+
+  if (!uniqueNames.length) return body;
+
+  const escapedNames = uniqueNames.map((name) =>
+    name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  );
+  const matcher = new RegExp(
+    `(@(?:${escapedNames.join("|")}))(?=$|[\\s.,!?;:…)}\\]])`,
+    "giu",
+  );
+  const knownMentions = new Set(
+    uniqueNames.map((name) => `@${name.toLocaleLowerCase("es-MX")}`),
+  );
+
+  return body.split(matcher).map((fragment, index) =>
+    knownMentions.has(fragment.toLocaleLowerCase("es-MX")) ? (
+      <mark className="forum-inline-mention" key={`${fragment}-${index}`}>
+        {fragment}
+      </mark>
+    ) : (
+      fragment
+    ),
+  );
+}
+
 function ForumReplyCard({
   item,
   nestedReplies,
   role,
   profile,
+  mentionNames,
   onReact,
   onReply,
   onReport,
@@ -1629,6 +1680,7 @@ function ForumReplyCard({
   nestedReplies: ForumReply[];
   role: Role;
   profile: UserProfile;
+  mentionNames: string[];
   onReact: (item: ForumReply, kind: ForumReactionKind) => void;
   onReply: (replyId: string) => void;
   onReport: (item: ForumReply) => void;
@@ -1687,7 +1739,7 @@ function ForumReplyCard({
             </div>
           ) : (
             <>
-              <p>{item.body}</p>
+              <p>{highlightForumMentions(item.body, mentionNames)}</p>
               {item.attachment && (
                 <button
                   type="button"
@@ -1783,6 +1835,7 @@ function ForumReplyCard({
               nestedReplies={[]}
               role={role}
               profile={profile}
+              mentionNames={mentionNames}
               onReact={onReact}
               onReply={() => onReply(item.id)}
               onReport={onReport}
@@ -1864,7 +1917,7 @@ function GuidelinesDialog({
             <span>03</span>
             <div>
               <strong>Pide ayuda cuando algo no esté bien</strong>
-              <p>Puedes reportar una aportación para que la revise un adulto.</p>
+              <p>Puedes reportar una aportación para que la revise un profesor o director.</p>
             </div>
           </div>
         </div>
@@ -2182,7 +2235,7 @@ function ModerationDrawer({
               <span><UserX size={17} /></span>
               <div>
                 <strong>Acceso al foro</strong>
-                <small>Dirección puede suspender o habilitar participantes.</small>
+                <small>Supende o habilita participantes.</small>
               </div>
             </div>
             <div className="forum-ban-form">
@@ -2305,7 +2358,7 @@ function ModerationDrawer({
         </div>
         <footer>
           <Archive size={16} />
-          La eliminación es lógica: la evidencia permanece en el historial.
+          La evidencia permanece en el historial.
         </footer>
       </motion.aside>
     </>

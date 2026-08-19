@@ -29,6 +29,9 @@ const TASK_PATH =
   "institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}";
 const HISTORY_PATH = `${TASK_PATH}/entregas/{studentId}/historial/{eventId}`;
 const EXTENSION_PATH = `${TASK_PATH}/prorrogas/{studentId}`;
+const WORKSHOP_PATH =
+  "institutions/{institutionId}/workshops/{workshopId}";
+const WORKSHOP_RESOURCE_PATH = `${WORKSHOP_PATH}/resources/{resourceId}`;
 const ACADEMIC_TIMEZONE = "America/Mexico_City";
 
 type CalendarWeek = {
@@ -888,6 +891,96 @@ async function writeNotifications(
     await batch.commit();
   }
 }
+
+function notificationRecipients(value: unknown) {
+  return Array.isArray(value)
+    ? [...new Set(value.map(String).filter(Boolean))]
+    : [];
+}
+
+export const onWorkshopAccessChanged = onDocumentWritten(
+  { document: WORKSHOP_PATH },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (!after) return;
+    const beforeMembers = new Set(notificationRecipients(before?.memberIds));
+    const beforeManagers = new Set(notificationRecipients(before?.managerIds));
+    const nextMembers = notificationRecipients(after.memberIds);
+    const nextManagers = notificationRecipients(after.managerIds);
+    const newManagers = nextManagers.filter((userId) => !beforeManagers.has(userId));
+    const managerSet = new Set(newManagers);
+    const newParticipants = nextMembers.filter(
+      (userId) => !beforeMembers.has(userId) && !managerSet.has(userId),
+    );
+    const workshopId = String(event.params.workshopId);
+    const workshopTitle = String(after.title ?? "Talleres");
+
+    if (newParticipants.length) {
+      await writeNotifications(
+        newParticipants,
+        `workshop-access-${workshopId}-${event.id}`,
+        {
+          category: "workshop",
+          title: `Ya tienes acceso a ${workshopTitle}`,
+          detail: "Entra para descubrir las actividades y recursos disponibles.",
+          workshopId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: "workshop_access_granted",
+        },
+      );
+    }
+
+    if (newManagers.length) {
+      await writeNotifications(
+        newManagers,
+        `workshop-manager-${workshopId}-${event.id}`,
+        {
+          category: "workshop",
+          title: `Ahora administras ${workshopTitle}`,
+          detail: "Ya puedes subir y retirar recursos de este taller.",
+          workshopId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: "workshop_manager_granted",
+        },
+      );
+    }
+  },
+);
+
+export const onWorkshopResourceCreated = onDocumentCreated(
+  { document: WORKSHOP_RESOURCE_PATH },
+  async (event) => {
+    const resource = event.data?.data();
+    if (!resource) return;
+    const workshopReference = event.data?.ref.parent.parent;
+    if (!workshopReference) return;
+    const workshopSnapshot = await workshopReference.get();
+    if (!workshopSnapshot.exists) return;
+    const workshop = workshopSnapshot.data();
+    const uploadedBy = String(resource.uploadedBy ?? "");
+    const recipients = notificationRecipients(workshop?.memberIds).filter(
+      (userId) => userId !== uploadedBy,
+    );
+    if (!recipients.length) return;
+    const workshopId = String(event.params.workshopId);
+    await writeNotifications(
+      recipients,
+      `workshop-resource-${event.params.resourceId}`,
+      {
+        category: "workshop",
+        title: `Nuevo recurso en ${String(workshop?.title ?? "Talleres")}`,
+        detail: String(resource.title ?? resource.fileName ?? "Material disponible"),
+        workshopId,
+        resourceId: event.params.resourceId,
+        url: `/workshops/${encodeURIComponent(workshopId)}`,
+        eventType: "workshop_resource_created",
+      },
+    );
+  },
+);
 
 const MURAL_CATEGORIES = [
   "Ciencia y curiosidades",

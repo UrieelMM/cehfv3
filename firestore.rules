@@ -189,9 +189,94 @@ service cloud.firestore {
 
       match /portal/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if isStaff()
+        allow create: if isDirector()
           && profile().institutionId == institutionId;
+        allow update: if profile().institutionId == institutionId
+          && (
+            isDirector()
+            || (
+              roleIs("teacher")
+              && !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(["weeklyVerse"])
+            )
+          );
         allow delete: if false;
+      }
+
+      match /workshops/{workshopId} {
+        function validWorkshopAccess(data) {
+          return data.studentIds is list
+            && data.teacherIds is list
+            && data.managerIds is list
+            && data.memberIds is list
+            && data.managerIds.hasOnly(data.teacherIds)
+            && data.memberIds.toSet()
+              == data.studentIds.toSet().union(data.teacherIds.toSet());
+        }
+
+        function canReadWorkshop(data) {
+          return isActive()
+            && profile().institutionId == institutionId
+            && data.institutionId == institutionId
+            && (
+              isDirector()
+              || (
+                data.memberIds is list
+                && request.auth.uid in data.memberIds
+              )
+            );
+        }
+
+        function workshopData() {
+          return get(
+            /databases/$(database)/documents/institutions/$(institutionId)/workshops/$(workshopId)
+          ).data;
+        }
+
+        function canManageWorkshop() {
+          let workshop = workshopData();
+          return isActive()
+            && profile().institutionId == institutionId
+            && workshop.institutionId == institutionId
+            && (
+              isDirector()
+              || (
+                roleIs("teacher")
+                && workshop.managerIds is list
+                && request.auth.uid in workshop.managerIds
+              )
+            );
+        }
+
+        allow read: if canReadWorkshop(resource.data);
+        allow create: if isDirector()
+          && profile().institutionId == institutionId
+          && workshopId in ["tics", "club-lectura"]
+          && request.resource.data.institutionId == institutionId
+          && request.resource.data.kind in ["tics", "reading"]
+          && validWorkshopAccess(request.resource.data);
+        allow update: if isDirector()
+          && profile().institutionId == institutionId
+          && resource.data.institutionId == institutionId
+          && request.resource.data.institutionId == institutionId
+          && request.resource.data.kind == resource.data.kind
+          && validWorkshopAccess(request.resource.data);
+        allow delete: if false;
+
+        match /resources/{resourceId} {
+          allow read: if canReadWorkshop(workshopData());
+          allow create: if canManageWorkshop()
+            && request.resource.data.institutionId == institutionId
+            && request.resource.data.workshopId == workshopId
+            && request.resource.data.uploadedBy == request.auth.uid
+            && request.resource.data.title is string
+            && request.resource.data.storagePath is string
+            && request.resource.data.size is number
+            && request.resource.data.size > 0
+            && request.resource.data.size < 20 * 1024 * 1024;
+          allow update: if false;
+          allow delete: if canManageWorkshop();
+        }
       }
 
       match /configuracion/{documentId} {
