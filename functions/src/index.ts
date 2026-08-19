@@ -32,6 +32,9 @@ const EXTENSION_PATH = `${TASK_PATH}/prorrogas/{studentId}`;
 const WORKSHOP_PATH =
   "institutions/{institutionId}/workshops/{workshopId}";
 const WORKSHOP_RESOURCE_PATH = `${WORKSHOP_PATH}/resources/{resourceId}`;
+const WORKSHOP_TASK_PATH = `${WORKSHOP_PATH}/tasks/{taskId}`;
+const WORKSHOP_SUBMISSION_PATH =
+  `${WORKSHOP_TASK_PATH}/submissions/{studentId}`;
 const ACADEMIC_TIMEZONE = "America/Mexico_City";
 
 type CalendarWeek = {
@@ -979,6 +982,108 @@ export const onWorkshopResourceCreated = onDocumentCreated(
         eventType: "workshop_resource_created",
       },
     );
+  },
+);
+
+export const onWorkshopTaskChanged = onDocumentWritten(
+  { document: WORKSHOP_TASK_PATH },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (!after || after.status !== "published" || before?.status === "published") {
+      return;
+    }
+    const recipients = notificationRecipients(after.audienceStudentIds);
+    if (!recipients.length) return;
+    const workshopId = String(event.params.workshopId);
+    const reopened = before?.status === "closed";
+    await writeNotifications(
+      recipients,
+      `workshop-task-${event.params.taskId}-${event.id}`,
+      {
+        category: "workshop",
+        title: reopened
+          ? `Trabajo reabierto: ${String(after.title ?? "Talleres")}`
+          : `Nuevo trabajo: ${String(after.title ?? "Talleres")}`,
+        detail: `${String(after.teacherName ?? "Tu maestro")} · revisa la fecha de entrega.`,
+        workshopId,
+        taskId: event.params.taskId,
+        url: `/workshops/${encodeURIComponent(workshopId)}`,
+        eventType: reopened
+          ? "workshop_task_reopened"
+          : "workshop_task_published",
+      },
+    );
+  },
+);
+
+export const onWorkshopSubmissionChanged = onDocumentWritten(
+  { document: WORKSHOP_SUBMISSION_PATH },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (!after) return;
+    const taskReference = afterSnapshot.ref.parent.parent;
+    if (!taskReference) return;
+    const taskSnapshot = await taskReference.get();
+    if (!taskSnapshot.exists) return;
+    const task = taskSnapshot.data();
+    const workshopId = String(event.params.workshopId);
+    const version = Number(after.version ?? 1);
+    const submitted =
+      after.status === "submitted" &&
+      (!before || Number(before.version ?? 0) < version);
+
+    if (submitted) {
+      await writeNotifications(
+        [String(task?.createdBy ?? "")],
+        `workshop-submission-${event.params.taskId}-${event.params.studentId}-v${version}`,
+        {
+          category: "workshop",
+          title: `${String(after.studentName ?? "Un alumno")} entregó ${String(task?.title ?? "un trabajo")}`,
+          detail: `Versión ${version} lista para revisar.`,
+          workshopId,
+          taskId: event.params.taskId,
+          studentId: event.params.studentId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: version > 1
+            ? "workshop_task_resubmitted"
+            : "workshop_task_submitted",
+        },
+      );
+      return;
+    }
+
+    if (
+      ["feedback", "reviewed"].includes(String(after.status)) &&
+      (before?.status !== after.status ||
+        before?.teacherFeedback !== after.teacherFeedback)
+    ) {
+      const reviewed = after.status === "reviewed";
+      await writeNotifications(
+        [String(event.params.studentId)],
+        `workshop-feedback-${event.params.taskId}-${event.params.studentId}-v${version}-${after.status}-${event.id}`,
+        {
+          category: "workshop",
+          title: reviewed
+            ? `Trabajo finalizado: ${String(task?.title ?? "Talleres")}`
+            : `Nueva retroalimentación: ${String(task?.title ?? "Talleres")}`,
+          detail: reviewed
+            ? "Tu maestro concluyó la revisión."
+            : "Tu maestro dejó comentarios para tu siguiente versión.",
+          workshopId,
+          taskId: event.params.taskId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: reviewed
+            ? "workshop_task_reviewed"
+            : "workshop_task_feedback",
+        },
+      );
+    }
   },
 );
 

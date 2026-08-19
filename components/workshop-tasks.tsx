@@ -1,0 +1,553 @@
+"use client";
+
+import {
+  ArrowRight,
+  CalendarClock,
+  Check,
+  CheckCircle2,
+  ClipboardCheck,
+  Clock3,
+  Download,
+  FileText,
+  LoaderCircle,
+  MessageSquareText,
+  Paperclip,
+  Plus,
+  Send,
+  ShieldCheck,
+  UploadCloud,
+  UserCheck,
+  Users,
+  X,
+} from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { toast } from "sonner";
+import { friendlyFirebaseError } from "@/lib/firebase";
+import {
+  createWorkshopTask,
+  demoWorkshopTasks,
+  getWorkshopTaskAttachmentUrl,
+  saveWorkshopFeedback,
+  setWorkshopTaskStatus,
+  submitWorkshopTask,
+  watchWorkshopSubmissions,
+  watchWorkshopTasks,
+  type WorkshopTaskCreateInput,
+} from "@/lib/workshops-firebase";
+import type {
+  ManagedAccount,
+  Role,
+  UserProfile,
+  Workshop,
+  WorkshopSubmission,
+  WorkshopTask,
+  WorkshopTaskAttachment,
+} from "@/lib/types";
+
+type WorkshopTasksProps = {
+  workshop: Workshop;
+  profile: UserProfile;
+  role: Role;
+  accounts: ManagedAccount[];
+  firebaseReady: boolean;
+};
+
+function messageFor(error: unknown) {
+  if (
+    error instanceof Error &&
+    !(typeof error === "object" && error && "code" in error)
+  ) {
+    return error.message;
+  }
+  return friendlyFirebaseError(error);
+}
+
+function dueLabel(value: string) {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function dateTimeLocal(daysFromNow = 7) {
+  const date = new Date(Date.now() + daysFromNow * 24 * 60 * 60 * 1000);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+}
+
+function fileSize(value: number) {
+  return value < 1_000_000
+    ? `${Math.max(1, Math.round(value / 1_000))} KB`
+    : `${(value / 1_000_000).toFixed(1)} MB`;
+}
+
+export function WorkshopTasks({
+  workshop,
+  profile,
+  role,
+  accounts,
+  firebaseReady,
+}: WorkshopTasksProps) {
+  const [tasks, setTasks] = useState<WorkshopTask[]>(() =>
+    demoWorkshopTasks.filter((task) => task.workshopId === workshop.id),
+  );
+  const [loading, setLoading] = useState(firebaseReady);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<WorkshopTask | null>(null);
+  const [demoSubmissions, setDemoSubmissions] = useState<WorkshopSubmission[]>([]);
+  const canCreate =
+    role === "director" || workshop.managerIds.includes(profile.uid);
+
+  useEffect(() => {
+    if (!firebaseReady) {
+      const visible = demoWorkshopTasks.filter(
+        (task) =>
+          task.workshopId === workshop.id &&
+          (role === "director" ||
+            (role === "teacher" && task.createdBy === profile.uid) ||
+            (role === "student" && task.audienceStudentIds.includes(profile.uid))),
+      );
+      queueMicrotask(() => {
+        setTasks(visible);
+        setLoading(false);
+      });
+      return;
+    }
+    queueMicrotask(() => setLoading(true));
+    return watchWorkshopTasks(
+      workshop,
+      profile,
+      (next) => {
+        setTasks(next);
+        setLoading(false);
+      },
+      (error) => {
+        setLoading(false);
+        toast.error(messageFor(error));
+      },
+    );
+  }, [firebaseReady, profile, role, workshop]);
+
+  async function createTask(input: WorkshopTaskCreateInput) {
+    if (firebaseReady) {
+      await createWorkshopTask(workshop, profile, input);
+      return;
+    }
+    const now = new Date().toISOString();
+    setTasks((current) => [
+      {
+        id: `demo-work-${Date.now()}`,
+        workshopId: workshop.id,
+        institutionId: workshop.institutionId,
+        title: input.title,
+        description: input.description,
+        dueAt: new Date(input.dueAt).toISOString(),
+        status: input.status,
+        audienceStudentIds: input.audienceStudentIds,
+        attachments: input.files.map((file) => ({
+          id: crypto.randomUUID(),
+          name: file.name,
+          storagePath: "",
+          contentType: file.type,
+          size: file.size,
+        })),
+        createdBy: profile.uid,
+        teacherName: profile.name,
+        createdAt: now,
+        updatedAt: now,
+      },
+      ...current,
+    ]);
+  }
+
+  async function changeStatus(task: WorkshopTask, status: WorkshopTask["status"]) {
+    if (firebaseReady) {
+      await setWorkshopTaskStatus(task, status);
+    } else {
+      setTasks((current) =>
+        current.map((item) =>
+          item.id === task.id
+            ? { ...item, status, updatedAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+      setSelectedTask((current) =>
+        current?.id === task.id ? { ...current, status } : current,
+      );
+    }
+  }
+
+  return (
+    <section className="workshop-task-section">
+      <div className="workshop-task-heading">
+        <div>
+          <span className="eyebrow">Aula del taller</span>
+          <h2>Trabajos y entregas</h2>
+          <p>
+            {role === "student"
+              ? "Consulta las indicaciones, entrega tus archivos y recibe retroalimentación."
+              : "Publica trabajos para tu grupo y acompaña cada entrega."}
+          </p>
+        </div>
+        {canCreate && (
+          <button onClick={() => setCreateOpen(true)}>
+            <Plus size={17} /> Nuevo trabajo
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="workshop-task-loading"><LoaderCircle className="spin" size={22} /> Cargando trabajos…</div>
+      ) : tasks.length ? (
+        <div className="workshop-task-grid">
+          {tasks.map((task) => (
+            <button
+              className="workshop-task-card"
+              key={task.id}
+              onClick={() => setSelectedTask(task)}
+            >
+              <span className={`workshop-task-status is-${task.status}`}>
+                {task.status === "draft"
+                  ? "Borrador"
+                  : task.status === "closed"
+                    ? "Cerrado"
+                    : "Publicado"}
+              </span>
+              <span className="workshop-task-icon"><ClipboardCheck size={22} /></span>
+              <strong>{task.title}</strong>
+              <p>{task.description}</p>
+              <span className="workshop-task-teacher">Por {task.teacherName}</span>
+              <footer>
+                <span><CalendarClock size={15} /> {dueLabel(task.dueAt)}</span>
+                <span><Users size={15} /> {task.audienceStudentIds.length}</span>
+                <ArrowRight size={17} />
+              </footer>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="workshop-task-empty">
+          <ClipboardCheck size={28} />
+          <h3>No hay trabajos por ahora</h3>
+          <p>
+            {canCreate
+              ? "Crea el primer trabajo para los alumnos que Dirección asignó a tu grupo."
+              : "Cuando tu maestro publique un trabajo, aparecerá en este espacio."}
+          </p>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {createOpen && (
+          <WorkshopTaskCreateDialog
+            workshop={workshop}
+            profile={profile}
+            accounts={accounts}
+            onClose={() => setCreateOpen(false)}
+            onCreate={createTask}
+          />
+        )}
+        {selectedTask && (
+          <WorkshopTaskDetailDialog
+            task={selectedTask}
+            profile={profile}
+            role={role}
+            accounts={accounts}
+            firebaseReady={firebaseReady}
+            demoSubmissions={demoSubmissions.filter(
+              (submission) => submission.taskId === selectedTask.id,
+            )}
+            setDemoSubmissions={setDemoSubmissions}
+            onStatusChange={changeStatus}
+            onClose={() => setSelectedTask(null)}
+          />
+        )}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+function WorkshopTaskCreateDialog({
+  workshop,
+  profile,
+  accounts,
+  onClose,
+  onCreate,
+}: {
+  workshop: Workshop;
+  profile: UserProfile;
+  accounts: ManagedAccount[];
+  onClose: () => void;
+  onCreate: (input: WorkshopTaskCreateInput) => Promise<void>;
+}) {
+  const rosterIds =
+    profile.role === "director"
+      ? workshop.studentIds
+      : workshop.teacherStudentIds[profile.uid] ?? [];
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueAt, setDueAt] = useState(dateTimeLocal());
+  const [status, setStatus] = useState<"draft" | "published">("published");
+  const [selectedStudents, setSelectedStudents] = useState<string[]>(rosterIds);
+  const [files, setFiles] = useState<File[]>([]);
+  const [saving, setSaving] = useState(false);
+  const accountById = new Map(accounts.map((account) => [account.uid, account]));
+  const roster = rosterIds.map((studentId) =>
+    accountById.get(studentId) ?? {
+      uid: studentId,
+      name: studentId === "demo-student" ? "Sofía Martínez" : "Alumno asignado",
+      initials: studentId === "demo-student" ? "SM" : "CE",
+      grade: "",
+      group: "",
+    },
+  );
+
+  function toggleStudent(studentId: string) {
+    setSelectedStudents((current) =>
+      current.includes(studentId)
+        ? current.filter((id) => id !== studentId)
+        : [...current, studentId],
+    );
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedStudents.length) {
+      toast.error("Selecciona al menos un alumno.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onCreate({
+        title: title.trim(),
+        description: description.trim(),
+        dueAt: new Date(dueAt).toISOString(),
+        status,
+        audienceStudentIds: selectedStudents,
+        files,
+      });
+      toast.success(status === "published" ? "Trabajo publicado" : "Borrador guardado");
+      onClose();
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <motion.div className="modal-backdrop workshop-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+      <motion.form className="workshop-task-create-modal" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} onSubmit={submit}>
+        <header>
+          <span><ClipboardCheck size={22} /></span>
+          <div><small>Nueva actividad</small><h2>Crear trabajo en {workshop.title}</h2><p>Sólo podrás elegir alumnos asignados por Dirección.</p></div>
+          <button type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+        </header>
+        <div className="workshop-task-create-body">
+          <div className="workshop-task-form-fields">
+            <label><span>Título</span><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} required placeholder="Ej. Mi primera historia interactiva" /></label>
+            <label><span>Indicaciones</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1800} rows={5} required placeholder="Explica qué deben hacer y cómo entregar…" /></label>
+            <label><span>Fecha límite</span><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} required /></label>
+            <label className="workshop-task-files">
+              <input type="file" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
+              <UploadCloud size={21} />
+              <span><strong>{files.length ? `${files.length} archivo${files.length === 1 ? "" : "s"}` : "Adjuntar material"}</strong><small>Guías, imágenes, audio o video · 20 MB por archivo</small></span>
+            </label>
+          </div>
+          <aside className="workshop-roster-picker">
+            <div><span><Users size={17} /> Alumnos de este trabajo</span><button type="button" onClick={() => setSelectedStudents(selectedStudents.length === roster.length ? [] : rosterIds)}>{selectedStudents.length === roster.length ? "Quitar todos" : "Elegir todos"}</button></div>
+            {roster.length ? roster.map((student) => (
+              <button type="button" className={selectedStudents.includes(student.uid) ? "selected" : ""} key={student.uid} onClick={() => toggleStudent(student.uid)}>
+                <i>{student.initials}</i><span><strong>{student.name}</strong><small>{[student.grade, student.group].filter(Boolean).join(" ") || "Taller asignado"}</small></span><em>{selectedStudents.includes(student.uid) && <Check size={13} />}</em>
+              </button>
+            )) : <p className="workshop-no-roster"><ShieldCheck size={20} /> Dirección aún no te asigna alumnos en este taller.</p>}
+          </aside>
+        </div>
+        <footer>
+          <div className="workshop-publication-choice">
+            <button type="button" className={status === "draft" ? "active" : ""} onClick={() => setStatus("draft")}>Borrador</button>
+            <button type="button" className={status === "published" ? "active" : ""} onClick={() => setStatus("published")}>Publicar ahora</button>
+          </div>
+          <div><button type="button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || !roster.length}>{saving ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{saving ? "Guardando…" : status === "published" ? "Publicar" : "Guardar"}</button></div>
+        </footer>
+      </motion.form>
+    </motion.div>
+  );
+}
+
+function WorkshopTaskDetailDialog({
+  task,
+  profile,
+  role,
+  accounts,
+  firebaseReady,
+  demoSubmissions,
+  setDemoSubmissions,
+  onStatusChange,
+  onClose,
+}: {
+  task: WorkshopTask;
+  profile: UserProfile;
+  role: Role;
+  accounts: ManagedAccount[];
+  firebaseReady: boolean;
+  demoSubmissions: WorkshopSubmission[];
+  setDemoSubmissions: React.Dispatch<React.SetStateAction<WorkshopSubmission[]>>;
+  onStatusChange: (task: WorkshopTask, status: WorkshopTask["status"]) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [submissions, setSubmissions] = useState<WorkshopSubmission[]>(demoSubmissions);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+  const [content, setContent] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [feedback, setFeedback] = useState("");
+  const [busy, setBusy] = useState(false);
+  const staff = role !== "student";
+  const selectedSubmission =
+    submissions.find((item) => item.id === selectedSubmissionId) ?? submissions[0];
+  const mySubmission = role === "student" ? submissions[0] : undefined;
+  const studentById = useMemo(
+    () => new Map(accounts.map((account) => [account.uid, account])),
+    [accounts],
+  );
+
+  useEffect(() => {
+    if (!firebaseReady) {
+      queueMicrotask(() => setSubmissions(demoSubmissions));
+      return;
+    }
+    return watchWorkshopSubmissions(task, profile, setSubmissions, (error) =>
+      toast.error(messageFor(error)),
+    );
+  }, [demoSubmissions, firebaseReady, profile, task]);
+
+  useEffect(() => {
+    queueMicrotask(() => setFeedback(selectedSubmission?.teacherFeedback ?? ""));
+  }, [selectedSubmission]);
+
+  async function openAttachment(attachment: WorkshopTaskAttachment) {
+    if (!firebaseReady || !attachment.storagePath) {
+      toast.info("El archivo estará disponible desde Firebase Storage.");
+      return;
+    }
+    try {
+      const url = await getWorkshopTaskAttachmentUrl(attachment);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(messageFor(error));
+    }
+  }
+
+  async function submitStudentWork(event: FormEvent) {
+    event.preventDefault();
+    if (!content.trim() && !files.length) {
+      toast.error("Escribe una respuesta o adjunta un archivo.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (firebaseReady) {
+        await submitWorkshopTask(task, profile, { content, files });
+      } else {
+        const now = new Date().toISOString();
+        const next: WorkshopSubmission = {
+          id: profile.uid,
+          institutionId: task.institutionId,
+          workshopId: task.workshopId,
+          taskId: task.id,
+          studentId: profile.uid,
+          studentName: profile.name,
+          content,
+          attachments: files.map((file) => ({ id: crypto.randomUUID(), name: file.name, storagePath: "", contentType: file.type, size: file.size })),
+          version: (mySubmission?.version ?? 0) + 1,
+          status: "submitted",
+          teacherFeedback: "",
+          submittedAt: now,
+          updatedAt: now,
+        };
+        setDemoSubmissions((current) => [...current.filter((item) => !(item.taskId === task.id && item.studentId === profile.uid)), next]);
+        setSubmissions([next]);
+      }
+      setContent("");
+      setFiles([]);
+      toast.success(mySubmission ? "Nueva versión enviada" : "Trabajo enviado");
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveFeedback(reviewed: boolean) {
+    if (!selectedSubmission || !feedback.trim()) {
+      toast.error("Escribe una retroalimentación.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (firebaseReady) {
+        await saveWorkshopFeedback(task, selectedSubmission, feedback, reviewed);
+      } else {
+        const now = new Date().toISOString();
+        const updated = { ...selectedSubmission, teacherFeedback: feedback, status: reviewed ? "reviewed" as const : "feedback" as const, feedbackAt: now, reviewedAt: reviewed ? now : undefined, updatedAt: now };
+        setSubmissions((current) => current.map((item) => item.id === updated.id ? updated : item));
+        setDemoSubmissions((current) => current.map((item) => item.taskId === task.id && item.id === updated.id ? updated : item));
+      }
+      toast.success(reviewed ? "Entrega finalizada" : "Retroalimentación enviada");
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeStatus(status: WorkshopTask["status"]) {
+    setBusy(true);
+    try {
+      await onStatusChange(task, status);
+      toast.success(status === "published" ? "Trabajo publicado" : "Trabajo cerrado");
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <motion.div className="modal-backdrop workshop-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+      <motion.section className="workshop-task-detail-modal" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+        <header>
+          <div><span className={`workshop-task-status is-${task.status}`}>{task.status === "draft" ? "Borrador" : task.status === "closed" ? "Cerrado" : "Publicado"}</span><h2>{task.title}</h2><p><CalendarClock size={15} /> Entrega: {dueLabel(task.dueAt)} · {task.teacherName}</p></div>
+          <button onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+        </header>
+        <div className="workshop-task-detail-body">
+          <main>
+            <section className="workshop-task-instructions"><span className="eyebrow">Indicaciones</span><p>{task.description}</p>{task.attachments.length > 0 && <div className="workshop-task-attachments">{task.attachments.map((attachment) => <button key={attachment.id} onClick={() => void openAttachment(attachment)}><FileText size={17} /><span><strong>{attachment.name}</strong><small>{fileSize(attachment.size)}</small></span><Download size={15} /></button>)}</div>}</section>
+            {role === "student" ? (
+              <section className="workshop-student-delivery">
+                {mySubmission?.teacherFeedback && <div className={`workshop-feedback-card is-${mySubmission.status}`}><MessageSquareText size={20} /><div><span>{mySubmission.status === "reviewed" ? "Entrega finalizada" : "Retroalimentación de tu maestro"}</span><p>{mySubmission.teacherFeedback}</p></div></div>}
+                {mySubmission && <div className="workshop-previous-delivery"><CheckCircle2 size={18} /><span><strong>Versión {mySubmission.version} enviada</strong><small>{mySubmission.content || `${mySubmission.attachments.length} archivo(s)`}</small></span></div>}
+                {task.status === "published" ? <form onSubmit={submitStudentWork}><label><span>{mySubmission ? "Enviar una nueva versión" : "Tu respuesta"}</span><textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} maxLength={2000} placeholder="Explica tu trabajo o escribe tu respuesta…" /></label><label className="workshop-delivery-file"><input type="file" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /><Paperclip size={18} /><span>{files.length ? `${files.length} archivo(s) seleccionado(s)` : "Adjuntar archivos"}</span></label><button className="primary-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{mySubmission ? "Enviar nueva versión" : "Entregar trabajo"}</button></form> : <div className="workshop-task-closed"><Clock3 size={20} /> Este trabajo está cerrado para nuevas entregas.</div>}
+              </section>
+            ) : (
+              <section className="workshop-teacher-review">
+                <div className="workshop-submission-tabs"><span><Users size={16} /> Entregas ({submissions.length}/{task.audienceStudentIds.length})</span>{submissions.length ? submissions.map((submission) => <button className={selectedSubmission?.id === submission.id ? "active" : ""} key={submission.id} onClick={() => setSelectedSubmissionId(submission.id)}><i>{studentById.get(submission.studentId)?.initials ?? submission.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</i><span><strong>{submission.studentName}</strong><small>Versión {submission.version} · {submission.status === "reviewed" ? "Finalizada" : submission.status === "feedback" ? "Con comentarios" : "Por revisar"}</small></span></button>) : <p>Aún no hay entregas.</p>}</div>
+                {selectedSubmission && <div className="workshop-review-pane"><span className="eyebrow">Entrega de {selectedSubmission.studentName}</span><p>{selectedSubmission.content || "Entrega basada en archivos adjuntos."}</p>{selectedSubmission.attachments.map((attachment) => <button className="workshop-submission-file" key={attachment.id} onClick={() => void openAttachment(attachment)}><FileText size={17} /> {attachment.name} <Download size={15} /></button>)}<label><span>Retroalimentación</span><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={5} maxLength={1600} placeholder="Reconoce lo logrado e indica el siguiente paso…" /></label><div><button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button><button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button></div></div>}
+              </section>
+            )}
+          </main>
+          <aside>
+            <div><span>Asignación</span><strong>{task.audienceStudentIds.length} alumnos</strong></div>
+            <div><span>Archivos de apoyo</span><strong>{task.attachments.length}</strong></div>
+            {staff && <div className="workshop-task-control"><span>Estado del trabajo</span>{task.status === "draft" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar</button>}{task.status === "published" && <button disabled={busy} onClick={() => void changeStatus("closed")}><Clock3 size={15} /> Cerrar entregas</button>}{task.status === "closed" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Reabrir</button>}</div>}
+          </aside>
+        </div>
+      </motion.section>
+    </motion.div>
+  );
+}

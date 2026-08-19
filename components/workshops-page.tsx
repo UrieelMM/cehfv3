@@ -36,6 +36,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { WorkshopTasks } from "@/components/workshop-tasks";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   deleteWorkshopResource,
@@ -144,7 +145,17 @@ export function WorkshopsPage({
       if (saved) {
         try {
           const restored = JSON.parse(saved) as Workshop[];
-          if (Array.isArray(restored)) queueMicrotask(() => setBaseWorkshops(restored));
+          if (Array.isArray(restored)) {
+            const migrated = restored.map((workshop) => ({
+              ...workshop,
+              teacherStudentIds:
+                workshop.teacherStudentIds ??
+                demoWorkshops.find((item) => item.id === workshop.id)
+                  ?.teacherStudentIds ??
+                {},
+            }));
+            queueMicrotask(() => setBaseWorkshops(migrated));
+          }
         } catch {
           window.localStorage.removeItem("cehf-demo-workshops");
         }
@@ -153,7 +164,7 @@ export function WorkshopsPage({
       return;
     }
 
-    let unsubscribe = () => undefined;
+    let unsubscribe: () => void = () => undefined;
     let active = true;
     queueMicrotask(() => setLoading(true));
     const start = async () => {
@@ -321,6 +332,10 @@ export function WorkshopsPage({
       <>
         <WorkshopDetail
           workshop={selected}
+          profile={profile}
+          role={role}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
           canManage={canManage}
           isDirector={role === "director"}
           onBack={closeWorkshop}
@@ -366,7 +381,7 @@ export function WorkshopsPage({
         <div className="workshops-access-note">
           <ShieldCheck size={20} />
           <span>
-            <strong>Acceso cuidado</strong>
+            <strong>Acceso seguro</strong>
             Dirección decide quién participa y quién administra cada espacio.
           </span>
         </div>
@@ -490,6 +505,10 @@ function WorkshopCoverCard({
 
 function WorkshopDetail({
   workshop,
+  profile,
+  role,
+  managedAccounts,
+  firebaseReady,
   canManage,
   isDirector,
   onBack,
@@ -499,6 +518,10 @@ function WorkshopDetail({
   onDeleteResource,
 }: {
   workshop: Workshop;
+  profile: UserProfile;
+  role: Role;
+  managedAccounts: ManagedAccount[];
+  firebaseReady: boolean;
   canManage: boolean;
   isDirector: boolean;
   onBack: () => void;
@@ -587,7 +610,7 @@ function WorkshopDetail({
           <ShieldCheck size={20} />
           <span>
             <strong>Estás administrando este taller</strong>
-            Puedes subir y retirar recursos. Sólo Dirección cambia participantes y administradores.
+            Puedes compartir recursos, publicar trabajos y retroalimentar a tu grupo. Sólo Dirección cambia tus alumnos.
           </span>
         </aside>
       )}
@@ -671,6 +694,14 @@ function WorkshopDetail({
           </div>
         )}
       </section>
+
+      <WorkshopTasks
+        workshop={workshop}
+        profile={profile}
+        role={role}
+        accounts={managedAccounts}
+        firebaseReady={firebaseReady}
+      />
     </div>
   );
 }
@@ -689,6 +720,10 @@ function WorkshopAccessDialog({
   const [studentIds, setStudentIds] = useState(workshop.studentIds);
   const [teacherIds, setTeacherIds] = useState(workshop.teacherIds);
   const [managerIds, setManagerIds] = useState(workshop.managerIds);
+  const [teacherStudentIds, setTeacherStudentIds] = useState(
+    workshop.teacherStudentIds ?? {},
+  );
+  const [rosterTeacherId, setRosterTeacherId] = useState<string | null>(null);
   const [tab, setTab] = useState<"students" | "teachers">("students");
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
@@ -709,12 +744,27 @@ function WorkshopAccessDialog({
           ? current.filter((id) => id !== account.uid)
           : [...current, account.uid],
       );
+      if (studentIds.includes(account.uid)) {
+        setTeacherStudentIds((current) =>
+          Object.fromEntries(
+            Object.entries(current).map(([teacherId, roster]) => [
+              teacherId,
+              roster.filter((studentId) => studentId !== account.uid),
+            ]),
+          ),
+        );
+      }
       return;
     }
     setTeacherIds((current) => {
       const removing = current.includes(account.uid);
       if (removing) {
         setManagerIds((managers) => managers.filter((id) => id !== account.uid));
+        setTeacherStudentIds((rosters) => {
+          const next = { ...rosters };
+          delete next[account.uid];
+          return next;
+        });
         return current.filter((id) => id !== account.uid);
       }
       return [...current, account.uid];
@@ -725,17 +775,49 @@ function WorkshopAccessDialog({
     setTeacherIds((current) =>
       current.includes(account.uid) ? current : [...current, account.uid],
     );
-    setManagerIds((current) =>
-      current.includes(account.uid)
-        ? current.filter((id) => id !== account.uid)
-        : [...current, account.uid],
+    setManagerIds((current) => {
+      const removing = current.includes(account.uid);
+      if (removing) {
+        setTeacherStudentIds((rosters) => {
+          const next = { ...rosters };
+          delete next[account.uid];
+          return next;
+        });
+        if (rosterTeacherId === account.uid) setRosterTeacherId(null);
+        return current.filter((id) => id !== account.uid);
+      }
+      setTeacherStudentIds((rosters) => ({
+        ...rosters,
+        [account.uid]: rosters[account.uid] ?? [],
+      }));
+      return [...current, account.uid];
+    });
+  }
+
+  function toggleRosterStudent(teacherId: string, studentId: string) {
+    setStudentIds((current) =>
+      current.includes(studentId) ? current : [...current, studentId],
     );
+    setTeacherStudentIds((current) => {
+      const roster = current[teacherId] ?? [];
+      return {
+        ...current,
+        [teacherId]: roster.includes(studentId)
+          ? roster.filter((id) => id !== studentId)
+          : [...roster, studentId],
+      };
+    });
   }
 
   async function submit() {
     setSaving(true);
     try {
-      await onSave(workshop, { studentIds, teacherIds, managerIds });
+      await onSave(workshop, {
+        studentIds,
+        teacherIds,
+        managerIds,
+        teacherStudentIds,
+      });
       toast.success("Acceso del taller actualizado", {
         description: "Las nuevas personas recibirán una notificación.",
       });
@@ -772,7 +854,7 @@ function WorkshopAccessDialog({
           <div>
             <span className="eyebrow">Control de Dirección</span>
             <h2 id="workshop-access-title">Acceso a {workshop.title}</h2>
-            <p>Elige participantes y docentes administradores.</p>
+            <p>Elige participantes, administradores y el grupo de cada maestro.</p>
           </div>
           <button onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
         </header>
@@ -796,7 +878,33 @@ function WorkshopAccessDialog({
         </div>
 
         <div className="workshop-access-list">
-          {visible.length ? visible.map((account) => {
+          {rosterTeacherId ? (
+            <div className="workshop-roster-editor">
+              <div className="workshop-roster-editor-heading">
+                <button onClick={() => setRosterTeacherId(null)}><ArrowLeft size={16} /> Maestros</button>
+                <span>
+                  <strong>Alumnos de {teachers.find((teacher) => teacher.uid === rosterTeacherId)?.name}</strong>
+                  <small>Este maestro sólo podrá enviar trabajos y revisar a los alumnos elegidos.</small>
+                </span>
+              </div>
+              <div className="workshop-roster-editor-list">
+                {students.map((student) => {
+                  const assigned = (teacherStudentIds[rosterTeacherId] ?? []).includes(student.uid);
+                  return (
+                    <button
+                      className={assigned ? "selected" : ""}
+                      key={student.uid}
+                      onClick={() => toggleRosterStudent(rosterTeacherId, student.uid)}
+                    >
+                      <span className="workshop-person-avatar">{student.initials}</span>
+                      <span><strong>{student.name}</strong><small>{[student.grade, student.group].filter(Boolean).join(" ") || student.email}</small></span>
+                      <i>{assigned && <Check size={14} />}</i>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : visible.length ? visible.map((account) => {
             const selected = account.role === "student"
               ? studentIds.includes(account.uid)
               : teacherIds.includes(account.uid);
@@ -816,14 +924,28 @@ function WorkshopAccessDialog({
                   <i>{selected && <Check size={14} />}</i>
                 </button>
                 {account.role === "teacher" && (
-                  <button
-                    className={`workshop-manager-toggle ${manager ? "active" : ""}`}
-                    onClick={() => toggleManager(account)}
-                    aria-pressed={manager}
-                  >
-                    <UserRoundCog size={15} />
-                    {manager ? "Administra recursos" : "Hacer administrador"}
-                  </button>
+                  <div className="workshop-teacher-controls">
+                    <button
+                      className={`workshop-manager-toggle ${manager ? "active" : ""}`}
+                      onClick={() => toggleManager(account)}
+                      aria-pressed={manager}
+                    >
+                      <UserRoundCog size={15} />
+                      {manager ? "Administra el taller" : "Hacer administrador"}
+                    </button>
+                    {manager && (
+                      <button
+                        className="workshop-roster-button"
+                        onClick={() => {
+                          setRosterTeacherId(account.uid);
+                          setQuery("");
+                        }}
+                      >
+                        <Users size={15} />
+                        {teacherStudentIds[account.uid]?.length ?? 0} alumnos
+                      </button>
+                    )}
+                  </div>
                 )}
               </article>
             );

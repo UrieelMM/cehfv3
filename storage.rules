@@ -99,6 +99,50 @@ service firebase.storage {
         );
     }
 
+    function workshopTask(institutionId, workshopId, taskId) {
+      return firestore.get(
+        /databases/(default)/documents/institutions/$(institutionId)/workshops/$(workshopId)/tasks/$(taskId)
+      ).data;
+    }
+
+    function canReadWorkshopTask(institutionId, workshopId, taskId) {
+      let task = workshopTask(institutionId, workshopId, taskId);
+      return canReadWorkshop(institutionId, workshopId)
+        && (
+          isDirector()
+          || (
+            profile().role == "teacher"
+            && task.createdBy == request.auth.uid
+          )
+          || (
+            profile().role == "student"
+            && task.audienceStudentIds is list
+            && request.auth.uid in task.audienceStudentIds
+            && task.status in ["published", "closed"]
+          )
+        );
+    }
+
+    function canManageWorkshopTask(institutionId, workshopId, taskId) {
+      let task = workshopTask(institutionId, workshopId, taskId);
+      return isDirector()
+        || (
+          canManageWorkshop(institutionId, workshopId)
+          && profile().role == "teacher"
+          && task.createdBy == request.auth.uid
+        );
+    }
+
+    function canUploadWorkshopSubmission(institutionId, workshopId, taskId, studentId) {
+      let task = workshopTask(institutionId, workshopId, taskId);
+      return sameInstitution(institutionId)
+        && profile().role == "student"
+        && request.auth.uid == studentId
+        && task.status == "published"
+        && task.audienceStudentIds is list
+        && studentId in task.audienceStudentIds;
+    }
+
     function forumParticipationEnabled(institutionId) {
       let banPath = /databases/(default)/documents/forumBans/$(institutionId)/users/$(request.auth.uid);
       return !firestore.exists(banPath) || firestore.get(banPath).data.active != true;
@@ -224,6 +268,32 @@ service firebase.storage {
         && workshopSafeUpload();
       allow update: if false;
       allow delete: if canManageWorkshop(institutionId, workshopId);
+    }
+
+    match /institutions/{institutionId}/workshops/{workshopId}/tasks/{taskId}/resources/{assetId}/{fileName} {
+      allow read: if canReadWorkshopTask(institutionId, workshopId, taskId);
+      allow create: if canManageWorkshop(institutionId, workshopId)
+        && workshopSafeUpload();
+      allow update: if false;
+      allow delete: if canManageWorkshop(institutionId, workshopId);
+    }
+
+    match /institutions/{institutionId}/workshops/{workshopId}/tasks/{taskId}/submissions/{studentId}/{versionId}/{assetId}/{fileName} {
+      allow read: if canReadWorkshopTask(institutionId, workshopId, taskId)
+        && (
+          request.auth.uid == studentId
+          || canManageWorkshopTask(institutionId, workshopId, taskId)
+        );
+      allow create: if canUploadWorkshopSubmission(
+          institutionId, workshopId, taskId, studentId
+        ) && workshopSafeUpload();
+      allow update: if false;
+      allow delete: if (
+          request.auth.uid == studentId
+          && canUploadWorkshopSubmission(
+            institutionId, workshopId, taskId, studentId
+          )
+        ) || (isDirector() && sameInstitution(institutionId));
     }
 
     match /institutions/{institutionId}/profiles/{userId}/{assetId} {

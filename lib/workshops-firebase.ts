@@ -29,6 +29,9 @@ import type {
   WorkshopAccessInput,
   WorkshopKind,
   WorkshopResource,
+  WorkshopSubmission,
+  WorkshopTask,
+  WorkshopTaskAttachment,
 } from "./types";
 
 export const workshopDefinitions: Array<{
@@ -65,6 +68,10 @@ export const demoWorkshops: Workshop[] = [
     studentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
     teacherIds: ["demo-teacher", "demo-teacher-mariana"],
     managerIds: ["demo-teacher", "demo-teacher-mariana"],
+    teacherStudentIds: {
+      "demo-teacher": ["demo-student", "demo-student-sofia", "demo-student-diego"],
+      "demo-teacher-mariana": ["demo-student-sofia", "demo-student-diego"],
+    },
     memberIds: [
       "demo-student",
       "demo-student-sofia",
@@ -96,6 +103,10 @@ export const demoWorkshops: Workshop[] = [
     studentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
     teacherIds: ["demo-teacher", "demo-teacher-mariana"],
     managerIds: ["demo-teacher", "demo-teacher-mariana"],
+    teacherStudentIds: {
+      "demo-teacher": ["demo-student", "demo-student-sofia", "demo-student-diego"],
+      "demo-teacher-mariana": ["demo-student-sofia", "demo-student-diego"],
+    },
     memberIds: [
       "demo-student",
       "demo-student-sofia",
@@ -148,6 +159,15 @@ function stringList(value: unknown) {
   return Array.isArray(value) ? [...new Set(value.map(String).filter(Boolean))] : [];
 }
 
+function studentMap(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([teacherId, studentIds]) => [teacherId, stringList(studentIds)])
+      .filter(([teacherId]) => Boolean(teacherId)),
+  );
+}
+
 function resourceFromSnapshot(
   snapshot: QueryDocumentSnapshot<DocumentData>,
 ): WorkshopResource {
@@ -185,6 +205,7 @@ function workshopFromSnapshot(
     studentIds: stringList(data.studentIds),
     teacherIds: stringList(data.teacherIds),
     managerIds: stringList(data.managerIds),
+    teacherStudentIds: studentMap(data.teacherStudentIds),
     memberIds: stringList(data.memberIds),
     resources: [],
     updatedAt: asIso(data.updatedAt),
@@ -214,6 +235,7 @@ export async function ensureDefaultWorkshops(profile: UserProfile) {
       studentIds: [],
       teacherIds: [],
       managerIds: [],
+      teacherStudentIds: {},
       memberIds: [],
       createdBy: profile.uid,
       createdByName: profile.name,
@@ -305,12 +327,25 @@ export async function updateWorkshopAccess(
   const managerIds = [
     ...new Set(access.managerIds.filter((id) => teacherIds.includes(id))),
   ];
+  const teacherStudentIds = Object.fromEntries(
+    managerIds.map((teacherId) => [
+      teacherId,
+      [
+        ...new Set(
+          (access.teacherStudentIds[teacherId] ?? []).filter((studentId) =>
+            studentIds.includes(studentId),
+          ),
+        ),
+      ],
+    ]),
+  );
   await updateDoc(
     doc(db, "institutions", profile.institutionId, "workshops", workshop.id),
     {
       studentIds,
       teacherIds,
       managerIds,
+      teacherStudentIds,
       memberIds: [...new Set([...studentIds, ...teacherIds])],
       updatedAt: serverTimestamp(),
       updatedBy: profile.uid,
@@ -402,4 +437,404 @@ export async function getWorkshopResourceUrl(resource: WorkshopResource) {
   }
   const { storage } = requireFirebase();
   return getDownloadURL(ref(storage, resource.storagePath));
+}
+
+export type WorkshopTaskCreateInput = {
+  title: string;
+  description: string;
+  dueAt: string;
+  status: "draft" | "published";
+  audienceStudentIds: string[];
+  files: File[];
+};
+
+export const demoWorkshopTasks: WorkshopTask[] = [
+  {
+    id: "demo-task-tics",
+    workshopId: "tics",
+    institutionId: "cehf-primaria",
+    title: "Diseña una animación interactiva",
+    description:
+      "Crea una escena con al menos dos personajes, movimiento y un mensaje sobre ciudadanía digital.",
+    dueAt: "2026-08-28T23:00:00.000Z",
+    status: "published",
+    audienceStudentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
+    attachments: [],
+    createdBy: "demo-teacher",
+    teacherName: "Mariana López",
+    createdAt: "2026-08-19T15:00:00.000Z",
+    updatedAt: "2026-08-19T15:00:00.000Z",
+  },
+  {
+    id: "demo-task-reading",
+    workshopId: "club-lectura",
+    institutionId: "cehf-primaria",
+    title: "Carta a un personaje",
+    description:
+      "Escribe una carta breve a tu personaje favorito y cuéntale qué decisión suya te hizo pensar.",
+    dueAt: "2026-08-30T20:00:00.000Z",
+    status: "published",
+    audienceStudentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
+    attachments: [],
+    createdBy: "demo-teacher",
+    teacherName: "Mariana López",
+    createdAt: "2026-08-19T15:30:00.000Z",
+    updatedAt: "2026-08-19T15:30:00.000Z",
+  },
+];
+
+function attachmentFromData(value: unknown): WorkshopTaskAttachment | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  const storagePath = String(data.storagePath ?? "");
+  const name = String(data.name ?? "");
+  if (!storagePath || !name) return null;
+  return {
+    id: String(data.id ?? storagePath),
+    name,
+    storagePath,
+    contentType: String(data.contentType ?? "application/octet-stream"),
+    size: Number(data.size ?? 0),
+  };
+}
+
+function attachmentsFromData(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map(attachmentFromData)
+        .filter((item): item is WorkshopTaskAttachment => Boolean(item))
+    : [];
+}
+
+function taskFromSnapshot(
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+): WorkshopTask {
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    workshopId: String(data.workshopId ?? ""),
+    institutionId: String(data.institutionId ?? ""),
+    title: String(data.title ?? "Trabajo del taller"),
+    description: String(data.description ?? ""),
+    dueAt: asIso(data.dueAt),
+    status: ["draft", "closed"].includes(String(data.status))
+      ? (String(data.status) as WorkshopTask["status"])
+      : "published",
+    audienceStudentIds: stringList(data.audienceStudentIds),
+    attachments: attachmentsFromData(data.attachments),
+    createdBy: String(data.createdBy ?? ""),
+    teacherName: String(data.teacherName ?? "Equipo docente"),
+    createdAt: asIso(data.createdAt),
+    updatedAt: asIso(data.updatedAt),
+  };
+}
+
+function submissionFromData(
+  id: string,
+  data: DocumentData,
+): WorkshopSubmission {
+  return {
+    id,
+    taskId: String(data.taskId ?? ""),
+    workshopId: String(data.workshopId ?? ""),
+    institutionId: String(data.institutionId ?? ""),
+    studentId: String(data.studentId ?? id),
+    studentName: String(data.studentName ?? "Alumno CEHF"),
+    content: String(data.content ?? ""),
+    attachments: attachmentsFromData(data.attachments),
+    version: Math.max(1, Number(data.version ?? 1)),
+    status: ["feedback", "reviewed"].includes(String(data.status))
+      ? (String(data.status) as WorkshopSubmission["status"])
+      : "submitted",
+    teacherFeedback: String(data.teacherFeedback ?? ""),
+    submittedAt: asIso(data.submittedAt),
+    feedbackAt: data.feedbackAt ? asIso(data.feedbackAt) : undefined,
+    reviewedAt: data.reviewedAt ? asIso(data.reviewedAt) : undefined,
+    updatedAt: asIso(data.updatedAt),
+  };
+}
+
+function taskCollection(institutionId: string, workshopId: string) {
+  if (!firebase.db) throw new Error("Firebase no está configurado.");
+  return collection(
+    firebase.db,
+    "institutions",
+    institutionId,
+    "workshops",
+    workshopId,
+    "tasks",
+  );
+}
+
+export function watchWorkshopTasks(
+  workshop: Workshop,
+  profile: UserProfile,
+  callback: (tasks: WorkshopTask[]) => void,
+  onError?: (error: Error) => void,
+) {
+  if (!firebase.db) {
+    callback([]);
+    return () => undefined;
+  }
+  const source =
+    profile.role === "director"
+      ? query(taskCollection(profile.institutionId, workshop.id))
+      : profile.role === "teacher"
+        ? query(
+            taskCollection(profile.institutionId, workshop.id),
+            where("createdBy", "==", profile.uid),
+          )
+        : query(
+            taskCollection(profile.institutionId, workshop.id),
+            where("audienceStudentIds", "array-contains", profile.uid),
+            where("status", "in", ["published", "closed"]),
+          );
+  return onSnapshot(
+    source,
+    (snapshot) =>
+      callback(
+        snapshot.docs
+          .map(taskFromSnapshot)
+          .sort((first, second) => second.createdAt.localeCompare(first.createdAt)),
+      ),
+    (error) => onError?.(error),
+  );
+}
+
+async function uploadWorkshopFiles(
+  prefix: string,
+  files: File[],
+): Promise<WorkshopTaskAttachment[]> {
+  const { storage } = requireFirebase();
+  const uploaded: Array<{
+    attachment: WorkshopTaskAttachment;
+    storageReference: ReturnType<typeof ref>;
+  }> = [];
+  try {
+    for (const file of files) {
+      if (file.size <= 0 || file.size >= 20 * 1024 * 1024) {
+        throw new Error(`“${file.name}” debe pesar menos de 20 MB.`);
+      }
+      const id = crypto.randomUUID();
+      const storagePath = `${prefix}/${id}/${safeFileName(file.name)}`;
+      const storageReference = ref(storage, storagePath);
+      await uploadBytes(storageReference, file, {
+        contentType: file.type || "application/octet-stream",
+      });
+      uploaded.push({
+        storageReference,
+        attachment: {
+          id,
+          name: file.name,
+          storagePath,
+          contentType: file.type || "application/octet-stream",
+          size: file.size,
+        },
+      });
+    }
+    return uploaded.map((item) => item.attachment);
+  } catch (error) {
+    await Promise.all(
+      uploaded.map((item) => deleteObject(item.storageReference).catch(() => undefined)),
+    );
+    throw error;
+  }
+}
+
+export async function createWorkshopTask(
+  workshop: Workshop,
+  profile: UserProfile,
+  input: WorkshopTaskCreateInput,
+) {
+  const allowedStudents =
+    profile.role === "director"
+      ? workshop.studentIds
+      : workshop.teacherStudentIds[profile.uid] ?? [];
+  const audienceStudentIds = [
+    ...new Set(
+      input.audienceStudentIds.filter((studentId) =>
+        allowedStudents.includes(studentId),
+      ),
+    ),
+  ];
+  if (!audienceStudentIds.length) {
+    throw new Error("Selecciona al menos un alumno de tu grupo.");
+  }
+  const reference = doc(taskCollection(profile.institutionId, workshop.id));
+  const prefix = `institutions/${profile.institutionId}/workshops/${workshop.id}/tasks/${reference.id}/resources`;
+  const attachments = await uploadWorkshopFiles(prefix, input.files);
+  try {
+    await setDoc(reference, {
+      institutionId: profile.institutionId,
+      workshopId: workshop.id,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      dueAt: new Date(input.dueAt),
+      status: input.status,
+      audienceStudentIds,
+      attachments,
+      createdBy: profile.uid,
+      teacherName: profile.name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    await Promise.all(
+      attachments.map((attachment) =>
+        deleteObject(ref(firebase.storage!, attachment.storagePath)).catch(() => undefined),
+      ),
+    );
+    throw error;
+  }
+  return reference.id;
+}
+
+export async function setWorkshopTaskStatus(
+  task: WorkshopTask,
+  status: WorkshopTask["status"],
+) {
+  const { db } = requireFirebase();
+  await updateDoc(
+    doc(
+      db,
+      "institutions",
+      task.institutionId,
+      "workshops",
+      task.workshopId,
+      "tasks",
+      task.id,
+    ),
+    { status, updatedAt: serverTimestamp() },
+  );
+}
+
+export function watchWorkshopSubmissions(
+  task: WorkshopTask,
+  profile: UserProfile,
+  callback: (submissions: WorkshopSubmission[]) => void,
+  onError?: (error: Error) => void,
+) {
+  if (!firebase.db) {
+    callback([]);
+    return () => undefined;
+  }
+  const submissions = collection(
+    firebase.db,
+    "institutions",
+    task.institutionId,
+    "workshops",
+    task.workshopId,
+    "tasks",
+    task.id,
+    "submissions",
+  );
+  if (profile.role === "student") {
+    return onSnapshot(
+      doc(submissions, profile.uid),
+      (snapshot) =>
+        callback(snapshot.exists() ? [submissionFromData(snapshot.id, snapshot.data())] : []),
+      (error) => onError?.(error),
+    );
+  }
+  return onSnapshot(
+    submissions,
+    (snapshot) =>
+      callback(
+        snapshot.docs
+          .map((entry) => submissionFromData(entry.id, entry.data()))
+          .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt)),
+      ),
+    (error) => onError?.(error),
+  );
+}
+
+export async function submitWorkshopTask(
+  task: WorkshopTask,
+  profile: UserProfile,
+  input: { content: string; files: File[] },
+) {
+  if (profile.role !== "student") {
+    throw new Error("Sólo los alumnos pueden enviar este trabajo.");
+  }
+  const { db } = requireFirebase();
+  const submissionReference = doc(
+    db,
+    "institutions",
+    task.institutionId,
+    "workshops",
+    task.workshopId,
+    "tasks",
+    task.id,
+    "submissions",
+    profile.uid,
+  );
+  const previous = await getDoc(submissionReference);
+  const version = previous.exists() ? Number(previous.data().version ?? 1) + 1 : 1;
+  const prefix = `institutions/${task.institutionId}/workshops/${task.workshopId}/tasks/${task.id}/submissions/${profile.uid}/${version}`;
+  const attachments = await uploadWorkshopFiles(prefix, input.files);
+  const payload = {
+    institutionId: task.institutionId,
+    workshopId: task.workshopId,
+    taskId: task.id,
+    studentId: profile.uid,
+    studentName: previous.exists()
+      ? String(previous.data().studentName ?? profile.name)
+      : profile.name,
+    content: input.content.trim(),
+    attachments,
+    version,
+    status: "submitted",
+    teacherFeedback: "",
+    submittedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  const batch = writeBatch(db);
+  batch.set(submissionReference, payload);
+  batch.set(doc(collection(submissionReference, "history"), `version-${version}`), payload);
+  try {
+    await batch.commit();
+  } catch (error) {
+    await Promise.all(
+      attachments.map((attachment) =>
+        deleteObject(ref(firebase.storage!, attachment.storagePath)).catch(() => undefined),
+      ),
+    );
+    throw error;
+  }
+}
+
+export async function saveWorkshopFeedback(
+  task: WorkshopTask,
+  submission: WorkshopSubmission,
+  feedback: string,
+  reviewed: boolean,
+) {
+  const { db } = requireFirebase();
+  await updateDoc(
+    doc(
+      db,
+      "institutions",
+      task.institutionId,
+      "workshops",
+      task.workshopId,
+      "tasks",
+      task.id,
+      "submissions",
+      submission.studentId,
+    ),
+    {
+      teacherFeedback: feedback.trim(),
+      status: reviewed ? "reviewed" : "feedback",
+      feedbackAt: serverTimestamp(),
+      reviewedAt: reviewed ? serverTimestamp() : null,
+      updatedAt: serverTimestamp(),
+    },
+  );
+}
+
+export async function getWorkshopTaskAttachmentUrl(
+  attachment: WorkshopTaskAttachment,
+) {
+  const { storage } = requireFirebase();
+  return getDownloadURL(ref(storage, attachment.storagePath));
 }

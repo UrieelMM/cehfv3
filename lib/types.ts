@@ -465,6 +465,7 @@ export type Workshop = {
   studentIds: string[];
   teacherIds: string[];
   managerIds: string[];
+  teacherStudentIds: Record<string, string[]>;
   memberIds: string[];
   resources: WorkshopResource[];
   updatedAt: string;
@@ -474,6 +475,56 @@ export type WorkshopAccessInput = {
   studentIds: string[];
   teacherIds: string[];
   managerIds: string[];
+  teacherStudentIds: Record<string, string[]>;
+};
+
+export type WorkshopTaskStatus = "draft" | "published" | "closed";
+
+export type WorkshopTaskAttachment = {
+  id: string;
+  name: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+};
+
+export type WorkshopTask = {
+  id: string;
+  workshopId: string;
+  institutionId: string;
+  title: string;
+  description: string;
+  dueAt: string;
+  status: WorkshopTaskStatus;
+  audienceStudentIds: string[];
+  attachments: WorkshopTaskAttachment[];
+  createdBy: string;
+  teacherName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkshopSubmissionStatus =
+  | "submitted"
+  | "feedback"
+  | "reviewed";
+
+export type WorkshopSubmission = {
+  id: string;
+  taskId: string;
+  workshopId: string;
+  institutionId: string;
+  studentId: string;
+  studentName: string;
+  content: string;
+  attachments: WorkshopTaskAttachment[];
+  version: number;
+  status: WorkshopSubmissionStatus;
+  teacherFeedback: string;
+  submittedAt: string;
+  feedbackAt?: string;
+  reviewedAt?: string;
+  updatedAt: string;
 };
 
 export type PortalSettings = {

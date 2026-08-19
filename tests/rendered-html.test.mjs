@@ -75,6 +75,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     workshopSource,
     workshopFirebaseSource,
     workshopCss,
+    workshopTaskUiSource,
   ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
@@ -93,6 +94,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
       readFile(new URL("lib/workshops-firebase.ts", projectRoot), "utf8"),
       readFile(new URL("app/workshops.css", projectRoot), "utf8"),
+      readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -231,12 +233,24 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(workshopFirebaseSource, /ensureDefaultWorkshops/);
   assert.match(workshopFirebaseSource, /uploadWorkshopResource/);
   assert.match(workshopFirebaseSource, /watchWorkshopResources/);
+  assert.match(workshopFirebaseSource, /teacherStudentIds/);
+  assert.match(workshopFirebaseSource, /createWorkshopTask/);
+  assert.match(workshopFirebaseSource, /submitWorkshopTask/);
+  assert.match(workshopFirebaseSource, /saveWorkshopFeedback/);
+  assert.match(workshopTaskUiSource, /Trabajos y entregas/);
+  assert.match(workshopTaskUiSource, /Enviar nueva versión/);
+  assert.match(workshopTaskUiSource, /Finalizar revisión/);
   assert.match(firestoreRules, /match \/workshops\/\{workshopId\}/);
+  assert.match(firestoreRules, /match \/tasks\/\{taskId\}/);
+  assert.match(firestoreRules, /validWorkshopTaskAudience/);
+  assert.match(firestoreRules, /match \/submissions\/\{studentId\}/);
   assert.match(firestoreRules, /function canManageWorkshop/);
   assert.match(storageRules, /workshopSafeUpload/);
   assert.match(storageRules, /workshops\/\{workshopId\}\/resources/);
   assert.match(functionsSource, /onWorkshopAccessChanged/);
   assert.match(functionsSource, /onWorkshopResourceCreated/);
+  assert.match(functionsSource, /onWorkshopTaskChanged/);
+  assert.match(functionsSource, /onWorkshopSubmissionChanged/);
   assert.match(workshopCss, /workshop-cover-card\.is-tics/);
   assert.match(workshopCss, /workshop-cover-card\.is-reading/);
   await access(new URL("public/og-campus.png", projectRoot));
