@@ -262,6 +262,78 @@ export type Material = {
   reviewed: boolean;
 };
 
+export type LearningMaterialType =
+  | "pdf"
+  | "audio"
+  | "video"
+  | "image"
+  | "document"
+  | "link"
+  | "other";
+
+export type LearningMaterialLink = {
+  id: string;
+  label: string;
+  url: string;
+};
+
+export type LearningMaterialAttachment = {
+  id: string;
+  name: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+  downloadUrl?: string;
+};
+
+export type LearningMaterial = {
+  id: string;
+  firestorePath: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  subjectId: string;
+  subject: string;
+  title: string;
+  description: string;
+  type: LearningMaterialType;
+  links: LearningMaterialLink[];
+  attachments: LearningMaterialAttachment[];
+  required: boolean;
+  audienceStudentIds: string[];
+  targetGroups: string[];
+  managerIds: string[];
+  createdBy: string;
+  createdByName: string;
+  createdByRole: "director" | "teacher";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LearningMaterialView = {
+  studentId: string;
+  studentName: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  viewCount: number;
+};
+
+export type LearningMaterialCreateInput = {
+  title: string;
+  description: string;
+  type: LearningMaterialType;
+  subject: string;
+  weekId: string;
+  targetGroups: string[];
+  links: Array<{ label: string; url: string }>;
+  files: File[];
+  required: boolean;
+};
+
 export type ProgressLevel =
   | "achieved"
   | "in_progress"

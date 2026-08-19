@@ -901,6 +901,380 @@ function notificationRecipients(value: unknown) {
     : [];
 }
 
+type MaterialStaff = {
+  uid: string;
+  institutionId: string;
+  name: string;
+  role: "director" | "teacher";
+  subjects: string[];
+};
+
+const MATERIAL_TYPES = [
+  "pdf",
+  "audio",
+  "video",
+  "image",
+  "document",
+  "link",
+  "other",
+] as const;
+
+async function requireMaterialStaff(
+  auth: CallableRequest<unknown>["auth"],
+): Promise<MaterialStaff> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const snapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = snapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  const directorClaimsAreValid =
+    role !== "director" ||
+    (
+      auth.token.role === "director" &&
+      auth.token.allPermissions === true &&
+      auth.token.institutionId === institutionId
+    );
+  if (
+    !snapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher"].includes(role) ||
+    !institutionId ||
+    !directorClaimsAreValid
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil no tiene permiso para publicar materiales.",
+    );
+  }
+  return {
+    uid: auth.uid,
+    institutionId,
+    name: String(profile?.name ?? "Campus CEHF"),
+    role: role as MaterialStaff["role"],
+    subjects: Array.isArray(profile?.subjects) ? profile.subjects.map(String) : [],
+  };
+}
+
+function materialId(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", "El identificador del material no es válido.");
+  }
+  return normalized;
+}
+
+function materialText(
+  value: unknown,
+  field: string,
+  minimum: number,
+  maximum: number,
+) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < minimum || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} debe tener entre ${minimum} y ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function optionalMaterialText(value: unknown, field: string, maximum: number) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim();
+  if (normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} puede tener hasta ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function materialGroups(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Los grupos no tienen un formato válido.");
+  }
+  const groups = [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+  if (groups.length > 30 || groups.some((group) => group.length > 30)) {
+    throw new HttpsError("invalid-argument", "Selecciona grupos válidos.");
+  }
+  return groups;
+}
+
+function materialLinks(value: unknown) {
+  if (!Array.isArray(value) || value.length > 10) {
+    throw new HttpsError("invalid-argument", "Puedes agregar hasta 10 enlaces.");
+  }
+  return value.map((item, index) => {
+    const input = (item ?? {}) as Record<string, unknown>;
+    const url = String(input.url ?? "").trim();
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new HttpsError("invalid-argument", `El enlace ${index + 1} no es válido.`);
+    }
+    if (!["http:", "https:"].includes(parsed.protocol) || url.length > 2_000) {
+      throw new HttpsError("invalid-argument", `El enlace ${index + 1} no es seguro.`);
+    }
+    return {
+      id: materialId(input.id),
+      label: materialText(input.label || "Enlace", "El nombre del enlace", 1, 100),
+      url,
+    };
+  });
+}
+
+function materialAttachments(
+  value: unknown,
+  institutionId: string,
+  selectedMaterialId: string,
+) {
+  if (!Array.isArray(value) || value.length > 8) {
+    throw new HttpsError("invalid-argument", "Puedes agregar hasta 8 archivos.");
+  }
+  return value.map((item, index) => {
+    const input = (item ?? {}) as Record<string, unknown>;
+    const id = materialId(input.id);
+    const storagePath = String(input.storagePath ?? "");
+    const expectedPath = `institutions/${institutionId}/materials/${selectedMaterialId}/${id}`;
+    const size = Number(input.size ?? 0);
+    if (storagePath !== expectedPath || !Number.isFinite(size) || size <= 0 || size >= 100 * 1024 * 1024) {
+      throw new HttpsError(
+        "invalid-argument",
+        `El archivo ${index + 1} no coincide con la carga autorizada.`,
+      );
+    }
+    return {
+      id,
+      name: materialText(input.name, "El nombre del archivo", 1, 180),
+      storagePath,
+      contentType: materialText(input.contentType, "El tipo del archivo", 1, 120),
+      size,
+    };
+  });
+}
+
+export const createMaterial = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  if (String(input.institutionId ?? "") !== actor.institutionId) {
+    throw new HttpsError("permission-denied", "La institución no coincide con tu perfil.");
+  }
+  const selectedMaterialId = materialId(input.materialId);
+  const title = materialText(input.title, "El nombre", 3, 120);
+  const description = optionalMaterialText(input.description, "La descripción", 800);
+  const subject = materialText(input.subject, "La materia", 2, 80);
+  const subjectId = calendarId(input.subjectId, "La materia");
+  const type = String(input.type ?? "");
+  if (!MATERIAL_TYPES.includes(type as typeof MATERIAL_TYPES[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un tipo de material válido.");
+  }
+  if (actor.role === "teacher" && !actor.subjects.includes(subject)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo puedes publicar materiales de las materias que impartes.",
+    );
+  }
+  const targetGroups = materialGroups(input.targetGroups);
+  const links = materialLinks(input.links);
+  const attachments = materialAttachments(
+    input.attachments,
+    actor.institutionId,
+    selectedMaterialId,
+  );
+  if (!links.length && !attachments.length) {
+    throw new HttpsError("invalid-argument", "Agrega al menos un enlace o archivo.");
+  }
+  const schoolYearId = calendarId(input.schoolYearId, "El ciclo escolar");
+  const termId = calendarId(input.termId, "El trimestre");
+  const weekId = calendarId(input.weekId, "La semana");
+  const weekReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/semanas/${weekId}`,
+  );
+  const termReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/trimestres/${termId}`,
+  );
+  const configReference = db.doc(
+    `institutions/${actor.institutionId}/configuracion/academica`,
+  );
+  const [weekSnapshot, termSnapshot, configSnapshot] = await db.getAll(
+    weekReference,
+    termReference,
+    configReference,
+  );
+  const week = weekSnapshot.data();
+  const term = termSnapshot.data();
+  const config = configSnapshot.data();
+  if (
+    !weekSnapshot.exists ||
+    !termSnapshot.exists ||
+    week?.active !== true ||
+    term?.active !== true ||
+    !Array.isArray(term?.weekIds) ||
+    !term.weekIds.includes(weekId)
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La semana seleccionada no pertenece al calendario académico activo.",
+    );
+  }
+
+  const peopleSnapshot = await db
+    .collection("users")
+    .where("institutionId", "==", actor.institutionId)
+    .get();
+  const people = peopleSnapshot.docs.map((snapshot) => ({
+    uid: snapshot.id,
+    ...snapshot.data(),
+  })) as Array<DocumentData & { uid: string }>;
+  const recipients = people.filter((person) => {
+    if (person.active !== true || person.role !== "student") return false;
+    const subjects = Array.isArray(person.subjects) ? person.subjects.map(String) : [];
+    const teacherIds = Array.isArray(person.teacherIds)
+      ? person.teacherIds.map(String)
+      : [];
+    const group = `${String(person.grade ?? "")} ${String(person.group ?? "")}`.trim();
+    return (
+      subjects.includes(subject) &&
+      (actor.role === "director" || teacherIds.includes(actor.uid)) &&
+      (!targetGroups.length || targetGroups.includes(group))
+    );
+  });
+  if (!recipients.length) {
+    throw new HttpsError(
+      "failed-precondition",
+      actor.role === "teacher"
+        ? "No tienes alumnos asignados en esa materia y grupos."
+        : "No hay alumnos activos para esa materia y grupos.",
+    );
+  }
+  const resolvedGroups = [
+    ...new Set(
+      recipients.map((person) =>
+        `${String(person.grade ?? "")} ${String(person.group ?? "")}`.trim(),
+      ),
+    ),
+  ].filter(Boolean);
+  const managerIds = actor.role === "teacher"
+    ? [actor.uid]
+    : people
+        .filter((person) => {
+          if (person.active !== true || person.role !== "teacher") return false;
+          const teacherSubjects = Array.isArray(person.subjects)
+            ? person.subjects.map(String)
+            : [];
+          return teacherSubjects.includes(subject) && recipients.some((student) => {
+            const teacherIds = Array.isArray(student.teacherIds)
+              ? student.teacherIds.map(String)
+              : [];
+            return teacherIds.includes(person.uid);
+          });
+        })
+        .map((person) => person.uid);
+
+  const reference = db.doc(
+    `institutions/${actor.institutionId}/materials/${selectedMaterialId}`,
+  );
+  const existing = await reference.get();
+  if (existing.exists) {
+    const data = existing.data();
+    if (data?.createdBy === actor.uid) {
+      return {
+        materialId: selectedMaterialId,
+        recipientCount: notificationRecipients(data.audienceStudentIds).length,
+      };
+    }
+    throw new HttpsError("already-exists", "Ese material ya existe.");
+  }
+  const now = Timestamp.now();
+  const material = {
+    institutionId: actor.institutionId,
+    schoolYearId,
+    schoolYearLabel: String(config?.schoolYearLabel ?? input.schoolYearLabel ?? schoolYearId),
+    termId,
+    termLabel: String(term?.label ?? input.termLabel ?? "Trimestre"),
+    weekId,
+    weekLabel: String(week?.label ?? input.weekLabel ?? "Semana"),
+    subjectId,
+    subject,
+    title,
+    description,
+    type,
+    links,
+    attachments,
+    required: input.required === true,
+    audienceStudentIds: recipients.map((person) => person.uid),
+    targetGroups: resolvedGroups,
+    managerIds,
+    createdBy: actor.uid,
+    createdByName: actor.name,
+    createdByRole: actor.role,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const batch = db.batch();
+  batch.create(reference, material);
+  batch.create(db.collection("auditEvents").doc(), {
+    entityType: "material",
+    entityId: selectedMaterialId,
+    institutionId: actor.institutionId,
+    action: "material.published",
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    after: {
+      subject,
+      weekId,
+      type,
+      required: input.required === true,
+      recipientCount: recipients.length,
+    },
+    createdAt: now,
+  });
+  await batch.commit();
+
+  await writeNotifications(
+    recipients.map((person) => person.uid),
+    `material-${selectedMaterialId}`,
+    {
+      category: "material",
+      title: `Nuevo material: ${title}`,
+      detail: `${subject} · ${String(week?.label ?? "Semana")}${input.required === true ? " · Obligatorio" : ""}`,
+      materialId: selectedMaterialId,
+      url: "/weekly-materials",
+      eventType: "material_published",
+    },
+  );
+  const managerRecipients = managerIds.filter((uid) => uid !== actor.uid);
+  if (managerRecipients.length) {
+    await writeNotifications(
+      managerRecipients,
+      `material-manager-${selectedMaterialId}`,
+      {
+        category: "material",
+        title: "Nuevo material para tus alumnos",
+        detail: `${title} · ${subject} · ${String(week?.label ?? "Semana")}`,
+        materialId: selectedMaterialId,
+        url: "/weekly-materials",
+        eventType: "material_assigned_to_students",
+      },
+    );
+  }
+  logger.info("Learning material published", {
+    materialId: selectedMaterialId,
+    institutionId: actor.institutionId,
+    actorId: actor.uid,
+    recipientCount: recipients.length,
+  });
+  return { materialId: selectedMaterialId, recipientCount: recipients.length };
+});
+
 export const onWorkshopAccessChanged = onDocumentWritten(
   { document: WORKSHOP_PATH },
   async (event) => {

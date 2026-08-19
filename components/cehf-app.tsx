@@ -54,6 +54,10 @@ import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WorkshopsPage } from "@/components/workshops-page";
 import {
+  MaterialCreateModal,
+  MaterialsPage,
+} from "@/components/materials-page";
+import {
   AcademicConfigurationCard,
   TaskCreateModal,
   TaskDetailModal,
@@ -91,6 +95,13 @@ import {
   watchTaskNotifications,
 } from "@/lib/tasks-firebase";
 import {
+  createDemoLearningMaterial,
+  createLearningMaterial,
+  legacyMaterialsToLearningMaterials,
+  loadViewedLearningMaterialIds,
+  watchLearningMaterials,
+} from "@/lib/materials-firebase";
+import {
   createDemoState,
   demoManagedAccounts,
   demoProfiles,
@@ -109,6 +120,8 @@ import type {
   ForumTopicKind,
   ManagedAccount,
   AcademicConfig,
+  LearningMaterial,
+  LearningMaterialCreateInput,
   PortalState,
   ProgressLevel,
   Role,
@@ -333,6 +346,23 @@ export function CEHFApp() {
     ),
   );
   const [taskRecordsLoading, setTaskRecordsLoading] = useState(false);
+  const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>(() =>
+    legacyMaterialsToLearningMaterials(
+      createDemoState().materials,
+      demoProfiles.student,
+      defaultAcademicConfig,
+      demoManagedAccounts,
+    ),
+  );
+  const [materialRecordsLoading, setMaterialRecordsLoading] = useState(false);
+  const [viewedMaterialIds, setViewedMaterialIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        createDemoState().materials
+          .filter((material) => material.reviewed)
+          .map((material) => material.id),
+      ),
+  );
   const [mobileMore, setMobileMore] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>(
@@ -477,6 +507,65 @@ export function CEHFApp() {
       setTaskRecordsLoading(false);
     });
   }, [demoRole, firebaseUser]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    queueMicrotask(() => {
+      setMaterialRecords([]);
+      setMaterialRecordsLoading(true);
+    });
+    return watchLearningMaterials(
+      profile,
+      (materials) => {
+        setMaterialRecords(materials);
+        setMaterialRecordsLoading(false);
+      },
+      (error) => {
+        setMaterialRecordsLoading(false);
+        reportFirebaseError("cargar materiales", error);
+      },
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
+    if (firebaseUser) return;
+    queueMicrotask(() => {
+      setMaterialRecords(
+        legacyMaterialsToLearningMaterials(
+          state.materials,
+          currentProfile,
+          academicConfig,
+          managedAccounts,
+        ),
+      );
+      setMaterialRecordsLoading(false);
+      setViewedMaterialIds(
+        new Set(
+          state.materials
+            .filter((material) => material.reviewed)
+            .map((material) => material.id),
+        ),
+      );
+    });
+  }, [academicConfig, currentProfile, firebaseUser, managedAccounts, state.materials]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile || profile.role !== "student") {
+      if (profile?.role !== "student") queueMicrotask(() => setViewedMaterialIds(new Set()));
+      return;
+    }
+    let active = true;
+    void loadViewedLearningMaterialIds(materialRecords, profile)
+      .then((ids) => {
+        if (active) setViewedMaterialIds(ids);
+      })
+      .catch((error) => {
+        if (active) reportFirebaseError("cargar lecturas de materiales", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [firebaseUser, materialRecords, profile]);
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
@@ -965,13 +1054,18 @@ export function CEHFApp() {
                   <button
                     className="primary-button"
                     disabled={
-                      activeSection === "tasks" &&
-                      academicConfig.calendarStatus !== "active"
+                      (activeSection === "tasks" &&
+                        academicConfig.calendarStatus !== "active") ||
+                      (activeSection === "weekly-materials" &&
+                        academicCalendar.weeks.length === 0)
                     }
                     title={
                       activeSection === "tasks" &&
                       academicConfig.calendarStatus !== "active"
                         ? "Dirección debe configurar una semana activa"
+                        : activeSection === "weekly-materials" &&
+                            academicCalendar.weeks.length === 0
+                          ? "Dirección debe configurar las semanas académicas"
                         : undefined
                     }
                     onClick={() => setCreateOpen(true)}
@@ -999,6 +1093,12 @@ export function CEHFApp() {
               openDetail={openTaskDetail}
               taskRecords={taskRecords}
               taskRecordsLoading={taskRecordsLoading}
+              materialRecords={materialRecords}
+              materialRecordsLoading={materialRecordsLoading}
+              viewedMaterialIds={viewedMaterialIds}
+              onMaterialViewed={(materialId) =>
+                setViewedMaterialIds((current) => new Set(current).add(materialId))
+              }
               academicConfig={academicConfig}
               academicCalendar={academicCalendar}
               saveAcademicCalendarConfiguration={async (input) => {
@@ -1038,7 +1138,40 @@ export function CEHFApp() {
             onNavigate={navigate}
           />
         )}
-        {createOpen && activeSection === "tasks" ? (
+        {createOpen && activeSection === "weekly-materials" ? (
+          <MaterialCreateModal
+            profile={currentProfile}
+            config={academicConfig}
+            calendar={academicCalendar}
+            accounts={managedAccounts}
+            onClose={() => setCreateOpen(false)}
+            onCreate={async (input: LearningMaterialCreateInput) => {
+              if (firebaseUser && profile) {
+                const result = await createLearningMaterial(
+                  input,
+                  profile,
+                  academicConfig,
+                  academicCalendar,
+                );
+                toast.success("Material publicado", {
+                  description: `${result.recipientCount} ${result.recipientCount === 1 ? "alumno fue notificado" : "alumnos fueron notificados"}.`,
+                });
+              } else {
+                const material = createDemoLearningMaterial(
+                  input,
+                  currentProfile,
+                  academicConfig,
+                  academicCalendar,
+                  managedAccounts,
+                );
+                setMaterialRecords((previous) => [material, ...previous]);
+                toast.success("Material publicado en la demostración", {
+                  description: `${material.audienceStudentIds.length} destinatarios preparados.`,
+                });
+              }
+            }}
+          />
+        ) : createOpen && activeSection === "tasks" ? (
           <TaskCreateModal
             config={academicConfig}
             accounts={managedAccounts}
@@ -1535,6 +1668,10 @@ function SectionContent({
   openDetail,
   taskRecords,
   taskRecordsLoading,
+  materialRecords,
+  materialRecordsLoading,
+  viewedMaterialIds,
+  onMaterialViewed,
   academicConfig,
   academicCalendar,
   saveAcademicCalendarConfiguration,
@@ -1556,6 +1693,10 @@ function SectionContent({
   openDetail: (id: string) => void;
   taskRecords: TaskAssignment[];
   taskRecordsLoading: boolean;
+  materialRecords: LearningMaterial[];
+  materialRecordsLoading: boolean;
+  viewedMaterialIds: Set<string>;
+  onMaterialViewed: (materialId: string) => void;
   academicConfig: AcademicConfig;
   academicCalendar: AcademicCalendar;
   saveAcademicCalendarConfiguration: (
@@ -1623,7 +1764,15 @@ function SectionContent({
       );
     case "weekly-materials":
       return (
-        <MaterialsPage state={state} updateState={updateState} role={role} />
+        <MaterialsPage
+          materials={materialRecords}
+          loading={materialRecordsLoading}
+          profile={profile}
+          accounts={managedAccounts}
+          viewedIds={viewedMaterialIds}
+          onViewed={onMaterialViewed}
+          firebaseReady={firebaseReady}
+        />
       );
     case "wall-newspaper":
       return (
@@ -2675,97 +2824,6 @@ function ReportsPage({
           </article>
         ))}
     </section>
-  );
-}
-
-function MaterialsPage({
-  state,
-  updateState,
-  role,
-}: {
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-  role: Role;
-}) {
-  return (
-    <div>
-      <div className="filter-row">
-        <div className="filter-pills">
-          <button className="active">Toda la semana</button>
-          <button>Lunes</button>
-          <button>Miércoles</button>
-          <button>Jueves</button>
-        </div>
-        <button className="filter-button">
-          Todas las materias <ChevronDown size={16} />
-        </button>
-      </div>
-      <section className="materials-grid">
-        {state.materials.map((material) => (
-          <article className="material-card" key={material.id}>
-            <div className={`material-type ${subjectColors[material.subject] ?? "violet"}`}>
-              {material.type === "Video" ? (
-                <Sparkles size={24} />
-              ) : material.type === "Audio" ? (
-                <MessageCircle size={24} />
-              ) : (
-                <FileText size={24} />
-              )}
-              <span>{material.type}</span>
-            </div>
-            <div className="material-copy">
-              <div className="list-card-meta">
-                <span>{material.day}</span>
-                <i>•</i>
-                <span>{material.subject}</span>
-              </div>
-              <h3>{material.title}</h3>
-              <p>{material.description}</p>
-              <div className="material-flags">
-                <span className={material.required ? "required" : ""}>
-                  {material.required ? "Obligatorio" : "Opcional"}
-                </span>
-                {material.type === "Audio" && <span>Con transcripción</span>}
-              </div>
-              <button
-                className={
-                  material.reviewed ? "secondary-button" : "primary-button"
-                }
-                onClick={() =>
-                  updateState(
-                    (previous) => ({
-                      ...previous,
-                      materials: previous.materials.map((item) =>
-                        item.id === material.id
-                          ? { ...item, reviewed: true }
-                          : item,
-                      ),
-                    }),
-                    role === "student"
-                      ? "Material marcado como revisado"
-                      : "Vista previa abierta",
-                  )
-                }
-              >
-                {role === "student"
-                  ? material.reviewed
-                    ? "Revisado"
-                    : "Abrir material"
-                  : "Previsualizar"}
-                {material.reviewed ? (
-                  <CheckCircle2 size={17} />
-                ) : (
-                  <ArrowRight size={17} />
-                )}
-              </button>
-            </div>
-          </article>
-        ))}
-      </section>
-    </div>
   );
 }
 

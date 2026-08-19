@@ -66,6 +66,38 @@ service firebase.storage {
         );
     }
 
+    function materialSafeUpload() {
+      return request.resource.size < 100 * 1024 * 1024
+        && request.resource.contentType.matches(
+          "(application/pdf|application/octet-stream|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-(excel|powerpoint)|image/.*|audio/.*|video/.*|text/(plain|csv))"
+        );
+    }
+
+    function learningMaterial(institutionId, materialId) {
+      return firestore.get(
+        /databases/(default)/documents/institutions/$(institutionId)/materials/$(materialId)
+      ).data;
+    }
+
+    function canReadLearningMaterial(institutionId, materialId) {
+      let material = learningMaterial(institutionId, materialId);
+      return sameInstitution(institutionId)
+        && material.institutionId == institutionId
+        && (
+          isDirector()
+          || (
+            profile().role == "teacher"
+            && material.managerIds is list
+            && request.auth.uid in material.managerIds
+          )
+          || (
+            profile().role == "student"
+            && material.audienceStudentIds is list
+            && request.auth.uid in material.audienceStudentIds
+          )
+        );
+    }
+
     function workshop(institutionId, workshopId) {
       return firestore.get(
         /databases/(default)/documents/institutions/$(institutionId)/workshops/$(workshopId)
@@ -228,10 +260,11 @@ service firebase.storage {
     }
 
     match /institutions/{institutionId}/materials/{materialId}/{assetId} {
-      allow read: if sameInstitution(institutionId);
-      allow create, update: if isStaff()
+      allow read: if canReadLearningMaterial(institutionId, materialId);
+      allow create: if isStaff()
         && sameInstitution(institutionId)
-        && safeUpload();
+        && materialSafeUpload();
+      allow update: if false;
       allow delete: if isDirector() && sameInstitution(institutionId);
     }
 

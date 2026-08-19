@@ -644,9 +644,91 @@ service cloud.firestore {
         }
       }
 
+      match /materials/{materialId} {
+        function canReadMaterial(data) {
+          return isActive()
+            && data.institutionId == institutionId
+            && profile().institutionId == institutionId
+            && (
+              isDirector()
+              || (
+                roleIs("teacher")
+                && data.managerIds is list
+                && request.auth.uid in data.managerIds
+              )
+              || (
+                roleIs("student")
+                && data.audienceStudentIds is list
+                && request.auth.uid in data.audienceStudentIds
+              )
+            );
+        }
+
+        function parentMaterial() {
+          return get(
+            /databases/$(database)/documents/institutions/$(institutionId)/materials/$(materialId)
+          ).data;
+        }
+
+        allow read: if canReadMaterial(resource.data);
+        allow create, update, delete: if false;
+
+        match /views/{studentId} {
+          function canReadMaterialView() {
+            let material = parentMaterial();
+            return canReadMaterial(material) && (
+              isDirector()
+              || (
+                roleIs("teacher")
+                && request.auth.uid in material.managerIds
+              )
+              || request.auth.uid == studentId
+            );
+          }
+
+          function studentCanOpenMaterial() {
+            let material = parentMaterial();
+            return roleIs("student")
+              && request.auth.uid == studentId
+              && material.institutionId == institutionId
+              && profile().institutionId == institutionId
+              && material.audienceStudentIds is list
+              && studentId in material.audienceStudentIds;
+          }
+
+          allow read: if canReadMaterialView();
+          allow create: if studentCanOpenMaterial()
+            && request.resource.data.keys().hasOnly([
+              "institutionId", "materialId", "studentId", "studentName",
+              "firstOpenedAt", "lastOpenedAt", "viewCount"
+            ])
+            && request.resource.data.institutionId == institutionId
+            && request.resource.data.materialId == materialId
+            && request.resource.data.studentId == studentId
+            && request.resource.data.studentName == profile().name
+            && request.resource.data.firstOpenedAt == request.time
+            && request.resource.data.lastOpenedAt == request.time
+            && request.resource.data.viewCount == 1;
+          allow update: if studentCanOpenMaterial()
+            && request.resource.data.institutionId == resource.data.institutionId
+            && request.resource.data.materialId == resource.data.materialId
+            && request.resource.data.studentId == resource.data.studentId
+            && request.resource.data.studentName == resource.data.studentName
+            && request.resource.data.firstOpenedAt == resource.data.firstOpenedAt
+            && request.resource.data.lastOpenedAt == request.time
+            && request.resource.data.viewCount == resource.data.viewCount + 1
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["lastOpenedAt", "viewCount"]);
+          allow delete: if false;
+        }
+      }
+
       match /{collectionName}/{documentId} {
-        allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if isDirector()
+        allow read: if collectionName != "materials"
+          && isActive()
+          && profile().institutionId == institutionId;
+        allow create, update: if collectionName != "materials"
+          && isDirector()
           && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;
         allow delete: if false;
