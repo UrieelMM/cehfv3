@@ -577,7 +577,7 @@ export async function loadPortalState(
       } as PortalState)
     : initial;
 
-  if (profile.role === "student") {
+  if (profile.role !== "director") {
     const privateRef = privateStateRef(profile.uid);
     if (privateRef) {
       const privateSnapshot = await getDoc(privateRef);
@@ -586,7 +586,7 @@ export async function loadPortalState(
           ...sharedState,
           ...privateSnapshot.data(),
           // El versículo es institucional: siempre prevalece la versión del
-          // estado compartido sobre cualquier copia privada del estudiante.
+          // estado compartido sobre cualquier copia privada del usuario.
           weeklyVerse: sharedState.weeklyVerse,
         } as PortalState;
       }
@@ -605,12 +605,13 @@ export async function savePortalState(
 ) {
   if (!db) return;
   const target =
-    profile.role === "student"
-      ? privateStateRef(profile.uid)
-      : sharedStateRef(profile.institutionId);
+    profile.role === "director"
+      ? sharedStateRef(profile.institutionId)
+      : privateStateRef(profile.uid);
   if (!target) return;
   await setDoc(target, {
     ...state,
+    institutionId: profile.institutionId,
     updatedAt: new Date().toISOString(),
     updatedBy: profile.uid,
   });

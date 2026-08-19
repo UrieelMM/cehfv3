@@ -172,12 +172,25 @@ export function watchLearningMaterials(
     profile.institutionId,
     "materials",
   );
+  const institutionConstraint = where(
+    "institutionId",
+    "==",
+    profile.institutionId,
+  );
   const materialQuery =
     profile.role === "director"
-      ? query(base)
+      ? query(base, institutionConstraint)
       : profile.role === "teacher"
-        ? query(base, where("managerIds", "array-contains", profile.uid))
-        : query(base, where("audienceStudentIds", "array-contains", profile.uid));
+        ? query(
+            base,
+            institutionConstraint,
+            where("managerIds", "array-contains", profile.uid),
+          )
+        : query(
+            base,
+            institutionConstraint,
+            where("audienceStudentIds", "array-contains", profile.uid),
+          );
   return onSnapshot(
     materialQuery,
     (snapshot) => {
