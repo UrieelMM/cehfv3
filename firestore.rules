@@ -585,6 +585,35 @@ service cloud.firestore {
       }
     }
 
+    // El foro usa documentos independientes para evitar que una respuesta
+    // reescriba el estado completo del portal. Todas las mutaciones pasan por
+    // Cloud Functions, donde también se generan notificaciones y auditoría.
+    match /forumTopics/{topicId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || request.auth.uid in resource.data.participantIds
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /forumPosts/{postId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || request.auth.uid in resource.data.participantIds
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /forumModeration/{caseId} {
+      allow read: if isStaff() && sameInstitution(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /forumBans/{institutionId}/users/{userId} {
+      allow read: if isActive()
+        && profile().institutionId == institutionId
+        && (isDirector() || request.auth.uid == userId);
+      allow create, update, delete: if false;
+    }
+
     match /notifications/{userId}/items/{notificationId} {
       allow read: if isActive() && request.auth.uid == userId;
       allow update: if isActive()

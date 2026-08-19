@@ -8254,6 +8254,39 @@ code {
   font-weight: 800;
 }
 
+.forum-pagination {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+
+.forum-pagination button {
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--violet);
+  font-size: 0.56rem;
+  font-weight: 800;
+}
+
+.forum-pagination button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.forum-pagination span {
+  color: var(--muted);
+  font-size: 0.54rem;
+  font-weight: 750;
+}
+
 .forum-no-results {
   display: flex;
   align-items: center;
@@ -9343,6 +9376,10 @@ code {
   gap: 13px;
 }
 
+.forum-create-grid {
+  gap: 9px;
+}
+
 .forum-field,
 .forum-create-grid label {
   display: flex;
@@ -9380,6 +9417,19 @@ code {
   resize: vertical;
 }
 
+.forum-create-modal .forum-create-grid input,
+.forum-create-modal .forum-create-grid select {
+  min-height: 35px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 0.72rem;
+}
+
+.forum-create-modal .forum-create-grid label {
+  gap: 5px;
+  font-size: 0.66rem;
+}
+
 .forum-setting-toggles,
 .forum-create-options {
   display: flex;
@@ -9398,6 +9448,12 @@ code {
   justify-content: space-between;
   gap: 18px;
   padding: 8px 4px;
+}
+
+.forum-create-modal .forum-create-options label {
+  min-height: 40px;
+  padding: 5px 4px;
+  font-size: 0.68rem;
 }
 
 .forum-setting-toggles label + label,
@@ -9424,6 +9480,7 @@ code {
 .forum-create-options input {
   width: 18px;
   height: 18px;
+  min-height: 18px;
   flex: 0 0 auto;
   accent-color: var(--violet);
 }
@@ -9440,6 +9497,25 @@ code {
 
 .forum-create-modal > label textarea {
   min-height: 86px;
+}
+
+.forum-delete-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--coral) 42%, var(--border));
+  border-radius: 9px;
+  background: var(--coral-soft);
+  color: var(--coral);
+  font-size: 0.61rem;
+  font-weight: 800;
+}
+
+.forum-delete-button:disabled {
+  opacity: 0.55;
 }
 
 .forum-moderation-drawer {
@@ -9466,6 +9542,115 @@ code {
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
   backdrop-filter: blur(15px);
+}
+
+.forum-ban-manager {
+  margin: 0 18px 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.forum-ban-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 11px;
+}
+
+.forum-ban-heading > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--coral-soft);
+  color: var(--coral);
+}
+
+.forum-ban-heading > div,
+.forum-ban-list > div > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.forum-ban-heading strong {
+  font-size: 0.66rem;
+}
+
+.forum-ban-heading small,
+.forum-ban-list small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.54rem;
+}
+
+.forum-ban-form {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
+  gap: 6px;
+}
+
+.forum-ban-form select,
+.forum-ban-form input {
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 0.58rem;
+}
+
+.forum-ban-form button,
+.forum-ban-list button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 9px;
+  border: 1px solid var(--coral);
+  border-radius: 8px;
+  background: var(--coral-soft);
+  color: var(--coral);
+  font-size: 0.56rem;
+  font-weight: 800;
+}
+
+.forum-ban-form button:disabled {
+  opacity: 0.5;
+}
+
+.forum-ban-list {
+  display: flex;
+  margin-top: 11px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  flex-direction: column;
+  gap: 5px;
+}
+
+.forum-ban-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 0;
+}
+
+.forum-ban-list strong {
+  font-size: 0.61rem;
+}
+
+.forum-ban-list button {
+  min-height: 30px;
+  border-color: var(--mint);
+  background: var(--mint-soft);
+  color: var(--mint);
 }
 
 .forum-moderation-drawer > header h2 {

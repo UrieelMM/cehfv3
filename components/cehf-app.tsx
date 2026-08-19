@@ -96,6 +96,10 @@ import {
   roleLabel,
   subjectColors,
 } from "@/lib/demo-data";
+import {
+  createForumTopic,
+  watchForumWorkspace,
+} from "@/lib/forum-firebase";
 import type {
   AcademicCalendar,
   AcademicCalendarInput,
@@ -385,6 +389,7 @@ export function CEHFApp() {
               wallPosts: migratedWallPosts,
               forumModeration:
                 restored.forumModeration ?? defaults.forumModeration,
+              forumBans: restored.forumBans ?? defaults.forumBans,
             }
           : {
               ...defaults,
@@ -393,6 +398,7 @@ export function CEHFApp() {
               wallPosts: migratedWallPosts,
               forumTopics: defaults.forumTopics,
               forumModeration: defaults.forumModeration,
+              forumBans: defaults.forumBans,
             };
         window.localStorage.setItem(
           "cehf-demo-state",
@@ -474,6 +480,21 @@ export function CEHFApp() {
   }, [firebaseUser, profile]);
 
   useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    return watchForumWorkspace(
+      profile,
+      (workspace) =>
+        setState((previous) => ({
+          ...previous,
+          forumTopics: workspace.topics,
+          forumModeration: workspace.moderation,
+          forumBans: workspace.bans,
+        })),
+      (error) => reportFirebaseError("cargar el foro", error),
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
     if (!firebaseConfigured) return;
     return watchAuth(async (user) => {
       setAuthReady(false);
@@ -520,7 +541,7 @@ export function CEHFApp() {
     if (!firebaseUser || !profile || role === "student") return;
     let active = true;
     queueMicrotask(() => setManagedAccountsLoading(true));
-    void listManagedAccounts(profile.institutionId)
+    void listManagedAccounts(profile.institutionId, profile.role)
       .then((accounts) => {
         if (active) setManagedAccounts(accounts);
       })
@@ -1042,8 +1063,38 @@ export function CEHFApp() {
         ) : createOpen ? (
           <CreateModal
             section={activeSection}
+            forumGroups={[
+              ...new Set(
+                managedAccounts
+                  .filter((account) => account.role === "student")
+                  .map((account) =>
+                    `${account.grade ?? ""} ${account.group ?? ""}`.trim(),
+                  )
+                  .filter(Boolean),
+              ),
+            ]}
+            forumSubjects={currentProfile.subjects ?? []}
             onClose={() => setCreateOpen(false)}
-            onCreate={(titleValue, subject, forumDraft) => {
+            onCreate={async (titleValue, subject, forumDraft) => {
+              if (
+                activeSection === "forum" &&
+                firebaseUser &&
+                profile &&
+                forumDraft
+              ) {
+                await createForumTopic({
+                  title: titleValue,
+                  subject,
+                  ...forumDraft,
+                });
+                toast.success(
+                  forumDraft.status === "scheduled"
+                    ? "Conversación programada y grupo notificado"
+                    : "Conversación publicada y grupo notificado",
+                );
+                setCreateOpen(false);
+                return;
+              }
               const id = `${activeSection}-${Date.now()}`;
               updateState((previous) => {
                 if (activeSection === "tasks") {
@@ -1581,6 +1632,8 @@ function SectionContent({
           updateState={updateState}
           profile={profile}
           role={role}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
         />
       );
     case "users":
@@ -3533,31 +3586,60 @@ function AccountRegistrationModal({
 
 function CreateModal({
   section,
+  forumGroups,
+  forumSubjects,
   onClose,
   onCreate,
 }: {
   section: SectionKey;
+  forumGroups?: string[];
+  forumSubjects?: string[];
   onClose: () => void;
   onCreate: (
     title: string,
     subject: string,
     forumDraft?: ForumDraftDetails,
-  ) => void;
+  ) => Promise<void> | void;
 }) {
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("Ciencias");
+  const [subject, setSubject] = useState(forumSubjects?.[0] ?? "Ciencias");
   const [prompt, setPrompt] = useState("");
-  const [group, setGroup] = useState("5.º A");
-  const [forumName, setForumName] = useState("Ciencias · 5.º A");
+  const [group, setGroup] = useState(forumGroups?.[0] ?? "5.º A");
+  const [forumName, setForumName] = useState(
+    `${forumSubjects?.[0] ?? "Ciencias"} · ${forumGroups?.[0] ?? "5.º A"}`,
+  );
   const [forumKind, setForumKind] =
     useState<ForumTopicKind>("weekly_question");
   const [forumStatus, setForumStatus] =
     useState<ForumTopic["status"]>("open");
-  const [opensAt, setOpensAt] = useState("Publicado ahora");
-  const [closesAt, setClosesAt] = useState("Cierra el viernes");
+  const [opensAt, setOpensAt] = useState("");
+  const [closesAt, setClosesAt] = useState(() => {
+    const date = new Date(Date.now() + 7 * 24 * 60 * 60_000);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 16);
+  });
   const [allowReplies, setAllowReplies] = useState(true);
   const [allowAttachments, setAllowAttachments] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [createError, setCreateError] = useState("");
   const isForum = section === "forum";
+  const subjectOptions = [
+    ...new Set([
+      ...(forumSubjects ?? []),
+      "Ciencias",
+      "Matemáticas",
+      "Español",
+      "Comunidad",
+    ]),
+  ];
+  const groupOptions = [
+    ...new Set([
+      ...(forumGroups?.length ? forumGroups : ["5.º A", "5.º B"]),
+      "4.º–6.º",
+      "Todo el campus",
+    ]),
+  ];
   return (
     <motion.div
       className="modal-backdrop"
@@ -3573,25 +3655,38 @@ function CreateModal({
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          onCreate(
-            title.trim(),
-            subject,
-            isForum
-              ? {
-                  prompt: prompt.trim(),
-                  group,
-                  forumName: forumName.trim(),
-                  kind: forumKind,
-                  status: forumStatus,
-                  opensAt: opensAt.trim(),
-                  closesAt: closesAt.trim(),
-                  allowReplies,
-                  allowAttachments,
-                }
-              : undefined,
-          );
+          setSubmitting(true);
+          setCreateError("");
+          try {
+            await onCreate(
+              title.trim(),
+              subject,
+              isForum
+                ? {
+                    prompt: prompt.trim(),
+                    group,
+                    forumName: forumName.trim(),
+                    kind: forumKind,
+                    status: forumStatus,
+                    opensAt:
+                      forumStatus === "scheduled" && opensAt
+                        ? new Date(opensAt).toISOString()
+                        : new Date().toISOString(),
+                    closesAt: closesAt
+                      ? new Date(closesAt).toISOString()
+                      : "",
+                    allowReplies,
+                    allowAttachments,
+                  }
+                : undefined,
+            );
+          } catch (error) {
+            setCreateError(friendlyFirebaseError(error));
+          } finally {
+            setSubmitting(false);
+          }
         }}
       >
         <div className="modal-heading">
@@ -3624,10 +3719,9 @@ function CreateModal({
               if (isForum) setForumName(`${event.target.value} · ${group}`);
             }}
           >
-            <option>Ciencias</option>
-            <option>Matemáticas</option>
-            <option>Español</option>
-            <option>Comunidad</option>
+            {subjectOptions.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
           </select>
         </label>
         {isForum ? (
@@ -3671,10 +3765,9 @@ function CreateModal({
                     setForumName(`${subject} · ${event.target.value}`);
                   }}
                 >
-                  <option>5.º A</option>
-                  <option>5.º B</option>
-                  <option>4.º–6.º</option>
-                  <option>Todo el campus</option>
+                  {groupOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -3693,11 +3786,16 @@ function CreateModal({
                   onChange={(event) => {
                     const nextStatus = event.target.value as ForumTopic["status"];
                     setForumStatus(nextStatus);
-                    setOpensAt(
-                      nextStatus === "scheduled"
-                        ? "Se abre el lunes · 07:00"
-                        : "Publicado ahora",
-                    );
+                    if (nextStatus === "scheduled" && !opensAt) {
+                      const date = new Date(Date.now() + 24 * 60 * 60_000);
+                      setOpensAt(
+                        new Date(
+                          date.getTime() - date.getTimezoneOffset() * 60_000,
+                        )
+                          .toISOString()
+                          .slice(0, 16),
+                      );
+                    }
                   }}
                 >
                   <option value="open">Publicar ahora</option>
@@ -3708,18 +3806,33 @@ function CreateModal({
               <label>
                 Apertura
                 <input
-                  value={opensAt}
+                  type={forumStatus === "scheduled" ? "datetime-local" : "text"}
+                  value={
+                    forumStatus === "scheduled"
+                      ? opensAt
+                      : forumStatus === "closed"
+                        ? "Publicado cerrado"
+                        : "Publicado ahora"
+                  }
                   onChange={(event) => setOpensAt(event.target.value)}
+                  readOnly={forumStatus !== "scheduled"}
+                  required={forumStatus === "scheduled"}
                 />
               </label>
               <label>
                 Cierre
                 <input
+                  type="datetime-local"
                   value={closesAt}
                   onChange={(event) => setClosesAt(event.target.value)}
                 />
               </label>
             </div>
+            {createError && (
+              <div className="forum-composer-error" role="alert">
+                <ShieldCheck size={15} /> {createError}
+              </div>
+            )}
             <div className="forum-create-options">
               <label>
                 <input
@@ -3761,12 +3874,22 @@ function CreateModal({
           </button>
           <button
             className="primary-button"
-            disabled={!title.trim() || (isForum && !prompt.trim())}
+            disabled={
+              submitting ||
+              !title.trim() ||
+              (isForum &&
+                (!prompt.trim() ||
+                  (forumStatus === "scheduled" && !opensAt)))
+            }
           >
             {isForum
               ? forumStatus === "scheduled"
-                ? "Programar tema"
-                : "Publicar tema"
+                ? submitting
+                  ? "Programando…"
+                  : "Programar tema"
+                : submitting
+                  ? "Publicando…"
+                  : "Publicar tema"
               : "Crear borrador"}{" "}
             <ArrowRight size={17} />
           </button>

@@ -114,6 +114,38 @@
       ]
     },
     {
+      "collectionGroup": "forumTopics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "opensAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "forumTopics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "institutionId", "order": "ASCENDING" },
+        { "fieldPath": "participantIds", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "forumPosts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "institutionId", "order": "ASCENDING" },
+        { "fieldPath": "participantIds", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "forumTopics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "closesAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "messageOutbox",
       "queryScope": "COLLECTION",
       "fields": [

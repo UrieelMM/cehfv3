@@ -613,6 +613,7 @@ export const createDemoState = (): PortalState => ({
       status: "open",
     },
   ],
+  forumBans: [],
   notifications: [
     {
       id: "notif-task",

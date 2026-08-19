@@ -219,13 +219,20 @@ function accountDate(value: unknown) {
 
 export async function listManagedAccounts(
   institutionId: string,
+  callerRole: Role = "director",
 ): Promise<ManagedAccount[]> {
   if (!db) return [];
   const snapshot = await getDocs(
-    query(
-      collection(db, "users"),
-      where("institutionId", "==", institutionId),
-    ),
+    callerRole === "teacher"
+      ? query(
+          collection(db, "users"),
+          where("institutionId", "==", institutionId),
+          where("role", "==", "student"),
+        )
+      : query(
+          collection(db, "users"),
+          where("institutionId", "==", institutionId),
+        ),
   );
   const accounts: ManagedAccount[] = [];
   for (const entry of snapshot.docs) {

@@ -54,6 +54,16 @@ service firebase.storage {
         );
     }
 
+    function forumSafeUpload() {
+      return request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches("(application/pdf|image/.*)");
+    }
+
+    function forumParticipationEnabled(institutionId) {
+      let banPath = /databases/(default)/documents/forumBans/$(institutionId)/users/$(request.auth.uid);
+      return !firestore.exists(banPath) || firestore.get(banPath).data.active != true;
+    }
+
     function academicTask(institutionId, schoolYearId, termId, weekId, subjectId, taskId) {
       return firestore.get(
         /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)
@@ -161,7 +171,8 @@ service firebase.storage {
     match /institutions/{institutionId}/forum/{topicId}/{postId}/{assetId} {
       allow read: if sameInstitution(institutionId);
       allow create: if sameInstitution(institutionId)
-        && safeUpload();
+        && forumParticipationEnabled(institutionId)
+        && forumSafeUpload();
       allow update, delete: if isStaff()
         && sameInstitution(institutionId)
         && (request.resource == null || safeUpload());

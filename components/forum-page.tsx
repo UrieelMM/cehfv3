@@ -33,6 +33,9 @@ import {
   ShieldCheck,
   Sparkles,
   ThumbsUp,
+  Trash2,
+  UserCheck,
+  UserX,
   Users,
   X,
 } from "lucide-react";
@@ -44,12 +47,30 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { toast } from "sonner";
+import { friendlyFirebaseError } from "@/lib/firebase";
+import {
+  deleteForumTopic,
+  forumDateLabel,
+  getForumAttachmentUrl,
+  moderateForumPost,
+  publishForumReply,
+  reactToForumPost,
+  reportForumPost,
+  setForumPostMarked,
+  setForumTopicFollowing,
+  setForumUserBan,
+  updateForumTopic,
+  watchForumFollowing,
+} from "@/lib/forum-firebase";
 import type {
   ForumAttachment,
+  ForumBan,
   ForumModerationCase,
   ForumReactionKind,
   ForumReply,
   ForumTopic,
+  ManagedAccount,
   PortalState,
   Role,
   UserProfile,
@@ -63,6 +84,8 @@ type ForumPageProps = {
   ) => void;
   profile: UserProfile;
   role: Role;
+  managedAccounts: ManagedAccount[];
+  firebaseReady: boolean;
 };
 
 type TopicStatusFilter = "all" | ForumTopic["status"];
@@ -141,11 +164,30 @@ function initialsFor(label: string) {
     .join("");
 }
 
+function dateTimeLocalValue(value: string | undefined) {
+  const timestamp = Date.parse(value ?? "");
+  if (!Number.isFinite(timestamp)) return "";
+  const date = new Date(timestamp - new Date(timestamp).getTimezoneOffset() * 60_000);
+  return date.toISOString().slice(0, 16);
+}
+
+function forumErrorMessage(error: unknown) {
+  if (
+    error instanceof Error &&
+    !(typeof error === "object" && error && "code" in error)
+  ) {
+    return error.message;
+  }
+  return friendlyFirebaseError(error);
+}
+
 export function ForumPage({
   state,
   updateState,
   profile,
   role,
+  managedAccounts,
+  firebaseReady,
 }: ForumPageProps) {
   const topics = useMemo(
     () => state.forumTopics.map(normalizeTopic),
@@ -158,15 +200,17 @@ export function ForumPage({
     useState<TopicStatusFilter>("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [sort, setSort] = useState<TopicSort>("recent");
-  const [visibleCount, setVisibleCount] = useState(5);
+  const [currentPage, setCurrentPage] = useState(1);
   const [reply, setReply] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<ForumAttachment | null>(null);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [following, setFollowing] = useState<string[]>([]);
   const [guidelinesOpen, setGuidelinesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [moderationOpen, setModerationOpen] = useState(false);
   const [composerError, setComposerError] = useState("");
+  const [publishing, setPublishing] = useState(false);
   const [guidelinesAccepted, setGuidelinesAccepted] = useState(() =>
     typeof window === "undefined"
       ? false
@@ -174,8 +218,9 @@ export function ForumPage({
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
-  const lastPublishedAtRef = useRef(0);
+  const publishCooldownRef = useRef(false);
   const staff = role !== "student";
+  const pageSize = 5;
 
   const spaces = useMemo(() => {
     const byId = new Map<
@@ -217,14 +262,31 @@ export function ForumPage({
     });
     if (sort === "participation") {
       next.sort((a, b) => b.replies.length - a.replies.length);
+    } else {
+      next.sort(
+        (a, b) =>
+          (Date.parse(b.lastActivityAt ?? "") || 0) -
+          (Date.parse(a.lastActivityAt ?? "") || 0),
+      );
     }
     return next;
   }, [query, selectedSpace, sort, statusFilter, subjectFilter, topics]);
 
   const selectedTopic =
-    topics.find((topic) => topic.id === selectedId) ??
+    filteredTopics.find((topic) => topic.id === selectedId) ??
     filteredTopics[0] ??
+    topics.find((topic) => topic.id === selectedId) ??
     topics[0];
+
+  const pageCount = Math.max(1, Math.ceil(filteredTopics.length / pageSize));
+  const activePage = Math.min(currentPage, pageCount);
+  const paginatedTopics = filteredTopics.slice(
+    (activePage - 1) * pageSize,
+    activePage * pageSize,
+  );
+  const currentBan = (state.forumBans ?? []).find(
+    (ban) => ban.userId === profile.uid && ban.active,
+  );
 
   const openModeration = (state.forumModeration ?? []).filter(
     (item) => item.status === "open",
@@ -236,12 +298,95 @@ export function ForumPage({
     return () => window.removeEventListener("popstate", syncTopicWithPath);
   }, [topics]);
 
+  useEffect(() => {
+    if (!firebaseReady) return;
+    return watchForumFollowing(profile, setFollowing, (error) =>
+      toast.error(friendlyFirebaseError(error)),
+    );
+  }, [firebaseReady, profile]);
+
+  async function changeForumBan(
+    userId: string,
+    active: boolean,
+    reason: string,
+  ) {
+    if (!firebaseReady) {
+      const account = managedAccounts.find((item) => item.uid === userId);
+      updateState(
+        (previous) => {
+          const existing = (previous.forumBans ?? []).find(
+            (ban) => ban.userId === userId,
+          );
+          const nextBan: ForumBan = {
+            userId,
+            userName:
+              account?.name ?? existing?.userName ?? "Integrante CEHF",
+            active,
+            reason: reason || existing?.reason || "Moderación del foro",
+            bannedBy: existing?.bannedBy ?? profile.name,
+            bannedAt: existing?.bannedAt ?? "Ahora",
+            ...(active
+              ? {}
+              : { restoredBy: profile.name, restoredAt: "Ahora" }),
+          };
+          return {
+            ...previous,
+            forumBans: existing
+              ? previous.forumBans.map((ban) =>
+                  ban.userId === userId ? nextBan : ban,
+                )
+              : [...(previous.forumBans ?? []), nextBan],
+          };
+        },
+        active
+          ? "Participación suspendida"
+          : "Participación habilitada nuevamente",
+      );
+      return;
+    }
+    try {
+      await setForumUserBan(userId, active, reason);
+      toast.success(
+        active
+          ? "Participación suspendida"
+          : "Participación habilitada nuevamente",
+      );
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    }
+  }
+
   if (!selectedTopic) {
     return (
-      <div className="empty-state forum-empty">
-        <MessageCircle size={30} />
-        <h2>Todavía no hay conversaciones</h2>
-        <p>Cuando el equipo docente publique un tema, aparecerá aquí.</p>
+      <div className="forum-page">
+        <div className="empty-state forum-empty">
+          <MessageCircle size={30} />
+          <h2>Todavía no hay conversaciones</h2>
+          <p>Cuando el equipo docente publique un tema, aparecerá aquí.</p>
+          {staff && (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setModerationOpen(true)}
+            >
+              <ShieldCheck size={16} /> Abrir moderación
+            </button>
+          )}
+        </div>
+        <AnimatePresence>
+          {moderationOpen && staff && (
+            <ModerationDrawer
+              cases={state.forumModeration ?? []}
+              topics={[]}
+              role={role}
+              accounts={managedAccounts}
+              bans={state.forumBans ?? []}
+              onClose={() => setModerationOpen(false)}
+              onModerate={moderateCase}
+              onBan={changeForumBan}
+            />
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -277,7 +422,15 @@ export function ForumPage({
     );
   }
 
-  function reactToReply(replyItem: ForumReply, kind: ForumReactionKind) {
+  async function reactToReply(replyItem: ForumReply, kind: ForumReactionKind) {
+    if (firebaseReady) {
+      try {
+        await reactToForumPost(replyItem.id, kind);
+      } catch (error) {
+        toast.error(friendlyFirebaseError(error));
+      }
+      return;
+    }
     updateReply(selectedTopic.id, replyItem.id, (item) => {
       const active = item.reactedByMe?.includes(kind) ?? false;
       const reactedByMe = active
@@ -294,7 +447,19 @@ export function ForumPage({
     });
   }
 
-  function reportReply(replyItem: ForumReply) {
+  async function reportReply(replyItem: ForumReply) {
+    if (firebaseReady) {
+      try {
+        await reportForumPost(
+          replyItem.id,
+          "Revisión solicitada por un participante",
+        );
+        toast.success("Reporte enviado al equipo de moderación");
+      } catch (error) {
+        toast.error(friendlyFirebaseError(error));
+      }
+      return;
+    }
     const caseExists = (state.forumModeration ?? []).some(
       (item) =>
         item.topicId === selectedTopic.id &&
@@ -335,10 +500,25 @@ export function ForumPage({
     );
   }
 
-  function moderateCase(
+  async function moderateCase(
     moderationCase: ForumModerationCase,
     action: "hidden" | "dismissed" | "restored",
   ) {
+    if (firebaseReady) {
+      try {
+        await moderateForumPost(moderationCase.replyId, action);
+        toast.success(
+          action === "hidden"
+            ? "Comentario eliminado y evidencia conservada"
+            : action === "restored"
+              ? "Comentario restaurado"
+              : "Caso descartado",
+        );
+      } catch (error) {
+        toast.error(friendlyFirebaseError(error));
+      }
+      return;
+    }
     updateState(
       (previous) => ({
         ...previous,
@@ -380,10 +560,23 @@ export function ForumPage({
     );
   }
 
-  function moderateReplyDirectly(
+  async function moderateReplyDirectly(
     replyItem: ForumReply,
     action: "hidden" | "restored",
   ) {
+    if (firebaseReady) {
+      try {
+        await moderateForumPost(replyItem.id, action);
+        toast.success(
+          action === "hidden"
+            ? "Comentario eliminado y evidencia conservada"
+            : "Comentario restaurado",
+        );
+      } catch (error) {
+        toast.error(friendlyFirebaseError(error));
+      }
+      return;
+    }
     updateState(
       (previous) => {
         const cases = previous.forumModeration ?? [];
@@ -444,9 +637,56 @@ export function ForumPage({
     );
   }
 
-  function publishReply() {
+  async function publishReply() {
     const cleanReply = reply.trim();
-    if (!cleanReply) return;
+    if (!cleanReply || publishing) return;
+    if (currentBan) {
+      setComposerError(
+        "Tu participación en el foro está suspendida. Puedes seguir consultando los temas.",
+      );
+      return;
+    }
+    if (firebaseReady) {
+      setPublishing(true);
+      try {
+        const mentionedUserIds = mentionCandidates
+          .filter(
+            (participant) =>
+              participant.uid &&
+              cleanReply
+                .toLocaleLowerCase("es-MX")
+                .includes(`@${participant.name.toLocaleLowerCase("es-MX")}`),
+          )
+          .map((participant) => participant.uid);
+        await publishForumReply({
+          profile,
+          topicId: selectedTopic.id,
+          body: cleanReply,
+          parentId: replyingTo ?? undefined,
+          mentionedUserIds,
+          file: attachmentFile,
+        });
+        toast.success(
+          replyingTo
+            ? "Tu respuesta se publicó y se notificó a la conversación"
+            : "Tu aportación se publicó en el grupo",
+        );
+        setReply("");
+        setReplyingTo(null);
+        setAttachment(null);
+        setAttachmentFile(null);
+        setComposerError("");
+        publishCooldownRef.current = true;
+        window.setTimeout(() => {
+          publishCooldownRef.current = false;
+        }, 5_000);
+      } catch (error) {
+        setComposerError(forumErrorMessage(error));
+      } finally {
+        setPublishing(false);
+      }
+      return;
+    }
     updateState(
       (previous) => ({
         ...previous,
@@ -460,6 +700,7 @@ export function ForumPage({
                   ...topic.replies,
                   {
                     id: `reply-${Date.now()}`,
+                    authorId: profile.uid,
                     author: profile.name,
                     initials: profile.initials,
                     body: cleanReply,
@@ -484,8 +725,12 @@ export function ForumPage({
     setReply("");
     setReplyingTo(null);
     setAttachment(null);
+    setAttachmentFile(null);
     setComposerError("");
-    lastPublishedAtRef.current = Date.now();
+    publishCooldownRef.current = true;
+    window.setTimeout(() => {
+      publishCooldownRef.current = false;
+    }, 5_000);
   }
 
   function submitReply(event: FormEvent) {
@@ -500,7 +745,7 @@ export function ForumPage({
       );
       return;
     }
-    if (Date.now() - lastPublishedAtRef.current < 5_000) {
+    if (publishCooldownRef.current) {
       setComposerError(
         "Espera unos segundos antes de publicar otra aportación.",
       );
@@ -510,17 +755,24 @@ export function ForumPage({
       setGuidelinesOpen(true);
       return;
     }
-    publishReply();
+    void publishReply();
   }
 
   const parentReply = selectedTopic.replies.find(
     (item) => item.id === replyingTo,
   );
+  const mentionCandidates = selectedTopic.participantProfiles?.length
+    ? selectedTopic.participantProfiles
+    : selectedTopic.participants.map((name) => ({
+        uid: "",
+        name,
+        initials: initialsFor(name),
+      }));
   const mentionMatch = reply.match(/(?:^|\s)@([\p{L}]*)$/u);
   const mentionSuggestions = mentionMatch
-    ? selectedTopic.participants
+    ? mentionCandidates
         .filter((participant) =>
-          participant
+          participant.name
             .toLocaleLowerCase("es-MX")
             .startsWith(mentionMatch[1].toLocaleLowerCase("es-MX")),
         )
@@ -530,6 +782,66 @@ export function ForumPage({
   const topLevelReplies = selectedTopic.replies.filter(
     (item) => !item.parentId,
   );
+  const canManageSelected =
+    role === "director" ||
+    (role === "teacher" &&
+      (selectedTopic.creatorId
+        ? selectedTopic.creatorId === profile.uid
+        : selectedTopic.responsible === profile.name));
+
+  async function toggleFollowing() {
+    const nextFollowing = !following.includes(selectedTopic.id);
+    if (firebaseReady) {
+      try {
+        await setForumTopicFollowing(profile, selectedTopic.id, nextFollowing);
+      } catch (error) {
+        toast.error(friendlyFirebaseError(error));
+      }
+      return;
+    }
+    setFollowing((current) =>
+      nextFollowing
+        ? [...current, selectedTopic.id]
+        : current.filter((item) => item !== selectedTopic.id),
+    );
+  }
+
+  async function toggleMarked(replyItem: ForumReply) {
+    if (firebaseReady) {
+      try {
+        await setForumPostMarked(replyItem.id, !replyItem.markedAnswer);
+        toast.success(
+          replyItem.markedAnswer
+            ? "Marca de respuesta retirada"
+            : "Respuesta docente destacada",
+        );
+      } catch (error) {
+        toast.error(friendlyFirebaseError(error));
+      }
+      return;
+    }
+    updateReply(
+      selectedTopic.id,
+      replyItem.id,
+      (current) => ({
+        ...current,
+        markedAnswer: !current.markedAnswer,
+      }),
+      replyItem.markedAnswer
+        ? "Marca de respuesta retirada"
+        : "Respuesta docente destacada",
+    );
+  }
+
+  async function openAttachment(item: ForumAttachment) {
+    if (!firebaseReady || !item.storagePath) return;
+    try {
+      const url = await getForumAttachmentUrl(item);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    }
+  }
 
   return (
     <div className="forum-page">
@@ -576,14 +888,20 @@ export function ForumPage({
           <Search size={18} aria-hidden="true" />
           <input
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="Buscar una conversación, materia o grupo…"
             aria-label="Buscar en el foro"
           />
           {query && (
             <button
               type="button"
-              onClick={() => setQuery("")}
+              onClick={() => {
+                setQuery("");
+                setCurrentPage(1);
+              }}
               aria-label="Limpiar búsqueda"
             >
               <X size={16} />
@@ -594,7 +912,10 @@ export function ForumPage({
           <span className="sr-only">Filtrar por materia</span>
           <select
             value={subjectFilter}
-            onChange={(event) => setSubjectFilter(event.target.value)}
+            onChange={(event) => {
+              setSubjectFilter(event.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="all">Todas las materias</option>
             {subjects.map((subject) => (
@@ -607,7 +928,10 @@ export function ForumPage({
           <span className="sr-only">Ordenar conversaciones</span>
           <select
             value={sort}
-            onChange={(event) => setSort(event.target.value as TopicSort)}
+            onChange={(event) => {
+              setSort(event.target.value as TopicSort);
+              setCurrentPage(1);
+            }}
           >
             <option value="recent">Actividad reciente</option>
             <option value="participation">Más participación</option>
@@ -625,7 +949,10 @@ export function ForumPage({
               type="button"
               key={value}
               className={statusFilter === value ? "active" : ""}
-              onClick={() => setStatusFilter(value as TopicStatusFilter)}
+              onClick={() => {
+                setStatusFilter(value as TopicStatusFilter);
+                setCurrentPage(1);
+              }}
             >
               {label}
             </button>
@@ -646,7 +973,10 @@ export function ForumPage({
             <button
               type="button"
               className={`forum-space ${selectedSpace === "all" ? "active" : ""}`}
-              onClick={() => setSelectedSpace("all")}
+              onClick={() => {
+                setSelectedSpace("all");
+                setCurrentPage(1);
+              }}
             >
               <span className="forum-space-icon is-all">
                 <MessagesSquare size={17} />
@@ -668,7 +998,10 @@ export function ForumPage({
                   type="button"
                   key={space.id}
                   className={`forum-space ${selectedSpace === space.id ? "active" : ""}`}
-                  onClick={() => setSelectedSpace(space.id)}
+                  onClick={() => {
+                    setSelectedSpace(space.id);
+                    setCurrentPage(1);
+                  }}
                 >
                   <span
                     className={`forum-space-icon tone-${(index % 4) + 1}`}
@@ -696,7 +1029,7 @@ export function ForumPage({
               </div>
             </div>
             <div className="forum-topic-list">
-              {filteredTopics.slice(0, visibleCount).map((topic) => {
+              {paginatedTopics.map((topic) => {
                 const TopicIcon = forumIconByKind[topic.kind];
                 const visibleReplies = topic.replies.filter(
                   (item) => item.status !== "hidden",
@@ -740,14 +1073,28 @@ export function ForumPage({
                 </div>
               )}
             </div>
-            {visibleCount < filteredTopics.length && (
-              <button
-                type="button"
-                className="forum-load-more"
-                onClick={() => setVisibleCount((count) => count + 4)}
-              >
-                Ver más conversaciones
-              </button>
+            {filteredTopics.length > pageSize && (
+              <div className="forum-pagination" aria-label="Paginación de temas">
+                <button
+                  type="button"
+                  disabled={activePage === 1}
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                >
+                  Anterior
+                </button>
+                <span>
+                  {activePage} de {pageCount}
+                </span>
+                <button
+                  type="button"
+                  disabled={activePage === pageCount}
+                  onClick={() =>
+                    setCurrentPage((page) => Math.min(pageCount, page + 1))
+                  }
+                >
+                  Siguiente
+                </button>
+              </div>
             )}
           </section>
         </aside>
@@ -767,7 +1114,8 @@ export function ForumPage({
                   <BadgeCheck size={15} aria-label="Espacio verificado" />
                 </div>
                 <span>
-                  {selectedTopic.responsible} · {selectedTopic.opensAt}
+                  {selectedTopic.responsible} ·{" "}
+                  {forumDateLabel(selectedTopic.opensAt, "Publicado")}
                 </span>
               </div>
               <span
@@ -775,7 +1123,7 @@ export function ForumPage({
               >
                 {statusDetails[selectedTopic.status].label}
               </span>
-              {staff && (
+              {canManageSelected && (
                 <button
                   type="button"
                   className="forum-more-button"
@@ -803,7 +1151,10 @@ export function ForumPage({
                   <Users size={15} /> {selectedTopic.group}
                 </span>
                 <span>
-                  <Clock3 size={15} /> {selectedTopic.closesAt}
+                  <Clock3 size={15} />{" "}
+                  {selectedTopic.closesAt
+                    ? `Cierra ${forumDateLabel(selectedTopic.closesAt, "próximamente")}`
+                    : "Sin fecha de cierre"}
                 </span>
                 {selectedTopic.allowAttachments && (
                   <span>
@@ -830,13 +1181,7 @@ export function ForumPage({
                 className={
                   following.includes(selectedTopic.id) ? "is-following" : ""
                 }
-                onClick={() =>
-                  setFollowing((current) =>
-                    current.includes(selectedTopic.id)
-                      ? current.filter((item) => item !== selectedTopic.id)
-                      : [...current, selectedTopic.id],
-                  )
-                }
+                onClick={() => void toggleFollowing()}
               >
                 <Bookmark
                   size={17}
@@ -885,19 +1230,8 @@ export function ForumPage({
                     onRestore={(replyItem) =>
                       moderateReplyDirectly(replyItem, "restored")
                     }
-                    onMark={(replyItem) =>
-                      updateReply(
-                        selectedTopic.id,
-                        replyItem.id,
-                        (current) => ({
-                          ...current,
-                          markedAnswer: !current.markedAnswer,
-                        }),
-                        replyItem.markedAnswer
-                          ? "Marca de respuesta retirada"
-                          : "Respuesta docente destacada",
-                      )
-                    }
+                    onMark={(replyItem) => void toggleMarked(replyItem)}
+                    onOpenAttachment={(item) => void openAttachment(item)}
                   />
                 );
               })}
@@ -917,7 +1251,8 @@ export function ForumPage({
             </div>
 
             {selectedTopic.status === "open" &&
-              selectedTopic.allowReplies && (
+              selectedTopic.allowReplies &&
+              !currentBan && (
                 <form className="forum-composer" onSubmit={submitReply}>
                   <span className="avatar">{profile.initials}</span>
                   <div className="forum-composer-body">
@@ -953,19 +1288,19 @@ export function ForumPage({
                         {mentionSuggestions.map((participant) => (
                           <button
                             type="button"
-                            key={participant}
+                            key={participant.uid || participant.name}
                             onClick={() => {
                               setReply((current) =>
                                 current.replace(
                                   /@[\p{L}]*$/u,
-                                  `@${participant} `,
+                                  `@${participant.name} `,
                                 ),
                               );
                               composerRef.current?.focus();
                             }}
                           >
-                            <span>{initialsFor(participant)}</span>
-                            {participant}
+                            <span>{participant.initials}</span>
+                            {participant.name}
                           </button>
                         ))}
                       </div>
@@ -979,7 +1314,10 @@ export function ForumPage({
                         </span>
                         <button
                           type="button"
-                          onClick={() => setAttachment(null)}
+                          onClick={() => {
+                            setAttachment(null);
+                            setAttachmentFile(null);
+                          }}
                           aria-label="Quitar adjunto"
                         >
                           <X size={16} />
@@ -1011,6 +1349,17 @@ export function ForumPage({
                                   event.target.value = "";
                                   return;
                                 }
+                                if (
+                                  !file.type.startsWith("image/") &&
+                                  file.type !== "application/pdf"
+                                ) {
+                                  setComposerError(
+                                    "Sólo puedes adjuntar una imagen o un archivo PDF.",
+                                  );
+                                  event.target.value = "";
+                                  return;
+                                }
+                                setAttachmentFile(file);
                                 setAttachment({
                                   id: `attachment-${Date.now()}`,
                                   name: file.name,
@@ -1046,34 +1395,39 @@ export function ForumPage({
                       <span>{reply.length}/600</span>
                       <button
                         className="forum-publish-button"
-                        disabled={!reply.trim()}
+                        disabled={!reply.trim() || publishing}
                       >
-                        <Send size={17} /> Publicar
+                        <Send size={17} /> {publishing ? "Publicando…" : "Publicar"}
                       </button>
                     </div>
                   </div>
                 </form>
               )}
 
-            {(selectedTopic.status !== "open" ||
+            {(currentBan ||
+              selectedTopic.status !== "open" ||
               !selectedTopic.allowReplies) && (
               <div className="forum-closed-note">
-                {selectedTopic.status === "scheduled" ? (
+                {selectedTopic.status === "scheduled" && !currentBan ? (
                   <CalendarClock size={20} />
                 ) : (
                   <LockKeyhole size={20} />
                 )}
                 <div>
                   <strong>
-                    {selectedTopic.status === "scheduled"
-                      ? "Esta conversación aún no abre"
+                    {currentBan
+                      ? "Tu participación está suspendida"
+                      : selectedTopic.status === "scheduled"
+                        ? "Esta conversación aún no abre"
                       : selectedTopic.allowReplies
                         ? "La conversación está cerrada"
                         : "Este es un aviso de solo lectura"}
                   </strong>
                   <span>
-                    {selectedTopic.status === "scheduled"
-                      ? selectedTopic.opensAt
+                    {currentBan
+                      ? currentBan.reason || "Dirección puede habilitar nuevamente tu acceso al foro."
+                      : selectedTopic.status === "scheduled"
+                        ? forumDateLabel(selectedTopic.opensAt, "Apertura pendiente")
                       : "Puedes consultar las aportaciones, pero ya no se reciben respuestas."}
                   </span>
                 </div>
@@ -1134,7 +1488,7 @@ export function ForumPage({
                       type="button"
                       onClick={() => moderateCase(moderationCase, "hidden")}
                     >
-                      Ocultar
+                      Eliminar
                     </button>
                   </div>
                 </div>
@@ -1198,11 +1552,17 @@ export function ForumPage({
             }}
           />
         )}
-        {settingsOpen && staff && (
+        {settingsOpen && canManageSelected && (
           <TopicSettingsDialog
             topic={selectedTopic}
             onClose={() => setSettingsOpen(false)}
-            onSave={(values) => {
+            onSave={async (values) => {
+              if (firebaseReady) {
+                await updateForumTopic(selectedTopic.id, values);
+                toast.success("Configuración de la conversación actualizada");
+                setSettingsOpen(false);
+                return;
+              }
               updateState(
                 (previous) => ({
                   ...previous,
@@ -1216,14 +1576,35 @@ export function ForumPage({
               );
               setSettingsOpen(false);
             }}
+            onDelete={async () => {
+              if (firebaseReady) {
+                await deleteForumTopic(selectedTopic.id);
+                toast.success("Tema eliminado; la auditoría fue conservada");
+              } else {
+                updateState(
+                  (previous) => ({
+                    ...previous,
+                    forumTopics: previous.forumTopics.filter(
+                      (topic) => topic.id !== selectedTopic.id,
+                    ),
+                  }),
+                  "Tema eliminado",
+                );
+              }
+              setSettingsOpen(false);
+            }}
           />
         )}
         {moderationOpen && staff && (
           <ModerationDrawer
             cases={state.forumModeration ?? []}
             topics={topics}
+            role={role}
+            accounts={managedAccounts}
+            bans={state.forumBans ?? []}
             onClose={() => setModerationOpen(false)}
             onModerate={moderateCase}
+            onBan={changeForumBan}
           />
         )}
       </AnimatePresence>
@@ -1242,6 +1623,7 @@ function ForumReplyCard({
   onHide,
   onRestore,
   onMark,
+  onOpenAttachment,
 }: {
   item: ForumReply;
   nestedReplies: ForumReply[];
@@ -1253,6 +1635,7 @@ function ForumReplyCard({
   onHide: (item: ForumReply) => void;
   onRestore: (item: ForumReply) => void;
   onMark: (item: ForumReply) => void;
+  onOpenAttachment: (item: ForumAttachment) => void;
 }) {
   const staff = role !== "student";
 
@@ -1273,7 +1656,9 @@ function ForumReplyCard({
                   <BadgeCheck size={13} /> Docente
                 </span>
               )}
-              {item.author === profile.name && (
+              {(item.authorId
+                ? item.authorId === profile.uid
+                : item.author === profile.name) && (
                 <span className="forum-you-label">Tú</span>
               )}
             </div>
@@ -1304,7 +1689,11 @@ function ForumReplyCard({
             <>
               <p>{item.body}</p>
               {item.attachment && (
-                <button type="button" className="forum-attachment">
+                <button
+                  type="button"
+                  className="forum-attachment"
+                  onClick={() => onOpenAttachment(item.attachment!)}
+                >
                   {item.attachment.type === "image" ? (
                     <ImagePlus size={20} />
                   ) : (
@@ -1349,15 +1738,15 @@ function ForumReplyCard({
                 <span>Responder</span>
               </button>
             )}
-            {!staff && item.author !== profile.name && (
+            {!staff && item.authorId !== profile.uid && (
               <button
                 type="button"
-                className={item.reports ? "is-reported" : ""}
+                className={item.reportedByMe ? "is-reported" : ""}
                 onClick={() => onReport(item)}
-                disabled={!!item.reports}
+                disabled={item.reportedByMe}
               >
                 <Flag size={15} />
-                <span>{item.reports ? "Reportado" : "Reportar"}</span>
+                <span>{item.reportedByMe ? "Reportado" : "Reportar"}</span>
               </button>
             )}
             {staff && (
@@ -1376,7 +1765,7 @@ function ForumReplyCard({
                 ) : (
                   <button type="button" onClick={() => onHide(item)}>
                     <EyeOff size={15} />
-                    <span>Ocultar</span>
+                    <span>Eliminar</span>
                   </button>
                 )}
               </>
@@ -1400,6 +1789,7 @@ function ForumReplyCard({
               onHide={onHide}
               onRestore={onRestore}
               onMark={onMark}
+              onOpenAttachment={onOpenAttachment}
             />
           ))}
         </div>
@@ -1496,6 +1886,7 @@ function TopicSettingsDialog({
   topic,
   onClose,
   onSave,
+  onDelete,
 }: {
   topic: ForumTopic;
   onClose: () => void;
@@ -1505,20 +1896,28 @@ function TopicSettingsDialog({
       | "title"
       | "prompt"
       | "status"
+      | "opensAt"
       | "allowReplies"
       | "allowAttachments"
       | "closesAt"
     >,
-  ) => void;
+  ) => Promise<void> | void;
+  onDelete: () => Promise<void> | void;
 }) {
   const [title, setTitle] = useState(topic.title);
   const [prompt, setPrompt] = useState(topic.prompt);
   const [status, setStatus] = useState(topic.status);
-  const [closesAt, setClosesAt] = useState(topic.closesAt);
+  const [opensAt, setOpensAt] = useState(dateTimeLocalValue(topic.opensAt));
+  const [closesAt, setClosesAt] = useState(
+    dateTimeLocalValue(topic.closesAt),
+  );
   const [allowReplies, setAllowReplies] = useState(topic.allowReplies);
   const [allowAttachments, setAllowAttachments] = useState(
     topic.allowAttachments,
   );
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState("");
 
   return (
     <motion.div
@@ -1538,16 +1937,25 @@ function TopicSettingsDialog({
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          onSave({
-            title: title.trim(),
-            prompt: prompt.trim(),
-            status,
-            allowReplies,
-            allowAttachments,
-            closesAt: closesAt.trim(),
-          });
+          setSubmitting(true);
+          setError("");
+          try {
+            await onSave({
+              title: title.trim(),
+              prompt: prompt.trim(),
+              status,
+              opensAt: opensAt ? new Date(opensAt).toISOString() : "",
+              allowReplies,
+              allowAttachments,
+              closesAt: closesAt ? new Date(closesAt).toISOString() : "",
+            });
+          } catch (saveError) {
+            setError(friendlyFirebaseError(saveError));
+          } finally {
+            setSubmitting(false);
+          }
         }}
       >
         <div className="forum-settings-heading">
@@ -1592,8 +2000,18 @@ function TopicSettingsDialog({
             </select>
           </label>
           <label className="forum-field">
+            <span>Apertura</span>
+            <input
+              type="datetime-local"
+              value={opensAt}
+              onChange={(event) => setOpensAt(event.target.value)}
+              required={status === "scheduled"}
+            />
+          </label>
+          <label className="forum-field">
             <span>Cierre</span>
             <input
+              type="datetime-local"
               value={closesAt}
               onChange={(event) => setClosesAt(event.target.value)}
             />
@@ -1614,7 +2032,7 @@ function TopicSettingsDialog({
           <label>
             <span>
               <strong>Permitir un adjunto</strong>
-              <small>Imágenes o PDF en esta demostración.</small>
+              <small>Imágenes o PDF de hasta 5 MB.</small>
             </span>
             <input
               type="checkbox"
@@ -1623,12 +2041,44 @@ function TopicSettingsDialog({
             />
           </label>
         </div>
+        {error && (
+          <div className="forum-composer-error" role="alert">
+            <ShieldCheck size={15} /> {error}
+          </div>
+        )}
         <div className="forum-dialog-actions">
+          <button
+            type="button"
+            className="forum-delete-button"
+            disabled={submitting}
+            onClick={async () => {
+              if (!confirmDelete) {
+                setConfirmDelete(true);
+                return;
+              }
+              setSubmitting(true);
+              setError("");
+              try {
+                await onDelete();
+              } catch (deleteError) {
+                setError(friendlyFirebaseError(deleteError));
+                setSubmitting(false);
+                setConfirmDelete(false);
+              }
+            }}
+          >
+            <Trash2 size={16} />
+            {confirmDelete ? "Confirmar eliminación" : "Eliminar tema"}
+          </button>
           <button type="button" className="secondary-button" onClick={onClose}>
             Cancelar
           </button>
-          <button className="primary-button" disabled={!title.trim()}>
-            <Settings2 size={17} /> Guardar cambios
+          <button
+            className="primary-button"
+            disabled={!title.trim() || submitting}
+          >
+            <Settings2 size={17} />
+            {submitting ? "Guardando…" : "Guardar cambios"}
           </button>
         </div>
       </motion.form>
@@ -1639,17 +2089,39 @@ function TopicSettingsDialog({
 function ModerationDrawer({
   cases,
   topics,
+  role,
+  accounts,
+  bans,
   onClose,
   onModerate,
+  onBan,
 }: {
   cases: ForumModerationCase[];
   topics: ForumTopic[];
+  role: Role;
+  accounts: ManagedAccount[];
+  bans: ForumBan[];
   onClose: () => void;
   onModerate: (
     moderationCase: ForumModerationCase,
     action: "hidden" | "dismissed" | "restored",
   ) => void;
+  onBan: (userId: string, active: boolean, reason: string) => Promise<void>;
 }) {
+  const activeBans = bans.filter((ban) => ban.active);
+  const bannedIds = new Set(activeBans.map((ban) => ban.userId));
+  const eligibleAccounts = accounts.filter(
+    (account) => account.active && !bannedIds.has(account.uid),
+  );
+  const [banUserId, setBanUserId] = useState(eligibleAccounts[0]?.uid ?? "");
+  const [banReason, setBanReason] = useState("");
+  const [banBusy, setBanBusy] = useState(false);
+  const selectedBanUserId = eligibleAccounts.some(
+    (account) => account.uid === banUserId,
+  )
+    ? banUserId
+    : eligibleAccounts[0]?.uid ?? "";
+
   return (
     <>
       <motion.button
@@ -1704,6 +2176,66 @@ function ModerationDrawer({
             <span>Resueltos</span>
           </div>
         </div>
+        {role === "director" && (
+          <section className="forum-ban-manager">
+            <div className="forum-ban-heading">
+              <span><UserX size={17} /></span>
+              <div>
+                <strong>Acceso al foro</strong>
+                <small>Dirección puede suspender o habilitar participantes.</small>
+              </div>
+            </div>
+            <div className="forum-ban-form">
+              <select
+                value={selectedBanUserId}
+                onChange={(event) => setBanUserId(event.target.value)}
+              >
+                {!eligibleAccounts.length && <option value="">Sin cuentas disponibles</option>}
+                {eligibleAccounts.map((account) => (
+                  <option key={account.uid} value={account.uid}>
+                    {account.name} · {account.role === "teacher" ? "Maestro" : `${account.grade ?? ""} ${account.group ?? ""}`.trim()}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={banReason}
+                maxLength={240}
+                onChange={(event) => setBanReason(event.target.value)}
+                placeholder="Motivo de la suspensión"
+              />
+              <button
+                type="button"
+                disabled={!selectedBanUserId || banReason.trim().length < 5 || banBusy}
+                onClick={async () => {
+                  setBanBusy(true);
+                  await onBan(selectedBanUserId, true, banReason.trim());
+                  setBanReason("");
+                  setBanBusy(false);
+                }}
+              >
+                <UserX size={15} /> {banBusy ? "Guardando…" : "Suspender"}
+              </button>
+            </div>
+            {activeBans.length > 0 && (
+              <div className="forum-ban-list">
+                {activeBans.map((ban) => (
+                  <div key={ban.userId}>
+                    <span>
+                      <strong>{ban.userName}</strong>
+                      <small>{ban.reason}</small>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => void onBan(ban.userId, false, ban.reason)}
+                    >
+                      <UserCheck size={14} /> Habilitar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
         <div className="forum-moderation-list">
           {cases.map((moderationCase) => {
             const topic = topics.find(
@@ -1726,7 +2258,7 @@ function ModerationDrawer({
                   <small>{moderationCase.reportedAt}</small>
                 </div>
                 <strong>{moderationCase.reason}</strong>
-                <p>“{moderationCase.excerpt}”</p>
+                <p>“{moderationCase.originalBody ?? moderationCase.excerpt}”</p>
                 <span>
                   {moderationCase.author} · {topic?.title ?? "Conversación"}
                 </span>
@@ -1747,7 +2279,7 @@ function ModerationDrawer({
                       type="button"
                       onClick={() => onModerate(moderationCase, "hidden")}
                     >
-                      <EyeOff size={15} /> Ocultar contenido
+                      <Trash2 size={15} /> Eliminar comentario
                     </button>
                   </div>
                 )}

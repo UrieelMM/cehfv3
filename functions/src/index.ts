@@ -1643,3 +1643,902 @@ export const publishScheduledTasks = onSchedule(
     logger.info("Scheduled tasks published", { count: snapshot.size });
   },
 );
+
+type ForumRole = "director" | "teacher" | "student";
+
+type ForumUser = {
+  uid: string;
+  institutionId: string;
+  name: string;
+  initials: string;
+  role: ForumRole;
+  grade: string;
+  group: string;
+};
+
+const FORUM_TOPIC_KINDS = [
+  "weekly_question",
+  "subject",
+  "reading_club",
+  "task_help",
+  "group_chat",
+  "wall",
+  "announcement",
+] as const;
+
+const FORUM_TOPIC_STATUSES = ["open", "scheduled", "closed", "archived"] as const;
+const FORUM_REACTIONS = ["helpful", "interesting", "celebrate"] as const;
+
+function forumId(value: unknown, label: string) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", `${label} no es válido.`);
+  }
+  return normalized;
+}
+
+function forumText(
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < minimum || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${label} debe tener entre ${minimum} y ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function forumOptionalText(value: unknown, maximum: number) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `El texto puede tener hasta ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function forumTimestamp(value: unknown, label: string, required: boolean) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized && !required) return null;
+  const milliseconds = Date.parse(normalized);
+  if (!Number.isFinite(milliseconds)) {
+    throw new HttpsError("invalid-argument", `${label} no es una fecha válida.`);
+  }
+  return Timestamp.fromMillis(milliseconds);
+}
+
+async function requireForumUser(
+  auth: CallableRequest<unknown>["auth"],
+  allowBanned = false,
+): Promise<ForumUser> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const profileSnapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = profileSnapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  if (
+    !profileSnapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher", "student"].includes(role) ||
+    !institutionId
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil institucional no está activo o está incompleto.",
+    );
+  }
+  if (!allowBanned) {
+    const banSnapshot = await db.doc(`forumBans/${institutionId}/users/${auth.uid}`).get();
+    if (banSnapshot.exists && banSnapshot.data()?.active === true) {
+      throw new HttpsError(
+        "permission-denied",
+        "Tu participación en el foro está suspendida. Puedes seguir consultando los temas.",
+      );
+    }
+  }
+  return {
+    uid: auth.uid,
+    institutionId,
+    name: String(profile?.name ?? "Integrante CEHF"),
+    initials: String(profile?.initials ?? "CE"),
+    role: role as ForumRole,
+    grade: String(profile?.grade ?? ""),
+    group: String(profile?.group ?? ""),
+  };
+}
+
+function requireForumStaff(user: ForumUser) {
+  if (user.role !== "teacher" && user.role !== "director") {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo maestros y Dirección pueden realizar esta acción.",
+    );
+  }
+}
+
+function canManageForumTopic(user: ForumUser, topic: DocumentData) {
+  return (
+    user.role === "director" ||
+    (user.role === "teacher" && topic.creatorId === user.uid)
+  );
+}
+
+function canParticipateInForumEntity(user: ForumUser, data: DocumentData) {
+  return (
+    user.role === "director" ||
+    user.role === "teacher" ||
+    (Array.isArray(data.participantIds) && data.participantIds.includes(user.uid))
+  );
+}
+
+function forumGroupMatches(profile: DocumentData, targetGroup: string) {
+  if (targetGroup === "Todo el campus") return true;
+  if (profile.role !== "student") return false;
+  const exactGroup = `${String(profile.grade ?? "")} ${String(profile.group ?? "")}`.trim();
+  if (exactGroup === targetGroup) return true;
+  const range = /^(\d)\.º[–-](\d)\.º$/.exec(targetGroup);
+  const grade = Number.parseInt(String(profile.grade ?? ""), 10);
+  return Boolean(range && grade >= Number(range[1]) && grade <= Number(range[2]));
+}
+
+async function forumAudience(institutionId: string, targetGroup: string) {
+  const snapshot = await db
+    .collection("users")
+    .where("institutionId", "==", institutionId)
+    .get();
+  return snapshot.docs
+    .filter((entry) => {
+      const profile = entry.data();
+      return profile.active === true && forumGroupMatches(profile, targetGroup);
+    })
+    .map((entry) => {
+      const profile = entry.data();
+      return {
+        uid: entry.id,
+        name: String(profile.name ?? "Integrante CEHF"),
+        initials: String(profile.initials ?? "CE"),
+      };
+    });
+}
+
+function forumTopicStatus(value: unknown) {
+  const status = String(value ?? "");
+  if (!FORUM_TOPIC_STATUSES.includes(status as typeof FORUM_TOPIC_STATUSES[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un estado válido.");
+  }
+  return status as typeof FORUM_TOPIC_STATUSES[number];
+}
+
+function forumTopicKind(value: unknown) {
+  const kind = String(value ?? "");
+  if (!FORUM_TOPIC_KINDS.includes(kind as typeof FORUM_TOPIC_KINDS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un tipo de foro válido.");
+  }
+  return kind as typeof FORUM_TOPIC_KINDS[number];
+}
+
+function forumDates(
+  status: typeof FORUM_TOPIC_STATUSES[number],
+  opensValue: unknown,
+  closesValue: unknown,
+) {
+  const requestedOpening =
+    status === "scheduled"
+      ? forumTimestamp(opensValue, "La apertura", true)
+      : forumTimestamp(opensValue, "La apertura", false);
+  const opensAt = requestedOpening ?? Timestamp.now();
+  const closesAt = forumTimestamp(closesValue, "El cierre", false);
+  if (status === "scheduled" && opensAt.toMillis() <= Date.now()) {
+    throw new HttpsError(
+      "invalid-argument",
+      "La apertura programada debe estar en el futuro.",
+    );
+  }
+  if (closesAt && closesAt.toMillis() <= opensAt.toMillis()) {
+    throw new HttpsError(
+      "invalid-argument",
+      "El cierre debe ocurrir después de la apertura.",
+    );
+  }
+  return { opensAt, closesAt };
+}
+
+async function writeForumAudit(
+  action: string,
+  entityType: "forumTopic" | "forumPost" | "forumBan",
+  entityId: string,
+  actor: ForumUser,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+) {
+  await db.collection("auditEvents").add({
+    entityType,
+    entityId,
+    institutionId: actor.institutionId,
+    action,
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    before,
+    after,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+}
+
+export const createForumTopic = onCall(async (request) => {
+  const creator = await requireForumUser(request.auth);
+  requireForumStaff(creator);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const title = forumText(input.title, "El título", 3, 140);
+  const prompt = forumText(input.prompt, "La consigna", 8, 2_000);
+  const subject = forumText(input.subject, "La materia", 2, 80);
+  const targetGroup = forumText(input.group, "El grupo", 2, 80);
+  const forumName = forumText(input.forumName, "El espacio", 2, 100);
+  const kind = forumTopicKind(input.kind);
+  const status = forumTopicStatus(input.status);
+  const { opensAt, closesAt } = forumDates(status, input.opensAt, input.closesAt);
+  if (typeof input.allowReplies !== "boolean" || typeof input.allowAttachments !== "boolean") {
+    throw new HttpsError("invalid-argument", "Revisa las reglas de participación.");
+  }
+  const audience = await forumAudience(creator.institutionId, targetGroup);
+  const participants = [...audience];
+  if (!participants.some((participant) => participant.uid === creator.uid)) {
+    participants.unshift({
+      uid: creator.uid,
+      name: creator.name,
+      initials: creator.initials,
+    });
+  }
+  const reference = db.collection("forumTopics").doc();
+  const now = Timestamp.now();
+  const topic = {
+    institutionId: creator.institutionId,
+    forumId: `space-${subject.toLocaleLowerCase("es-MX").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${targetGroup.toLocaleLowerCase("es-MX").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+    forumName,
+    title,
+    prompt,
+    kind,
+    subject,
+    targetGroup,
+    creatorId: creator.uid,
+    creatorName: creator.name,
+    creatorRole: creator.role,
+    participants,
+    participantIds: participants.map((participant) => participant.uid),
+    opensAt,
+    closesAt,
+    status,
+    allowReplies: input.allowReplies,
+    allowAttachments: input.allowAttachments,
+    pinned: false,
+    replyCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    lastActivityAt: now,
+  };
+  const batch = db.batch();
+  batch.create(reference, topic);
+  batch.create(db.collection("auditEvents").doc(), {
+    entityType: "forumTopic",
+    entityId: reference.id,
+    institutionId: creator.institutionId,
+    action: "forum.topic.created",
+    actorId: creator.uid,
+    actorName: creator.name,
+    actorRole: creator.role,
+    after: { title, targetGroup, status, allowReplies: input.allowReplies, allowAttachments: input.allowAttachments },
+    createdAt: now,
+  });
+  await batch.commit();
+  await writeNotifications(
+    audience.map((participant) => participant.uid),
+    `forum-topic-${reference.id}`,
+    {
+      category: "forum",
+      title: status === "scheduled" ? `Nuevo tema programado: ${title}` : `Nuevo tema: ${title}`,
+      detail: `${forumName} · ${targetGroup}`,
+      topicId: reference.id,
+      url: `/forum/${encodeURIComponent(String(topic.forumId))}/${reference.id}`,
+      eventType: "forum_topic_created",
+    },
+  );
+  logger.info("Forum topic created", {
+    topicId: reference.id,
+    institutionId: creator.institutionId,
+    targetGroup,
+    recipients: audience.length,
+  });
+  return { topicId: reference.id };
+});
+
+export const updateForumTopic = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const topicId = forumId(input.topicId, "El tema");
+  const values = (input.values ?? {}) as Record<string, unknown>;
+  const reference = db.doc(`forumTopics/${topicId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const previous = snapshot.data();
+    if (!snapshot.exists || previous?.institutionId !== actor.institutionId || previous.deletedAt) {
+      throw new HttpsError("not-found", "El tema ya no está disponible.");
+    }
+    if (!canManageForumTopic(actor, previous)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Sólo puedes administrar los temas creados por ti. Dirección puede administrar todos.",
+      );
+    }
+    const status = forumTopicStatus(values.status);
+    const { opensAt, closesAt } = forumDates(status, values.opensAt, values.closesAt);
+    if (typeof values.allowReplies !== "boolean" || typeof values.allowAttachments !== "boolean") {
+      throw new HttpsError("invalid-argument", "Revisa las reglas de participación.");
+    }
+    const next = {
+      title: forumText(values.title, "El título", 3, 140),
+      prompt: forumText(values.prompt, "La consigna", 8, 2_000),
+      status,
+      opensAt,
+      closesAt,
+      allowReplies: values.allowReplies,
+      allowAttachments: values.allowAttachments,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.uid,
+    };
+    transaction.update(reference, next);
+    transaction.create(db.collection("auditEvents").doc(), {
+      entityType: "forumTopic",
+      entityId: topicId,
+      institutionId: actor.institutionId,
+      action: status === "closed" ? "forum.topic.closed" : "forum.topic.updated",
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      before: {
+        title: previous.title,
+        status: previous.status,
+        allowReplies: previous.allowReplies,
+        allowAttachments: previous.allowAttachments,
+      },
+      after: next,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { ok: true as const };
+});
+
+export const deleteForumTopic = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const topicId = forumId(input.topicId, "El tema");
+  const reference = db.doc(`forumTopics/${topicId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const previous = snapshot.data();
+    if (!snapshot.exists || previous?.institutionId !== actor.institutionId || previous.deletedAt) {
+      throw new HttpsError("not-found", "El tema ya no está disponible.");
+    }
+    if (!canManageForumTopic(actor, previous)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Sólo puedes eliminar tus propios temas. Dirección puede eliminar cualquiera.",
+      );
+    }
+    transaction.update(reference, {
+      status: "archived",
+      deletedAt: FieldValue.serverTimestamp(),
+      deletedBy: actor.uid,
+      deletedByName: actor.name,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.create(db.collection("auditEvents").doc(), {
+      entityType: "forumTopic",
+      entityId: topicId,
+      institutionId: actor.institutionId,
+      action: "forum.topic.deleted",
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      before: { title: previous.title, status: previous.status },
+      after: { status: "archived", deleted: true },
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { ok: true as const };
+});
+
+function forumAttachment(
+  value: unknown,
+  actor: ForumUser,
+  topicId: string,
+  postId: string,
+) {
+  if (!value || typeof value !== "object") return null;
+  const attachment = value as Record<string, unknown>;
+  const storagePath = String(attachment.storagePath ?? "");
+  const contentType = String(attachment.contentType ?? "");
+  const size = Number(attachment.size ?? 0);
+  const prefix = `institutions/${actor.institutionId}/forum/${topicId}/${postId}/`;
+  if (
+    !storagePath.startsWith(prefix) ||
+    storagePath.length > 600 ||
+    !(contentType.startsWith("image/") || contentType === "application/pdf") ||
+    !Number.isFinite(size) ||
+    size <= 0 ||
+    size > 5_000_000
+  ) {
+    throw new HttpsError("invalid-argument", "El archivo adjunto no es válido.");
+  }
+  return {
+    id: forumId(attachment.id ?? postId, "El adjunto"),
+    name: forumText(attachment.name, "El nombre del archivo", 1, 160),
+    storagePath,
+    contentType,
+    size,
+  };
+}
+
+async function validForumMentions(
+  values: unknown,
+  body: string,
+  institutionId: string,
+) {
+  if (!Array.isArray(values)) return [];
+  const ids = [...new Set(values.map((value) => forumId(value, "La mención")))].slice(0, 12);
+  if (!ids.length) return [];
+  const snapshots = await db.getAll(...ids.map((id) => db.doc(`users/${id}`)));
+  const normalizedBody = body.toLocaleLowerCase("es-MX");
+  return snapshots
+    .filter((snapshot) => {
+      const profile = snapshot.data();
+      const name = String(profile?.name ?? "").toLocaleLowerCase("es-MX");
+      return (
+        snapshot.exists &&
+        profile?.active === true &&
+        profile.institutionId === institutionId &&
+        Boolean(name) &&
+        normalizedBody.includes(`@${name}`)
+      );
+    })
+    .map((snapshot) => snapshot.id);
+}
+
+export const createForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const topicId = forumId(input.topicId, "El tema");
+  const body = forumText(input.body, "La aportación", 1, 600);
+  const parentId = input.parentId ? forumId(input.parentId, "La respuesta") : "";
+  const attachment = forumAttachment(input.attachment, actor, topicId, postId);
+  let mentionedUserIds = await validForumMentions(
+    input.mentionedUserIds,
+    body,
+    actor.institutionId,
+  );
+  const topicReference = db.doc(`forumTopics/${topicId}`);
+  const postReference = db.doc(`forumPosts/${postId}`);
+  let parentAuthorId = "";
+  let topicTitle = "Tema del foro";
+  let forumName = "Foro CEHF";
+  await db.runTransaction(async (transaction) => {
+    const topicSnapshot = await transaction.get(topicReference);
+    const topic = topicSnapshot.data();
+    if (!topicSnapshot.exists || topic?.institutionId !== actor.institutionId || topic.deletedAt) {
+      throw new HttpsError("not-found", "El tema ya no está disponible.");
+    }
+    if (!canParticipateInForumEntity(actor, topic)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Este tema pertenece a otro grupo.",
+      );
+    }
+    const participantIds = Array.isArray(topic.participantIds)
+      ? topic.participantIds.map(String)
+      : [];
+    mentionedUserIds = mentionedUserIds.filter((userId) =>
+      participantIds.includes(userId),
+    );
+    if (topic.status !== "open" || topic.allowReplies !== true) {
+      throw new HttpsError("failed-precondition", "Este tema no acepta respuestas.");
+    }
+    if (topic.closesAt instanceof Timestamp && topic.closesAt.toMillis() <= Date.now()) {
+      throw new HttpsError("failed-precondition", "El periodo de participación terminó.");
+    }
+    if (attachment && topic.allowAttachments !== true) {
+      throw new HttpsError("failed-precondition", "Este tema no permite archivos adjuntos.");
+    }
+    if (parentId) {
+      const parentSnapshot = await transaction.get(db.doc(`forumPosts/${parentId}`));
+      const parent = parentSnapshot.data();
+      if (
+        !parentSnapshot.exists ||
+        parent?.institutionId !== actor.institutionId ||
+        parent.topicId !== topicId ||
+        parent.status !== "visible"
+      ) {
+        throw new HttpsError("not-found", "El comentario al que respondes ya no está disponible.");
+      }
+      parentAuthorId = String(parent.authorId ?? "");
+    }
+    const existing = await transaction.get(postReference);
+    if (existing.exists) {
+      throw new HttpsError("already-exists", "La aportación ya fue publicada.");
+    }
+    const now = Timestamp.now();
+    transaction.create(postReference, {
+      institutionId: actor.institutionId,
+      topicId,
+      participantIds,
+      authorId: actor.uid,
+      authorName: actor.name,
+      authorInitials: actor.initials,
+      authorRole: actor.role,
+      body,
+      parentId: parentId || null,
+      mentionedUserIds,
+      attachment,
+      status: "visible",
+      markedAnswer: false,
+      reactionUsers: { helpful: [], interesting: [], celebrate: [] },
+      reportedByIds: [],
+      reportCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    transaction.update(topicReference, {
+      replyCount: FieldValue.increment(1),
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+    topicTitle = String(topic.title ?? topicTitle);
+    forumName = String(topic.forumName ?? forumName);
+  });
+  if (parentAuthorId && parentAuthorId !== actor.uid) {
+    await writeNotifications([parentAuthorId], `forum-reply-${postId}`, {
+      category: "forum",
+      title: `${actor.name} respondió a tu comentario`,
+      detail: `${topicTitle} · ${body.slice(0, 120)}`,
+      topicId,
+      postId,
+      url: `/forum/topic/${topicId}`,
+      eventType: "forum_reply",
+    });
+  }
+  const mentionRecipients = mentionedUserIds.filter(
+    (userId) => userId !== actor.uid && userId !== parentAuthorId,
+  );
+  if (mentionRecipients.length) {
+    await writeNotifications(mentionRecipients, `forum-mention-${postId}`, {
+      category: "forum",
+      title: `${actor.name} te mencionó en el foro`,
+      detail: `${forumName} · ${body.slice(0, 120)}`,
+      topicId,
+      postId,
+      url: `/forum/topic/${topicId}`,
+      eventType: "forum_mention",
+    });
+  }
+  return { postId };
+});
+
+export const reactToForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const reaction = String(input.reaction ?? "");
+  if (!FORUM_REACTIONS.includes(reaction as typeof FORUM_REACTIONS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona una reacción válida.");
+  }
+  const reference = db.doc(`forumPosts/${postId}`);
+  const active = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const post = snapshot.data();
+    if (
+      !snapshot.exists ||
+      post?.institutionId !== actor.institutionId ||
+      post.status !== "visible" ||
+      !canParticipateInForumEntity(actor, post)
+    ) {
+      throw new HttpsError("not-found", "La publicación ya no está disponible.");
+    }
+    const reactionUsers = (post.reactionUsers ?? {}) as Record<string, unknown>;
+    const users = Array.isArray(reactionUsers[reaction])
+      ? reactionUsers[reaction].map(String)
+      : [];
+    const nextActive = !users.includes(actor.uid);
+    transaction.update(reference, {
+      [`reactionUsers.${reaction}`]: nextActive
+        ? FieldValue.arrayUnion(actor.uid)
+        : FieldValue.arrayRemove(actor.uid),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return nextActive;
+  });
+  return { active };
+});
+
+export const reportForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const reason = forumText(input.reason, "El motivo", 5, 240);
+  const postReference = db.doc(`forumPosts/${postId}`);
+  const caseReference = db.doc(`forumModeration/post-${postId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(postReference);
+    const post = snapshot.data();
+    if (
+      !snapshot.exists ||
+      post?.institutionId !== actor.institutionId ||
+      post.status !== "visible" ||
+      !canParticipateInForumEntity(actor, post)
+    ) {
+      throw new HttpsError("not-found", "La publicación ya no está disponible.");
+    }
+    if (post.authorId === actor.uid) {
+      throw new HttpsError("failed-precondition", "No puedes reportar tu propia aportación.");
+    }
+    const reporters = Array.isArray(post.reportedByIds)
+      ? post.reportedByIds.map(String)
+      : [];
+    if (reporters.includes(actor.uid)) return;
+    const caseSnapshot = await transaction.get(caseReference);
+    const moderationCase = caseSnapshot.data();
+    transaction.update(postReference, {
+      reportedByIds: FieldValue.arrayUnion(actor.uid),
+      reportCount: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(
+      caseReference,
+      {
+        institutionId: actor.institutionId,
+        topicId: String(post.topicId ?? ""),
+        postId,
+        authorId: String(post.authorId ?? ""),
+        authorName: String(post.authorName ?? "Integrante CEHF"),
+        excerpt: String(post.body ?? "").slice(0, 180),
+        reason: moderationCase?.reason ?? reason,
+        status: moderationCase?.status === "hidden" ? "hidden" : "open",
+        reporterIds: FieldValue.arrayUnion(actor.uid),
+        reportCount: FieldValue.increment(1),
+        createdAt: moderationCase?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+  return { ok: true as const };
+});
+
+export const moderateForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const action = String(input.action ?? "");
+  if (!["hidden", "dismissed", "restored"].includes(action)) {
+    throw new HttpsError("invalid-argument", "Selecciona una acción de moderación válida.");
+  }
+  const postReference = db.doc(`forumPosts/${postId}`);
+  const caseReference = db.doc(`forumModeration/post-${postId}`);
+  await db.runTransaction(async (transaction) => {
+    const [postSnapshot, caseSnapshot] = await Promise.all([
+      transaction.get(postReference),
+      transaction.get(caseReference),
+    ]);
+    const post = postSnapshot.data();
+    const moderationCase = caseSnapshot.data();
+    if (!postSnapshot.exists || post?.institutionId !== actor.institutionId) {
+      throw new HttpsError("not-found", "La publicación ya no está disponible.");
+    }
+    if (action === "restored" && !moderationCase?.originalBody) {
+      throw new HttpsError("failed-precondition", "No existe evidencia para restaurar.");
+    }
+    const now = FieldValue.serverTimestamp();
+    if (action === "hidden") {
+      transaction.update(postReference, {
+        body: "",
+        attachment: null,
+        status: "hidden",
+        hiddenAt: now,
+        hiddenBy: actor.uid,
+        updatedAt: now,
+      });
+    } else if (action === "restored") {
+      transaction.update(postReference, {
+        body: String(moderationCase?.originalBody ?? ""),
+        attachment: moderationCase?.originalAttachment ?? null,
+        status: "visible",
+        restoredAt: now,
+        restoredBy: actor.uid,
+        updatedAt: now,
+      });
+    }
+    transaction.set(
+      caseReference,
+      {
+        institutionId: actor.institutionId,
+        topicId: String(post.topicId ?? ""),
+        postId,
+        authorId: String(post.authorId ?? ""),
+        authorName: String(post.authorName ?? "Integrante CEHF"),
+        excerpt: String(moderationCase?.excerpt ?? post.body ?? "").slice(0, 180),
+        reason: String(moderationCase?.reason ?? "Acción directa de moderación"),
+        status: action,
+        originalBody: String(moderationCase?.originalBody ?? post.body ?? ""),
+        originalAttachment: moderationCase?.originalAttachment ?? post.attachment ?? null,
+        reportCount: Number(moderationCase?.reportCount ?? post.reportCount ?? 0),
+        createdAt: moderationCase?.createdAt ?? now,
+        resolvedById: actor.uid,
+        resolvedByName: actor.name,
+        resolvedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    transaction.create(db.collection("auditEvents").doc(), {
+      entityType: "forumPost",
+      entityId: postId,
+      institutionId: actor.institutionId,
+      action: `forum.post.${action}`,
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      before: { status: post.status },
+      after: { status: action },
+      createdAt: now,
+    });
+  });
+  return { ok: true as const };
+});
+
+export const setForumPostMarked = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  if (typeof input.marked !== "boolean") {
+    throw new HttpsError("invalid-argument", "La marca solicitada no es válida.");
+  }
+  const reference = db.doc(`forumPosts/${postId}`);
+  const snapshot = await reference.get();
+  const post = snapshot.data();
+  if (!snapshot.exists || post?.institutionId !== actor.institutionId || post.status !== "visible") {
+    throw new HttpsError("not-found", "La publicación ya no está disponible.");
+  }
+  await reference.update({
+    markedAnswer: input.marked,
+    markedBy: actor.uid,
+    markedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { ok: true as const };
+});
+
+export const setForumUserBan = onCall(async (request) => {
+  const director = await requireForumUser(request.auth, true);
+  if (director.role !== "director") {
+    throw new HttpsError("permission-denied", "Sólo Dirección puede suspender participantes.");
+  }
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const userId = forumId(input.userId, "El participante");
+  if (typeof input.active !== "boolean") {
+    throw new HttpsError("invalid-argument", "El estado solicitado no es válido.");
+  }
+  const targetSnapshot = await db.doc(`users/${userId}`).get();
+  const target = targetSnapshot.data();
+  if (
+    !targetSnapshot.exists ||
+    target?.institutionId !== director.institutionId ||
+    target.role === "director"
+  ) {
+    throw new HttpsError("not-found", "El participante no está disponible.");
+  }
+  const reason = input.active
+    ? forumText(input.reason, "El motivo", 5, 240)
+    : forumOptionalText(input.reason, 240);
+  const reference = db.doc(`forumBans/${director.institutionId}/users/${userId}`);
+  const previous = await reference.get();
+  const now = FieldValue.serverTimestamp();
+  await reference.set(
+    {
+      institutionId: director.institutionId,
+      userId,
+      userName: String(target.name ?? "Integrante CEHF"),
+      active: input.active,
+      reason: input.active ? reason : String(previous.data()?.reason ?? reason),
+      ...(input.active
+        ? {
+            bannedById: director.uid,
+            bannedByName: director.name,
+            bannedAt: now,
+            restoredById: null,
+            restoredByName: null,
+            restoredAt: null,
+          }
+        : {
+            restoredById: director.uid,
+            restoredByName: director.name,
+            restoredAt: now,
+          }),
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+  await writeForumAudit(
+    input.active ? "forum.user.banned" : "forum.user.restored",
+    "forumBan",
+    userId,
+    director,
+    { active: previous.data()?.active === true },
+    { active: input.active, reason },
+  );
+  return { ok: true as const };
+});
+
+export const syncScheduledForumTopics = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    timeZone: ACADEMIC_TIMEZONE,
+    retryCount: 3,
+  },
+  async () => {
+    const now = Timestamp.now();
+    const [opening, closing] = await Promise.all([
+      db
+        .collection("forumTopics")
+        .where("status", "==", "scheduled")
+        .where("opensAt", "<=", now)
+        .limit(200)
+        .get(),
+      db
+        .collection("forumTopics")
+        .where("status", "==", "open")
+        .where("closesAt", "<=", now)
+        .limit(200)
+        .get(),
+    ]);
+    const batch = db.batch();
+    opening.docs
+      .filter((snapshot) => !snapshot.data().deletedAt)
+      .forEach((snapshot) => {
+        batch.update(snapshot.ref, {
+          status: "open",
+          openedAt: now,
+          updatedAt: now,
+          lastActivityAt: now,
+        });
+      });
+    closing.docs
+      .filter((snapshot) => !snapshot.data().deletedAt)
+      .forEach((snapshot) => {
+        batch.update(snapshot.ref, {
+          status: "closed",
+          closedAt: now,
+          updatedAt: now,
+        });
+      });
+    if (opening.size || closing.size) await batch.commit();
+    logger.info("Scheduled forum topics synchronized", {
+      opened: opening.size,
+      closed: closing.size,
+    });
+  },
+);

@@ -329,10 +329,20 @@ export type ForumAttachment = {
   name: string;
   type: "image" | "document" | "link";
   sizeLabel?: string;
+  storagePath?: string;
+  contentType?: string;
+  size?: number;
+};
+
+export type ForumParticipant = {
+  uid: string;
+  name: string;
+  initials: string;
 };
 
 export type ForumReply = {
   id: string;
+  authorId?: string;
   author: string;
   initials: string;
   body: string;
@@ -346,6 +356,7 @@ export type ForumReply = {
   reports?: number;
   markedAnswer?: boolean;
   edited?: boolean;
+  reportedByMe?: boolean;
 };
 
 export type ForumTopicKind =
@@ -359,6 +370,8 @@ export type ForumTopicKind =
 
 export type ForumTopic = {
   id: string;
+  creatorId?: string;
+  creatorRole?: "director" | "teacher";
   forumId: string;
   forumName: string;
   title: string;
@@ -368,6 +381,7 @@ export type ForumTopic = {
   group: string;
   responsible: string;
   participants: string[];
+  participantProfiles?: ForumParticipant[];
   opensAt?: string;
   closesAt: string;
   status: "open" | "scheduled" | "closed" | "archived";
@@ -376,6 +390,7 @@ export type ForumTopic = {
   pinned?: boolean;
   unreadCount?: number;
   lastActivity: string;
+  lastActivityAt?: string;
   replies: ForumReply[];
 };
 
@@ -389,6 +404,20 @@ export type ForumModerationCase = {
   reportedAt: string;
   status: "open" | "hidden" | "dismissed" | "restored";
   resolvedBy?: string;
+  resolvedAt?: string;
+  originalBody?: string;
+  reportCount?: number;
+};
+
+export type ForumBan = {
+  userId: string;
+  userName: string;
+  active: boolean;
+  reason: string;
+  bannedBy: string;
+  bannedAt: string;
+  restoredBy?: string;
+  restoredAt?: string;
 };
 
 export type AppNotification = {
@@ -426,6 +455,7 @@ export type PortalState = {
   wallPosts: WallPost[];
   forumTopics: ForumTopic[];
   forumModeration: ForumModerationCase[];
+  forumBans: ForumBan[];
   notifications: AppNotification[];
   settings: PortalSettings;
   updatedAt?: string;
