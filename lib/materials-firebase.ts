@@ -166,31 +166,54 @@ export function watchLearningMaterials(
     callback([]);
     return () => undefined;
   }
+  if (profile.role === "student") {
+    if (!firebase.functions) {
+      onError?.(new Error("Firebase Functions no está configurado para Materiales."));
+      return () => undefined;
+    }
+    let active = true;
+    const callable = httpsCallable<
+      Record<string, never>,
+      { materials: Array<Record<string, unknown>> }
+    >(firebase.functions, "listStudentMaterials");
+    void callable({})
+      .then(({ data }) => {
+        if (!active) return;
+        callback(
+          data.materials.map((material) =>
+            materialFromData(
+              String(material.id ?? ""),
+              String(material.firestorePath ?? ""),
+              material,
+            ),
+          ),
+        );
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        onError?.(
+          error instanceof Error
+            ? error
+            : new Error("No pudimos cargar los materiales del alumno."),
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }
   const base = collection(
     firebase.db,
     "institutions",
     profile.institutionId,
     "materials",
   );
-  const institutionConstraint = where(
-    "institutionId",
-    "==",
-    profile.institutionId,
-  );
   const materialQuery =
     profile.role === "director"
-      ? query(base, institutionConstraint)
-      : profile.role === "teacher"
-        ? query(
-            base,
-            institutionConstraint,
-            where("managerIds", "array-contains", profile.uid),
-          )
-        : query(
-            base,
-            institutionConstraint,
-            where("audienceStudentIds", "array-contains", profile.uid),
-          );
+      ? query(base)
+      : query(
+          base,
+          where("managerIds", "array-contains", profile.uid),
+        );
   return onSnapshot(
     materialQuery,
     (snapshot) => {

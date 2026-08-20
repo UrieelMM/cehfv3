@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import {
@@ -10,9 +11,11 @@ import {
   type WriteBatch,
 } from "firebase-admin/firestore";
 import { logger, setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
 import {
   HttpsError,
   onCall,
+  onRequest,
   type CallableRequest,
 } from "firebase-functions/v2/https";
 import {
@@ -20,11 +23,33 @@ import {
   onDocumentWritten,
 } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import {
+  WHATSAPP_CONSENT_VERSION,
+  WHATSAPP_DAILY_TEMPLATE,
+  WHATSAPP_TEMPLATE_LANGUAGE,
+  WHATSAPP_TIMEZONE,
+  buildTemplateParameters,
+  dailyOutboxId,
+  firstName,
+  isOptOutMessage,
+  isTransientWhatsAppError,
+  isValidSendTime,
+  localDateKey,
+  maskPhone,
+  normalizeMexicanPhone,
+  retryDelayMinutes,
+  shouldRunDailySummary,
+  type DailyStudentSummary,
+} from "./whatsapp-core.js";
 
 initializeApp();
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
 
 const db = getFirestore();
+const whatsappAccessToken = defineSecret("WHATSAPP_ACCESS_TOKEN");
+const whatsappPhoneNumberId = defineSecret("WHATSAPP_PHONE_NUMBER_ID");
+const whatsappWebhookVerifyToken = defineSecret("WHATSAPP_WEBHOOK_VERIFY_TOKEN");
+const whatsappAppSecret = defineSecret("WHATSAPP_APP_SECRET");
 const TASK_PATH =
   "institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}";
 const HISTORY_PATH = `${TASK_PATH}/entregas/{studentId}/historial/{eventId}`;
@@ -309,6 +334,9 @@ function serializeManagedAccount(uid: string, data: DocumentData) {
           schoolLevel: data.schoolLevel === "secondary" ? "secondary" : "primary",
           grade: String(data.grade ?? ""),
           group: String(data.group ?? ""),
+          ...(data.guardianWhatsApp
+            ? { guardianWhatsApp: String(data.guardianWhatsApp) }
+            : {}),
         }
       : {}),
     subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
@@ -351,6 +379,17 @@ export const updateManagedAccount = onCall(async (request) => {
         "Selecciona un nivel, grado y grupo válidos.",
       );
     }
+    let guardianWhatsApp: string;
+    try {
+      guardianWhatsApp = normalizeMexicanPhone(input.guardianWhatsApp);
+    } catch (error) {
+      throw new HttpsError(
+        "invalid-argument",
+        error instanceof Error
+          ? error.message
+          : "El WhatsApp del padre o tutor no es válido.",
+      );
+    }
     const teacherSnapshots = await db.getAll(
       ...teacherIds.map((teacherId) => db.doc(`users/${teacherId}`)),
     );
@@ -369,7 +408,7 @@ export const updateManagedAccount = onCall(async (request) => {
         "Uno de los maestros asignados ya no está activo.",
       );
     }
-    studentAssignment = { schoolLevel, grade, group };
+    studentAssignment = { schoolLevel, grade, group, guardianWhatsApp };
   }
   const photoURL = input.photoURL ? String(input.photoURL).trim() : "";
   if (
@@ -909,6 +948,11 @@ type MaterialStaff = {
   subjects: string[];
 };
 
+type MaterialStudent = {
+  uid: string;
+  institutionId: string;
+};
+
 const MATERIAL_TYPES = [
   "pdf",
   "audio",
@@ -952,6 +996,60 @@ async function requireMaterialStaff(
     name: String(profile?.name ?? "Campus CEHF"),
     role: role as MaterialStaff["role"],
     subjects: Array.isArray(profile?.subjects) ? profile.subjects.map(String) : [],
+  };
+}
+
+async function requireMaterialStudent(
+  auth: CallableRequest<unknown>["auth"],
+): Promise<MaterialStudent> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const snapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = snapshot.data();
+  const institutionId = String(profile?.institutionId ?? "");
+  if (
+    !snapshot.exists ||
+    profile?.active !== true ||
+    profile?.role !== "student" ||
+    !institutionId
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil de alumno no está activo para consultar materiales.",
+    );
+  }
+  return { uid: auth.uid, institutionId };
+}
+
+function serializeLearningMaterial(
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+) {
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    firestorePath: snapshot.ref.path,
+    institutionId: String(data.institutionId ?? ""),
+    schoolYearId: String(data.schoolYearId ?? ""),
+    schoolYearLabel: String(data.schoolYearLabel ?? ""),
+    termId: String(data.termId ?? ""),
+    termLabel: String(data.termLabel ?? ""),
+    weekId: String(data.weekId ?? ""),
+    weekLabel: String(data.weekLabel ?? "Semana"),
+    subjectId: String(data.subjectId ?? "general"),
+    subject: String(data.subject ?? "General"),
+    title: String(data.title ?? "Material sin nombre"),
+    description: String(data.description ?? ""),
+    type: String(data.type ?? "other"),
+    links: Array.isArray(data.links) ? data.links : [],
+    attachments: Array.isArray(data.attachments) ? data.attachments : [],
+    required: data.required === true,
+    audienceStudentIds: notificationRecipients(data.audienceStudentIds),
+    targetGroups: notificationRecipients(data.targetGroups),
+    managerIds: notificationRecipients(data.managerIds),
+    createdBy: String(data.createdBy ?? ""),
+    createdByName: String(data.createdByName ?? "Campus CEHF"),
+    createdByRole: data.createdByRole === "director" ? "director" : "teacher",
+    createdAt: accountTimestamp(data.createdAt),
+    updatedAt: accountTimestamp(data.updatedAt),
   };
 }
 
@@ -1273,6 +1371,19 @@ export const createMaterial = onCall(async (request) => {
     recipientCount: recipients.length,
   });
   return { materialId: selectedMaterialId, recipientCount: recipients.length };
+});
+
+export const listStudentMaterials = onCall(async (request) => {
+  const student = await requireMaterialStudent(request.auth);
+  const snapshot = await db
+    .collection(`institutions/${student.institutionId}/materials`)
+    .where("audienceStudentIds", "array-contains", student.uid)
+    .get();
+  const materials = snapshot.docs
+    .filter((document) => document.data().institutionId === student.institutionId)
+    .map(serializeLearningMaterial)
+    .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  return { materials };
 });
 
 export const onWorkshopAccessChanged = onDocumentWritten(
@@ -2213,6 +2324,1085 @@ export const publishScheduledTasks = onSchedule(
     );
     await batch.commit();
     logger.info("Scheduled tasks published", { count: snapshot.size });
+  },
+);
+
+type GuardianContactStatus =
+  | "active"
+  | "paused"
+  | "opted_out"
+  | "invalid";
+
+type WhatsAppConfiguration = {
+  institutionId: string;
+  enabled: boolean;
+  dailySummaryEnabled: boolean;
+  sendTime: string;
+  sendOnNoTaskDays: boolean;
+  timeZone: string;
+  templateName: string;
+  templateLanguage: string;
+  graphApiVersion: string;
+};
+
+type SummaryTask = {
+  kind: "academic" | "workshop";
+  reference: DocumentReference;
+  targetGroup?: string;
+  audienceStudentIds?: string[];
+};
+
+type SummaryStudent = {
+  uid: string;
+  name: string;
+  groupKey: string;
+};
+
+const DEFAULT_WHATSAPP_CONFIGURATION: WhatsAppConfiguration = {
+  institutionId: "cehf-primaria",
+  enabled: false,
+  dailySummaryEnabled: true,
+  sendTime: "18:00",
+  sendOnNoTaskDays: true,
+  timeZone: WHATSAPP_TIMEZONE,
+  templateName: WHATSAPP_DAILY_TEMPLATE,
+  templateLanguage: WHATSAPP_TEMPLATE_LANGUAGE,
+  graphApiVersion: "v23.0",
+};
+
+function whatsappText(
+  value: unknown,
+  label: string,
+  minimum = 1,
+  maximum = 100,
+) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < minimum || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${label} debe tener entre ${minimum} y ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function whatsappContactId(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", "El contacto seleccionado no es válido.");
+  }
+  return normalized;
+}
+
+function whatsappStudentIds(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Selecciona al menos un estudiante.");
+  }
+  const ids = [...new Set(value.map(String).map((item) => item.trim()).filter(Boolean))];
+  if (
+    !ids.length ||
+    ids.length > 10 ||
+    ids.some((id) => !/^[A-Za-z0-9_-]{1,128}$/.test(id))
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Selecciona entre 1 y 10 estudiantes válidos.",
+    );
+  }
+  return ids;
+}
+
+function whatsappConfigFromData(
+  institutionId: string,
+  data?: DocumentData,
+): WhatsAppConfiguration {
+  return {
+    ...DEFAULT_WHATSAPP_CONFIGURATION,
+    institutionId,
+    enabled: data?.enabled === true,
+    dailySummaryEnabled: data?.dailySummaryEnabled !== false,
+    sendTime: isValidSendTime(data?.sendTime) ? String(data?.sendTime) : "18:00",
+    sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
+    templateName: /^[a-z0-9_]{1,512}$/.test(String(data?.templateName ?? ""))
+      ? String(data?.templateName)
+      : WHATSAPP_DAILY_TEMPLATE,
+    templateLanguage: /^[A-Za-z_]{2,10}$/.test(
+      String(data?.templateLanguage ?? ""),
+    )
+      ? String(data?.templateLanguage)
+      : WHATSAPP_TEMPLATE_LANGUAGE,
+    graphApiVersion: /^v\d{1,2}\.0$/.test(String(data?.graphApiVersion ?? ""))
+      ? String(data?.graphApiVersion)
+      : "v23.0",
+    timeZone: WHATSAPP_TIMEZONE,
+  };
+}
+
+async function readWhatsAppConfiguration(institutionId: string) {
+  const snapshot = await db
+    .doc(`institutions/${institutionId}/configuracion/whatsapp`)
+    .get();
+  return whatsappConfigFromData(institutionId, snapshot.data());
+}
+
+async function verifyGuardianStudents(
+  institutionId: string,
+  studentIds: string[],
+) {
+  const snapshots = await db.getAll(
+    ...studentIds.map((studentId) => db.doc(`users/${studentId}`)),
+  );
+  const invalid = snapshots.find((snapshot) => {
+    const student = snapshot.data();
+    return (
+      !snapshot.exists ||
+      student?.institutionId !== institutionId ||
+      student?.role !== "student" ||
+      student?.active !== true
+    );
+  });
+  if (invalid) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Uno de los estudiantes seleccionados ya no está activo.",
+    );
+  }
+  return snapshots.map((snapshot) => ({
+    id: snapshot.id,
+    name: String(snapshot.data()?.name ?? "Alumno"),
+  }));
+}
+
+export const saveGuardianContact = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const name = whatsappText(input.name, "El nombre", 2, 100);
+  const relationship = whatsappText(input.relationship, "El parentesco", 2, 40);
+  let phoneE164: string;
+  try {
+    phoneE164 = normalizeMexicanPhone(input.phone);
+  } catch (error) {
+    throw new HttpsError(
+      "invalid-argument",
+      error instanceof Error ? error.message : "El teléfono no es válido.",
+    );
+  }
+  const studentIds = whatsappStudentIds(input.studentIds);
+  const students = await verifyGuardianStudents(director.institutionId, studentIds);
+  if (input.consentConfirmed !== true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Confirma que el tutor autorizó recibir estos avisos por WhatsApp.",
+    );
+  }
+  const contactId = input.id ? whatsappContactId(input.id) : db.collection("guardianContacts").doc().id;
+  const reference = db.doc(`guardianContacts/${contactId}`);
+  const existing = await reference.get();
+  if (
+    existing.exists &&
+    existing.data()?.institutionId !== director.institutionId
+  ) {
+    throw new HttpsError("permission-denied", "El contacto no pertenece a esta institución.");
+  }
+  const contacts = await db
+    .collection("guardianContacts")
+    .where("institutionId", "==", director.institutionId)
+    .get();
+  const duplicate = contacts.docs.find(
+    (contact) => contact.id !== contactId && contact.data().phoneE164 === phoneE164,
+  );
+  if (duplicate) {
+    throw new HttpsError(
+      "already-exists",
+      "Ese teléfono ya está registrado como contacto familiar.",
+    );
+  }
+  const now = FieldValue.serverTimestamp();
+  const data = {
+    institutionId: director.institutionId,
+    name,
+    phoneE164,
+    phoneMasked: maskPhone(phoneE164),
+    relationship,
+    studentIds,
+    studentNames: students.map((student) => student.name),
+    categories: ["daily_task_summary"],
+    language: WHATSAPP_TEMPLATE_LANGUAGE,
+    timeZone: WHATSAPP_TIMEZONE,
+    status: "active" satisfies GuardianContactStatus,
+    consentStatus: "active",
+    consentSource: "school_admin",
+    consentVersion: WHATSAPP_CONSENT_VERSION,
+    consentGrantedAt: now,
+    consentRecordedBy: director.uid,
+    updatedAt: now,
+    updatedBy: director.uid,
+    ...(existing.exists ? {} : { createdAt: now, createdBy: director.uid }),
+  };
+  const batch = db.batch();
+  batch.set(reference, data, { merge: true });
+  batch.set(db.collection("auditEvents").doc(), {
+    institutionId: director.institutionId,
+    action: existing.exists ? "guardian_contact_updated" : "guardian_contact_created",
+    contactId,
+    actorUid: director.uid,
+    actorName: director.name,
+    studentIds,
+    createdAt: now,
+  });
+  await batch.commit();
+  return {
+    contact: {
+      id: contactId,
+      ...data,
+      consentGrantedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...(existing.exists ? {} : { createdAt: new Date().toISOString() }),
+    },
+  };
+});
+
+export const setGuardianContactStatus = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const contactId = whatsappContactId(input.id);
+  const status = String(input.status ?? "") as GuardianContactStatus;
+  if (!["active", "paused", "opted_out"].includes(status)) {
+    throw new HttpsError("invalid-argument", "El estado solicitado no es válido.");
+  }
+  const reference = db.doc(`guardianContacts/${contactId}`);
+  const snapshot = await reference.get();
+  if (
+    !snapshot.exists ||
+    snapshot.data()?.institutionId !== director.institutionId
+  ) {
+    throw new HttpsError("not-found", "El contacto ya no existe.");
+  }
+  if (
+    status === "active" &&
+    snapshot.data()?.status === "opted_out" &&
+    input.consentConfirmed !== true
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Se requiere un nuevo consentimiento para reactivar este contacto.",
+    );
+  }
+  const now = FieldValue.serverTimestamp();
+  const update: Record<string, unknown> = {
+    status,
+    updatedAt: now,
+    updatedBy: director.uid,
+  };
+  if (status === "opted_out") {
+    update.consentStatus = "withdrawn";
+    update.optedOutAt = now;
+    update.optOutSource = "school_admin";
+  } else if (status === "active") {
+    update.consentStatus = "active";
+    if (snapshot.data()?.status === "opted_out") {
+      update.consentGrantedAt = now;
+      update.consentVersion = WHATSAPP_CONSENT_VERSION;
+      update.consentRecordedBy = director.uid;
+    }
+  }
+  const batch = db.batch();
+  batch.update(reference, update);
+  batch.set(db.collection("auditEvents").doc(), {
+    institutionId: director.institutionId,
+    action: `guardian_contact_${status}`,
+    contactId,
+    actorUid: director.uid,
+    actorName: director.name,
+    createdAt: now,
+  });
+  await batch.commit();
+  return { id: contactId, status };
+});
+
+export const saveWhatsAppConfiguration = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  if (
+    typeof input.enabled !== "boolean" ||
+    typeof input.dailySummaryEnabled !== "boolean" ||
+    typeof input.sendOnNoTaskDays !== "boolean" ||
+    !isValidSendTime(input.sendTime)
+  ) {
+    throw new HttpsError("invalid-argument", "La configuración no es válida.");
+  }
+  const templateName = String(input.templateName ?? WHATSAPP_DAILY_TEMPLATE);
+  if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
+    throw new HttpsError("invalid-argument", "El nombre de la plantilla no es válido.");
+  }
+  const configuration: WhatsAppConfiguration = {
+    ...DEFAULT_WHATSAPP_CONFIGURATION,
+    institutionId: director.institutionId,
+    enabled: input.enabled,
+    dailySummaryEnabled: input.dailySummaryEnabled,
+    sendTime: String(input.sendTime),
+    sendOnNoTaskDays: input.sendOnNoTaskDays,
+    templateName,
+  };
+  const now = FieldValue.serverTimestamp();
+  const batch = db.batch();
+  batch.set(
+    db.doc(`institutions/${director.institutionId}/configuracion/whatsapp`),
+    {
+      ...configuration,
+      updatedAt: now,
+      updatedBy: director.uid,
+    },
+    { merge: true },
+  );
+  batch.set(db.collection("auditEvents").doc(), {
+    institutionId: director.institutionId,
+    action: "whatsapp_configuration_updated",
+    actorUid: director.uid,
+    actorName: director.name,
+    enabled: configuration.enabled,
+    sendTime: configuration.sendTime,
+    createdAt: now,
+  });
+  await batch.commit();
+  return { configuration };
+});
+
+function dueOnBusinessDate(
+  value: unknown,
+  businessDate: string,
+  timeZone: string,
+) {
+  const date = value instanceof Timestamp ? value.toDate() : new Date(String(value));
+  return !Number.isNaN(date.getTime()) && localDateKey(date, timeZone) === businessDate;
+}
+
+async function loadSummaryTasks(
+  institutionId: string,
+  businessDate: string,
+  timeZone: string,
+) {
+  const academicConfig = await db
+    .doc(`institutions/${institutionId}/configuracion/academica`)
+    .get();
+  const schoolYearId = String(academicConfig.data()?.schoolYearId ?? "");
+  const academicTasks = schoolYearId
+    ? await db
+        .collectionGroup("tareas")
+        .where("institutionId", "==", institutionId)
+        .where("schoolYearId", "==", schoolYearId)
+        .get()
+    : null;
+  const workshopTasks = await db
+    .collectionGroup("tasks")
+    .where("institutionId", "==", institutionId)
+    .get();
+  const tasks: SummaryTask[] = [];
+  academicTasks?.docs.forEach((snapshot) => {
+    const task = snapshot.data();
+    if (
+      ["published", "closed"].includes(String(task.status)) &&
+      dueOnBusinessDate(task.dueAt, businessDate, timeZone)
+    ) {
+      tasks.push({
+        kind: "academic",
+        reference: snapshot.ref,
+        targetGroup: String(task.targetGroup ?? ""),
+      });
+    }
+  });
+  workshopTasks.docs.forEach((snapshot) => {
+    const task = snapshot.data();
+    if (
+      snapshot.ref.path.includes("/workshops/") &&
+      ["published", "closed"].includes(String(task.status)) &&
+      dueOnBusinessDate(task.dueAt, businessDate, timeZone)
+    ) {
+      tasks.push({
+        kind: "workshop",
+        reference: snapshot.ref,
+        audienceStudentIds: notificationRecipients(task.audienceStudentIds),
+      });
+    }
+  });
+  return tasks;
+}
+
+async function loadSummaryStudents(
+  institutionId: string,
+  studentIds: string[],
+) {
+  if (!studentIds.length) return new Map<string, SummaryStudent>();
+  const snapshots = await db.getAll(
+    ...studentIds.map((studentId) => db.doc(`users/${studentId}`)),
+  );
+  return new Map(
+    snapshots
+      .filter((snapshot) => {
+        const student = snapshot.data();
+        return (
+          snapshot.exists &&
+          student?.institutionId === institutionId &&
+          student?.role === "student" &&
+          student?.active === true
+        );
+      })
+      .map((snapshot) => {
+        const student = snapshot.data() as DocumentData;
+        return [
+          snapshot.id,
+          {
+            uid: snapshot.id,
+            name: String(student.name ?? "Alumno"),
+            groupKey: `${String(student.grade ?? "")} ${String(student.group ?? "")}`.trim(),
+          } satisfies SummaryStudent,
+        ];
+      }),
+  );
+}
+
+async function buildStudentSummaries(
+  students: Map<string, SummaryStudent>,
+  tasks: SummaryTask[],
+) {
+  const summaries = new Map<string, DailyStudentSummary>();
+  const submissionChecks: Array<{
+    studentId: string;
+    reference: DocumentReference;
+  }> = [];
+  students.forEach((student) => {
+    const summary: DailyStudentSummary = {
+      studentId: student.uid,
+      firstName: firstName(student.name),
+      submitted: 0,
+      total: 0,
+      pending: 0,
+    };
+    tasks.forEach((task) => {
+      const assigned =
+        task.kind === "academic"
+          ? task.targetGroup === student.groupKey
+          : task.audienceStudentIds?.includes(student.uid) === true;
+      if (!assigned) return;
+      summary.total += 1;
+      submissionChecks.push({
+        studentId: student.uid,
+        reference:
+          task.kind === "academic"
+            ? task.reference.collection("entregas").doc(student.uid)
+            : task.reference.collection("submissions").doc(student.uid),
+      });
+    });
+    summaries.set(student.uid, summary);
+  });
+  for (let offset = 0; offset < submissionChecks.length; offset += 400) {
+    const checks = submissionChecks.slice(offset, offset + 400);
+    const snapshots = await db.getAll(...checks.map((check) => check.reference));
+    snapshots.forEach((snapshot, index) => {
+      const status = String(snapshot.data()?.status ?? "");
+      if (
+        snapshot.exists &&
+        ["submitted", "feedback", "reviewed"].includes(status)
+      ) {
+        const summary = summaries.get(checks[index].studentId);
+        if (summary) summary.submitted += 1;
+      }
+    });
+  }
+  summaries.forEach((summary) => {
+    summary.pending = Math.max(0, summary.total - summary.submitted);
+  });
+  return summaries;
+}
+
+async function createDailySummaryOutbox(
+  institutionId: string,
+  businessDate: string,
+  options: { contactId?: string; test?: boolean } = {},
+) {
+  const configuration = await readWhatsAppConfiguration(institutionId);
+  const contactsSnapshot = options.contactId
+    ? await db.getAll(db.doc(`guardianContacts/${options.contactId}`))
+    : (
+        await db
+          .collection("guardianContacts")
+          .where("institutionId", "==", institutionId)
+          .get()
+      ).docs;
+  const contacts = contactsSnapshot.filter((snapshot) => {
+    const contact = snapshot.data();
+    return (
+      snapshot.exists &&
+      contact?.institutionId === institutionId &&
+      contact?.status === "active" &&
+      contact?.consentStatus === "active" &&
+      Array.isArray(contact?.categories) &&
+      contact.categories.includes("daily_task_summary")
+    );
+  });
+  const studentIds = [
+    ...new Set(
+      contacts.flatMap((contact) => notificationRecipients(contact.data()?.studentIds)),
+    ),
+  ];
+  const students = await loadSummaryStudents(institutionId, studentIds);
+  const tasks = await loadSummaryTasks(
+    institutionId,
+    businessDate,
+    configuration.timeZone,
+  );
+  const summaries = await buildStudentSummaries(students, tasks);
+  let queued = 0;
+  let skipped = 0;
+  const outboxIds: string[] = [];
+  for (const contactSnapshot of contacts) {
+    const contact = contactSnapshot.data() as DocumentData;
+    const contactSummaries = notificationRecipients(contact.studentIds)
+      .map((studentId) => summaries.get(studentId))
+      .filter((summary): summary is DailyStudentSummary => Boolean(summary));
+    if (
+      !contactSummaries.length ||
+      (!configuration.sendOnNoTaskDays &&
+        contactSummaries.every((summary) => summary.total === 0) &&
+        options.test !== true)
+    ) {
+      skipped += 1;
+      continue;
+    }
+    const outboxId = options.test
+      ? `test_${Date.now()}_${contactSnapshot.id}`
+      : dailyOutboxId(businessDate, contactSnapshot.id);
+    const parameters = buildTemplateParameters(businessDate, contactSummaries);
+    const now = Timestamp.now();
+    try {
+      await db.doc(`messageOutbox/${outboxId}`).create({
+        institutionId,
+        guardianContactId: contactSnapshot.id,
+        recipientName: String(contact.name ?? "Familia CEHF"),
+        to: String(contact.phoneE164),
+        toMasked: String(contact.phoneMasked ?? maskPhone(String(contact.phoneE164))),
+        messageKind: options.test ? "daily_task_summary_test" : "daily_task_summary",
+        businessDate,
+        studentIds: contactSummaries.map((summary) => summary.studentId),
+        studentSummaries: contactSummaries,
+        templateName: configuration.templateName,
+        templateLanguage: configuration.templateLanguage,
+        templateParameters: parameters,
+        graphApiVersion: configuration.graphApiVersion,
+        status: "queued",
+        attemptCount: 0,
+        nextAttemptAt: now,
+        createdAt: now,
+        updatedAt: now,
+        test: options.test === true,
+      });
+      queued += 1;
+      outboxIds.push(outboxId);
+    } catch (error) {
+      const code =
+        typeof error === "object" && error && "code" in error
+          ? String(error.code)
+          : "";
+      if (!["6", "already-exists"].includes(code)) throw error;
+      skipped += 1;
+    }
+  }
+  return { queued, skipped, outboxIds, businessDate };
+}
+
+export const queueDailyWhatsAppSummaries = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const businessDate = input.businessDate
+    ? calendarDate(input.businessDate, "La fecha")
+    : localDateKey(new Date(), WHATSAPP_TIMEZONE);
+  const configuration = await readWhatsAppConfiguration(director.institutionId);
+  if (!configuration.enabled || !configuration.dailySummaryEnabled) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Activa los resúmenes diarios antes de encolarlos.",
+    );
+  }
+  const result = await createDailySummaryOutbox(
+    director.institutionId,
+    businessDate,
+  );
+  await db.collection("auditEvents").add({
+    institutionId: director.institutionId,
+    action: "whatsapp_daily_summary_queued_manually",
+    actorUid: director.uid,
+    actorName: director.name,
+    ...result,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return result;
+});
+
+export const enqueueDailyWhatsAppSummaries = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    timeZone: WHATSAPP_TIMEZONE,
+    retryCount: 3,
+  },
+  async () => {
+    const institutionId = "cehf-primaria";
+    const configuration = await readWhatsAppConfiguration(institutionId);
+    const now = new Date();
+    if (
+      !configuration.enabled ||
+      !configuration.dailySummaryEnabled ||
+      !shouldRunDailySummary(configuration.sendTime, now, configuration.timeZone)
+    ) {
+      return;
+    }
+    const result = await createDailySummaryOutbox(
+      institutionId,
+      localDateKey(now, configuration.timeZone),
+    );
+    logger.info("Daily WhatsApp summaries queued", result);
+  },
+);
+
+class WhatsAppSendError extends Error {
+  readonly httpStatus: number;
+  readonly providerCode: string;
+  readonly transient: boolean;
+
+  constructor(
+    message: string,
+    httpStatus: number,
+    providerCode = "",
+  ) {
+    super(message);
+    this.name = "WhatsAppSendError";
+    this.httpStatus = httpStatus;
+    this.providerCode = providerCode;
+    this.transient = isTransientWhatsAppError(httpStatus, providerCode);
+  }
+}
+
+function providerMessageKey(messageId: string) {
+  return Buffer.from(messageId).toString("base64url");
+}
+
+async function claimWhatsAppOutbox(reference: DocumentReference) {
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const data = snapshot.data();
+    if (
+      !snapshot.exists ||
+      data?.status !== "queued" ||
+      !(data.nextAttemptAt instanceof Timestamp) ||
+      data.nextAttemptAt.toMillis() > Date.now()
+    ) {
+      return null;
+    }
+    const attemptCount = Number(data.attemptCount ?? 0) + 1;
+    transaction.update(reference, {
+      status: "sending",
+      attemptCount,
+      sendingAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return { ...data, attemptCount } as DocumentData;
+  });
+}
+
+async function sendWhatsAppOutboxDocument(reference: DocumentReference) {
+  const message = await claimWhatsAppOutbox(reference);
+  if (!message) return { id: reference.id, status: "skipped" };
+  const token = whatsappAccessToken.value().trim();
+  const phoneNumberId = whatsappPhoneNumberId.value().trim();
+  try {
+    if (!token || !phoneNumberId) {
+      throw new WhatsAppSendError(
+        "Faltan las credenciales de WhatsApp en Secret Manager.",
+        400,
+        "configuration_missing",
+      );
+    }
+    const response = await fetch(
+      `https://graph.facebook.com/${String(message.graphApiVersion ?? "v23.0")}/${encodeURIComponent(phoneNumberId)}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: String(message.to ?? "").replace(/^\+/, ""),
+          type: "template",
+          template: {
+            name: String(message.templateName),
+            language: { code: String(message.templateLanguage) },
+            components: [
+              {
+                type: "body",
+                parameters: notificationRecipients(message.templateParameters).map(
+                  (parameter) => ({ type: "text", text: parameter }),
+                ),
+              },
+            ],
+          },
+        }),
+      },
+    );
+    const payload = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    if (!response.ok) {
+      const providerError =
+        payload.error && typeof payload.error === "object"
+          ? (payload.error as Record<string, unknown>)
+          : {};
+      throw new WhatsAppSendError(
+        String(providerError.message ?? "Meta rechazó el mensaje."),
+        response.status,
+        String(providerError.code ?? ""),
+      );
+    }
+    const providerMessageId = String(
+      Array.isArray(payload.messages)
+        ? (payload.messages[0] as Record<string, unknown> | undefined)?.id ?? ""
+        : "",
+    );
+    if (!providerMessageId) {
+      throw new WhatsAppSendError(
+        "Meta no devolvió un identificador de mensaje.",
+        502,
+      );
+    }
+    const now = FieldValue.serverTimestamp();
+    const batch = db.batch();
+    batch.update(reference, {
+      status: "sent",
+      providerMessageId,
+      sentAt: now,
+      updatedAt: now,
+      lastErrorCode: FieldValue.delete(),
+      lastErrorMessage: FieldValue.delete(),
+    });
+    batch.set(
+      db.doc(`whatsappProviderMessages/${providerMessageKey(providerMessageId)}`),
+      {
+        outboxId: reference.id,
+        providerMessageId,
+        institutionId: String(message.institutionId),
+        createdAt: now,
+      },
+    );
+    batch.set(
+      db.doc(
+        `institutions/${String(message.institutionId)}/configuracion/whatsapp`,
+      ),
+      { lastSuccessfulSendAt: now, lastSuccessfulOutboxId: reference.id },
+      { merge: true },
+    );
+    await batch.commit();
+    return { id: reference.id, status: "sent", providerMessageId };
+  } catch (error) {
+    const sendError =
+      error instanceof WhatsAppSendError
+        ? error
+        : new WhatsAppSendError(
+            error instanceof Error ? error.message : "No se pudo enviar el mensaje.",
+            500,
+          );
+    const attemptCount = Number(message.attemptCount ?? 1);
+    const retry = sendError.transient && attemptCount < 5;
+    await reference.update({
+      status: retry ? "queued" : "failed",
+      nextAttemptAt: retry
+        ? Timestamp.fromMillis(
+            Date.now() + retryDelayMinutes(attemptCount) * 60_000,
+          )
+        : FieldValue.delete(),
+      failedAt: retry ? FieldValue.delete() : FieldValue.serverTimestamp(),
+      lastErrorCode: sendError.providerCode || String(sendError.httpStatus),
+      lastErrorMessage: sendError.message.slice(0, 500),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    logger.error("WhatsApp message delivery failed", {
+      outboxId: reference.id,
+      attemptCount,
+      retry,
+      code: sendError.providerCode,
+      httpStatus: sendError.httpStatus,
+    });
+    return { id: reference.id, status: retry ? "queued" : "failed" };
+  }
+}
+
+async function processQueuedWhatsAppMessages(limit = 100) {
+  const snapshot = await db
+    .collection("messageOutbox")
+    .where("status", "==", "queued")
+    .where("nextAttemptAt", "<=", Timestamp.now())
+    .limit(limit)
+    .get();
+  const results = [];
+  for (let offset = 0; offset < snapshot.docs.length; offset += 10) {
+    results.push(
+      ...(await Promise.all(
+        snapshot.docs
+          .slice(offset, offset + 10)
+          .map((document) => sendWhatsAppOutboxDocument(document.ref)),
+      )),
+    );
+  }
+  return results;
+}
+
+export const processWhatsAppOutbox = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    timeZone: WHATSAPP_TIMEZONE,
+    retryCount: 0,
+    secrets: [whatsappAccessToken, whatsappPhoneNumberId],
+  },
+  async () => {
+    const results = await processQueuedWhatsAppMessages();
+    if (results.length) logger.info("WhatsApp outbox processed", { results });
+  },
+);
+
+export const sendWhatsAppTest = onCall(
+  { secrets: [whatsappAccessToken, whatsappPhoneNumberId] },
+  async (request) => {
+    const director = await requireAccountDirector(request.auth);
+    const input = (request.data ?? {}) as Record<string, unknown>;
+    const contactId = whatsappContactId(input.contactId);
+    const result = await createDailySummaryOutbox(
+      director.institutionId,
+      localDateKey(new Date(), WHATSAPP_TIMEZONE),
+      { contactId, test: true },
+    );
+    const outboxId = result.outboxIds[0];
+    if (!outboxId) {
+      throw new HttpsError(
+        "failed-precondition",
+        "El contacto no está activo o no tiene consentimiento vigente.",
+      );
+    }
+    const delivery = await sendWhatsAppOutboxDocument(
+      db.doc(`messageOutbox/${outboxId}`),
+    );
+    await db.collection("auditEvents").add({
+      institutionId: director.institutionId,
+      action: "whatsapp_test_sent",
+      actorUid: director.uid,
+      actorName: director.name,
+      contactId,
+      outboxId,
+      deliveryStatus: delivery.status,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return { outboxId, status: delivery.status };
+  },
+);
+
+function verifyWhatsAppSignature(rawBody: Buffer, signature: string) {
+  const secret = whatsappAppSecret.value();
+  if (!secret || !signature.startsWith("sha256=")) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+  const receivedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  return (
+    receivedBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(receivedBuffer, expectedBuffer)
+  );
+}
+
+async function applyWhatsAppDeliveryStatus(status: Record<string, unknown>) {
+  const providerMessageId = String(status.id ?? "");
+  const nextStatus = String(status.status ?? "");
+  if (
+    !providerMessageId ||
+    !["sent", "delivered", "read", "failed"].includes(nextStatus)
+  ) {
+    return;
+  }
+  const mapping = await db
+    .doc(`whatsappProviderMessages/${providerMessageKey(providerMessageId)}`)
+    .get();
+  const outboxId = String(mapping.data()?.outboxId ?? "");
+  if (!outboxId) return;
+  const reference = db.doc(`messageOutbox/${outboxId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists) return;
+    const currentStatus = String(snapshot.data()?.status ?? "");
+    const rank: Record<string, number> = {
+      queued: 0,
+      sending: 1,
+      sent: 2,
+      delivered: 3,
+      read: 4,
+      failed: 4,
+    };
+    if ((rank[nextStatus] ?? 0) < (rank[currentStatus] ?? 0)) return;
+    const providerErrors = Array.isArray(status.errors)
+      ? (status.errors as Array<Record<string, unknown>>)
+      : [];
+    const firstError = providerErrors[0];
+    transaction.update(reference, {
+      status: nextStatus,
+      [`${nextStatus}At`]: FieldValue.serverTimestamp(),
+      providerTimestamp: String(status.timestamp ?? ""),
+      ...(nextStatus === "failed"
+        ? {
+            lastErrorCode: String(firstError?.code ?? "provider_failed"),
+            lastErrorMessage: String(
+              firstError?.title ?? firstError?.message ?? "Meta reportó un fallo.",
+            ).slice(0, 500),
+          }
+        : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+function inboundMessageText(message: Record<string, unknown>) {
+  if (message.type === "text" && message.text && typeof message.text === "object") {
+    return String((message.text as Record<string, unknown>).body ?? "");
+  }
+  if (
+    message.type === "button" &&
+    message.button &&
+    typeof message.button === "object"
+  ) {
+    return String((message.button as Record<string, unknown>).text ?? "");
+  }
+  if (
+    message.type === "interactive" &&
+    message.interactive &&
+    typeof message.interactive === "object"
+  ) {
+    const interactive = message.interactive as Record<string, unknown>;
+    const reply =
+      (interactive.button_reply as Record<string, unknown> | undefined) ??
+      (interactive.list_reply as Record<string, unknown> | undefined);
+    return String(reply?.id ?? reply?.title ?? "");
+  }
+  return "";
+}
+
+async function applyWhatsAppOptOut(message: Record<string, unknown>) {
+  const messageId = String(message.id ?? "");
+  const from = String(message.from ?? "").replace(/\D/g, "");
+  if (!messageId || !from || !isOptOutMessage(inboundMessageText(message))) return;
+  const eventReference = db.doc(
+    `whatsappWebhookEvents/${providerMessageKey(messageId)}`,
+  );
+  const created = await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(eventReference);
+    if (existing.exists) return false;
+    transaction.create(eventReference, {
+      type: "opt_out",
+      providerMessageId: messageId,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+  if (!created) return;
+  const contacts = await db
+    .collection("guardianContacts")
+    .where("phoneE164", "==", `+${from}`)
+    .get();
+  if (contacts.empty) return;
+  const now = FieldValue.serverTimestamp();
+  const batch = db.batch();
+  contacts.docs.forEach((contact) => {
+    batch.update(contact.ref, {
+      status: "opted_out",
+      consentStatus: "withdrawn",
+      optedOutAt: now,
+      optOutSource: "whatsapp",
+      updatedAt: now,
+    });
+    batch.set(db.collection("auditEvents").doc(), {
+      institutionId: String(contact.data().institutionId ?? ""),
+      action: "guardian_contact_opted_out",
+      contactId: contact.id,
+      source: "whatsapp",
+      createdAt: now,
+    });
+  });
+  await batch.commit();
+}
+
+function whatsappWebhookValues(body: unknown) {
+  if (!body || typeof body !== "object") return [];
+  const entries = Array.isArray((body as Record<string, unknown>).entry)
+    ? ((body as Record<string, unknown>).entry as Array<Record<string, unknown>>)
+    : [];
+  return entries.flatMap((entry) => {
+    const changes = Array.isArray(entry.changes)
+      ? (entry.changes as Array<Record<string, unknown>>)
+      : [];
+    return changes
+      .map((change) => change.value)
+      .filter(
+        (value): value is Record<string, unknown> =>
+          Boolean(value) && typeof value === "object",
+      );
+  });
+}
+
+export const whatsappWebhook = onRequest(
+  { secrets: [whatsappWebhookVerifyToken, whatsappAppSecret] },
+  async (request, response) => {
+    if (request.method === "GET") {
+      const mode = String(request.query["hub.mode"] ?? "");
+      const token = String(request.query["hub.verify_token"] ?? "");
+      const challenge = String(request.query["hub.challenge"] ?? "");
+      if (
+        mode === "subscribe" &&
+        token &&
+        token === whatsappWebhookVerifyToken.value()
+      ) {
+        response.status(200).send(challenge);
+        return;
+      }
+      response.status(403).send("Verification failed");
+      return;
+    }
+    if (request.method !== "POST") {
+      response.status(405).send("Method not allowed");
+      return;
+    }
+    const signature = String(request.header("x-hub-signature-256") ?? "");
+    if (!request.rawBody || !verifyWhatsAppSignature(request.rawBody, signature)) {
+      response.status(401).send("Invalid signature");
+      return;
+    }
+    try {
+      const values = whatsappWebhookValues(request.body);
+      await Promise.all(
+        values.flatMap((value) => {
+          const statuses = Array.isArray(value.statuses)
+            ? (value.statuses as Array<Record<string, unknown>>)
+            : [];
+          const messages = Array.isArray(value.messages)
+            ? (value.messages as Array<Record<string, unknown>>)
+            : [];
+          return [
+            ...statuses.map(applyWhatsAppDeliveryStatus),
+            ...messages.map(applyWhatsAppOptOut),
+          ];
+        }),
+      );
+      response.status(200).send("EVENT_RECEIVED");
+    } catch (error) {
+      logger.error("WhatsApp webhook processing failed", error);
+      response.status(500).send("Webhook processing failed");
+    }
   },
 );
 

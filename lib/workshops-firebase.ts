@@ -47,7 +47,7 @@ export const workshopDefinitions: Array<{
     title: "TICS",
     shortTitle: "Tecnologías de la información",
     description:
-      "Explora programación, ciudadanía digital y herramientas para crear soluciones.",
+      "Explora nuevas herramientas digitales y aprende a usarlas de manera responsable y creativa.",
   },
   {
     id: "club-lectura",
@@ -56,81 +56,6 @@ export const workshopDefinitions: Array<{
     shortTitle: "Historias para compartir",
     description:
       "Una biblioteca viva para leer, conversar y descubrir nuevos mundos.",
-  },
-];
-
-const demoResourceDate = "2026-08-18T15:00:00.000Z";
-
-export const demoWorkshops: Workshop[] = [
-  {
-    ...workshopDefinitions[0],
-    institutionId: "cehf-primaria",
-    studentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
-    teacherIds: ["demo-teacher", "demo-teacher-mariana"],
-    managerIds: ["demo-teacher", "demo-teacher-mariana"],
-    teacherStudentIds: {
-      "demo-teacher": ["demo-student", "demo-student-sofia", "demo-student-diego"],
-      "demo-teacher-mariana": ["demo-student-sofia", "demo-student-diego"],
-    },
-    memberIds: [
-      "demo-student",
-      "demo-student-sofia",
-      "demo-student-diego",
-      "demo-teacher",
-      "demo-teacher-mariana",
-    ],
-    resources: [
-      {
-        id: "demo-tics-resource",
-        workshopId: "tics",
-        institutionId: "cehf-primaria",
-        title: "Reto: mi primera animación",
-        description: "Guía paso a paso para crear una historia interactiva.",
-        fileName: "reto-animacion.pdf",
-        storagePath: "",
-        contentType: "application/pdf",
-        size: 1_420_000,
-        uploadedBy: "demo-teacher",
-        uploadedByName: "Mariana López",
-        createdAt: demoResourceDate,
-      },
-    ],
-    updatedAt: demoResourceDate,
-  },
-  {
-    ...workshopDefinitions[1],
-    institutionId: "cehf-primaria",
-    studentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
-    teacherIds: ["demo-teacher", "demo-teacher-mariana"],
-    managerIds: ["demo-teacher", "demo-teacher-mariana"],
-    teacherStudentIds: {
-      "demo-teacher": ["demo-student", "demo-student-sofia", "demo-student-diego"],
-      "demo-teacher-mariana": ["demo-student-sofia", "demo-student-diego"],
-    },
-    memberIds: [
-      "demo-student",
-      "demo-student-sofia",
-      "demo-student-diego",
-      "demo-teacher",
-      "demo-teacher-mariana",
-    ],
-    resources: [
-      {
-        id: "demo-reading-resource",
-        workshopId: "club-lectura",
-        institutionId: "cehf-primaria",
-        title: "Bitácora de lector",
-        description: "Preguntas para guardar frases, personajes y nuevas ideas.",
-        fileName: "bitacora-de-lector.pdf",
-        storagePath: "",
-        contentType: "application/pdf",
-        size: 860_000,
-        uploadedBy: "demo-teacher",
-        uploadedByName: "Mariana López",
-        createdAt: demoResourceDate,
-      },
-    ],
-    updatedAt: demoResourceDate,
   },
 ];
 
@@ -447,41 +372,6 @@ export type WorkshopTaskCreateInput = {
   audienceStudentIds: string[];
   files: File[];
 };
-
-export const demoWorkshopTasks: WorkshopTask[] = [
-  {
-    id: "demo-task-tics",
-    workshopId: "tics",
-    institutionId: "cehf-primaria",
-    title: "Diseña una animación interactiva",
-    description:
-      "Crea una escena con al menos dos personajes, movimiento y un mensaje sobre ciudadanía digital.",
-    dueAt: "2026-08-28T23:00:00.000Z",
-    status: "published",
-    audienceStudentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
-    attachments: [],
-    createdBy: "demo-teacher",
-    teacherName: "Mariana López",
-    createdAt: "2026-08-19T15:00:00.000Z",
-    updatedAt: "2026-08-19T15:00:00.000Z",
-  },
-  {
-    id: "demo-task-reading",
-    workshopId: "club-lectura",
-    institutionId: "cehf-primaria",
-    title: "Carta a un personaje",
-    description:
-      "Escribe una carta breve a tu personaje favorito y cuéntale qué decisión suya te hizo pensar.",
-    dueAt: "2026-08-30T20:00:00.000Z",
-    status: "published",
-    audienceStudentIds: ["demo-student", "demo-student-sofia", "demo-student-diego"],
-    attachments: [],
-    createdBy: "demo-teacher",
-    teacherName: "Mariana López",
-    createdAt: "2026-08-19T15:30:00.000Z",
-    updatedAt: "2026-08-19T15:30:00.000Z",
-  },
-];
 
 function attachmentFromData(value: unknown): WorkshopTaskAttachment | null {
   if (!value || typeof value !== "object") return null;

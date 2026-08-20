@@ -47,6 +47,7 @@ import {
 import { createDemoState } from "./demo-data";
 import type {
   ManagedAccount,
+  PortalSettings,
   PortalState,
   Role,
   SchoolLevel,
@@ -98,6 +99,7 @@ export type ManagedAccountInput = {
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
+  guardianWhatsApp?: string;
   subjects: string[];
   teacherIds: string[];
   photo: File;
@@ -112,6 +114,7 @@ export type ManagedAccountUpdateInput = {
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
+  guardianWhatsApp?: string;
   subjects: string[];
   teacherIds: string[];
   photo?: File;
@@ -217,6 +220,18 @@ function accountDate(value: unknown) {
   return typeof value === "string" ? value : new Date().toISOString();
 }
 
+export function normalizeGuardianWhatsApp(value: string) {
+  let digits = value.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length === 10) digits = `52${digits}`;
+  if (digits.startsWith("521") && digits.length === 13) {
+    digits = `52${digits.slice(3)}`;
+  }
+  return digits.startsWith("52") && digits.length === 12
+    ? `+${digits}`
+    : "";
+}
+
 export async function listManagedAccounts(
   institutionId: string,
   callerRole: Role = "director",
@@ -253,6 +268,10 @@ export async function listManagedAccounts(
       schoolLevel: role === "student" ? readSchoolLevel(data.schoolLevel) : undefined,
       grade: data.grade ? String(data.grade) : undefined,
       group: data.group ? String(data.group) : undefined,
+      guardianWhatsApp:
+        role === "student" && data.guardianWhatsApp
+          ? String(data.guardianWhatsApp)
+          : undefined,
       subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
       teacherIds: Array.isArray(data.teacherIds)
         ? data.teacherIds.map(String)
@@ -293,6 +312,10 @@ export async function createManagedAccount(
       : undefined;
   const grade = input.grade?.trim();
   const group = input.group?.trim();
+  const guardianWhatsApp =
+    input.role === "student"
+      ? normalizeGuardianWhatsApp(input.guardianWhatsApp ?? "")
+      : undefined;
   if (
     input.role === "student" &&
     (!schoolLevel || !grade || !gradesBySchoolLevel[schoolLevel].includes(grade))
@@ -303,6 +326,11 @@ export async function createManagedAccount(
   }
   if (input.role === "student" && (!group || !["A", "B", "C"].includes(group))) {
     throw accountValidationError("Selecciona el grupo del alumno.");
+  }
+  if (input.role === "student" && !guardianWhatsApp) {
+    throw accountValidationError(
+      "Escribe un número de WhatsApp válido del padre o tutor, con 10 dígitos de México.",
+    );
   }
   if (input.subjects.length === 0) {
     throw accountValidationError("Selecciona al menos una materia.");
@@ -357,6 +385,7 @@ export async function createManagedAccount(
       schoolLevel,
       grade: input.role === "student" ? grade : undefined,
       group: input.role === "student" ? group : undefined,
+      guardianWhatsApp,
       subjects: input.subjects,
       teacherIds: input.role === "student" ? input.teacherIds : [],
       photoURL,
@@ -380,7 +409,7 @@ export async function createManagedAccount(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       ...(input.role === "student"
-        ? { schoolLevel, grade, group }
+        ? { schoolLevel, grade, group, guardianWhatsApp }
         : {}),
     });
     return { account, password };
@@ -450,6 +479,7 @@ export async function updateManagedAccount(
             schoolLevel: input.schoolLevel,
             grade: input.grade,
             group: input.group,
+            guardianWhatsApp: input.guardianWhatsApp,
           }
         : {}),
       ...(photoURL ? { photoURL } : {}),
@@ -560,6 +590,76 @@ const sharedStateRef = (institutionId: string) =>
   db ? doc(db, "institutions", institutionId, "portal", "shared") : null;
 const privateStateRef = (uid: string) =>
   db ? doc(db, "users", uid, "privateState", "portal") : null;
+const appearancePreferencesRef = (uid: string) =>
+  db ? doc(db, "users", uid, "preferences", "appearance") : null;
+
+function portalSettingsFromData(
+  value: Record<string, unknown> | undefined,
+  fallback: PortalSettings,
+): PortalSettings {
+  const theme = value?.theme;
+  return {
+    theme:
+      theme === "light" || theme === "dark" || theme === "system"
+        ? theme
+        : fallback.theme,
+    reducedMotion:
+      typeof value?.reducedMotion === "boolean"
+        ? value.reducedMotion
+        : fallback.reducedMotion,
+    whatsappEnabled:
+      typeof value?.whatsappEnabled === "boolean"
+        ? value.whatsappEnabled
+        : fallback.whatsappEnabled,
+    quietHours:
+      typeof value?.quietHours === "string"
+        ? value.quietHours
+        : fallback.quietHours,
+  };
+}
+
+async function withPortalPreferences(
+  state: PortalState,
+  profile: UserProfile,
+): Promise<PortalState> {
+  const normalizedState = {
+    ...state,
+    settings: portalSettingsFromData(
+      state.settings as unknown as Record<string, unknown>,
+      createDemoState().settings,
+    ),
+  };
+  const preferenceRef = appearancePreferencesRef(profile.uid);
+  if (!preferenceRef) return normalizedState;
+  const snapshot = await getDoc(preferenceRef);
+  return snapshot.exists()
+    ? {
+        ...normalizedState,
+        settings: portalSettingsFromData(
+          snapshot.data(),
+          normalizedState.settings,
+        ),
+      }
+    : normalizedState;
+}
+
+function withoutUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(withoutUndefined) as T;
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .map(([key, entry]) => [key, withoutUndefined(entry)]),
+    ) as T;
+  }
+  return value;
+}
 
 export async function loadPortalState(
   profile: UserProfile,
@@ -582,21 +682,23 @@ export async function loadPortalState(
     if (privateRef) {
       const privateSnapshot = await getDoc(privateRef);
       if (privateSnapshot.exists()) {
-        return {
+        return withPortalPreferences({
           ...sharedState,
           ...privateSnapshot.data(),
           // El versículo es institucional: siempre prevalece la versión del
           // estado compartido sobre cualquier copia privada del usuario.
           weeklyVerse: sharedState.weeklyVerse,
-        } as PortalState;
+        } as PortalState, profile);
       }
     }
-    return sharedState;
+    return withPortalPreferences(sharedState, profile);
   }
 
-  if (sharedSnapshot.exists()) return sharedState;
+  if (sharedSnapshot.exists()) {
+    return withPortalPreferences(sharedState, profile);
+  }
   if (profile.role === "director") await savePortalState(initial, profile);
-  return initial;
+  return withPortalPreferences(initial, profile);
 }
 
 export async function savePortalState(
@@ -609,12 +711,29 @@ export async function savePortalState(
       ? sharedStateRef(profile.institutionId)
       : privateStateRef(profile.uid);
   if (!target) return;
-  await setDoc(target, {
+  await setDoc(target, withoutUndefined({
     ...state,
     institutionId: profile.institutionId,
     updatedAt: new Date().toISOString(),
     updatedBy: profile.uid,
-  });
+  }));
+}
+
+export async function savePortalSettings(
+  settings: PortalSettings,
+  profile: UserProfile,
+) {
+  const target = appearancePreferencesRef(profile.uid);
+  if (!db || !target) return;
+  await setDoc(
+    target,
+    {
+      ...portalSettingsFromData(settings as unknown as Record<string, unknown>, settings),
+      institutionId: profile.institutionId,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
 
 export function friendlyFirebaseError(error: unknown) {
@@ -633,7 +752,7 @@ export function friendlyFirebaseError(error: unknown) {
     "auth/network-request-failed":
       "No pudimos conectar con Firebase. Revisa la red e intenta nuevamente.",
     "storage/unauthorized":
-      "Firebase Storage rechazó la fotografía. Publica las reglas incluidas en el proyecto.",
+      "Firebase Storage no autorizó el archivo. Actualiza tu sesión o verifica con Dirección que tengas acceso a este espacio.",
     "storage/object-not-found":
       "La fotografía ya no está disponible en Storage. Selecciónala nuevamente.",
     "functions/unauthenticated":
@@ -653,7 +772,7 @@ export function friendlyFirebaseError(error: unknown) {
     "invalid-argument":
       "Firebase recibió datos inválidos. Revisa los campos del formulario.",
     "permission-denied":
-      "Firebase rechazó la operación. Revisa que hayas publicado las reglas incluidas.",
+      "Firebase no autorizó esta operación. Actualiza tu sesión o verifica con Dirección que tu cuenta tenga el acceso necesario.",
   };
   if (error instanceof ManagedAccountCreationError) {
     if (error.userMessage) return error.userMessage;

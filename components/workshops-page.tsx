@@ -36,11 +36,11 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { WorkshopTasks } from "@/components/workshop-tasks";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   deleteWorkshopResource,
-  demoWorkshops,
   ensureDefaultWorkshops,
   getWorkshopResourceUrl,
   updateWorkshopAccess,
@@ -111,9 +111,7 @@ export function WorkshopsPage({
   managedAccounts,
   firebaseReady,
 }: WorkshopsPageProps) {
-  const [baseWorkshops, setBaseWorkshops] = useState<Workshop[]>(() =>
-    firebaseReady ? [] : demoWorkshops,
-  );
+  const [baseWorkshops, setBaseWorkshops] = useState<Workshop[]>([]);
   const [resourcesByWorkshop, setResourcesByWorkshop] = useState<
     Record<string, WorkshopResource[]>
   >({});
@@ -121,7 +119,11 @@ export function WorkshopsPage({
   const [loading, setLoading] = useState(firebaseReady);
   const [accessWorkshop, setAccessWorkshop] = useState<Workshop | null>(null);
   const [uploadWorkshop, setUploadWorkshop] = useState<Workshop | null>(null);
+  const [previewResource, setPreviewResource] = useState<WorkshopResource | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
   const initializedRef = useRef(false);
+  const previewRequest = useRef(0);
 
   const workshops = useMemo(
     () =>
@@ -141,26 +143,10 @@ export function WorkshopsPage({
 
   useEffect(() => {
     if (!firebaseReady) {
-      const saved = window.localStorage.getItem("cehf-demo-workshops");
-      if (saved) {
-        try {
-          const restored = JSON.parse(saved) as Workshop[];
-          if (Array.isArray(restored)) {
-            const migrated = restored.map((workshop) => ({
-              ...workshop,
-              teacherStudentIds:
-                workshop.teacherStudentIds ??
-                demoWorkshops.find((item) => item.id === workshop.id)
-                  ?.teacherStudentIds ??
-                {},
-            }));
-            queueMicrotask(() => setBaseWorkshops(migrated));
-          }
-        } catch {
-          window.localStorage.removeItem("cehf-demo-workshops");
-        }
-      }
-      queueMicrotask(() => setLoading(false));
+      queueMicrotask(() => {
+        setBaseWorkshops([]);
+        setLoading(false);
+      });
       return;
     }
 
@@ -224,95 +210,58 @@ export function WorkshopsPage({
   }
 
   function closeWorkshop() {
+    previewRequest.current += 1;
+    setPreviewResource(null);
     window.history.pushState({}, "", "/workshops");
     setSelectedId(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function saveAccess(workshop: Workshop, access: WorkshopAccessInput) {
-    if (firebaseReady) {
-      await updateWorkshopAccess(workshop, access, profile);
-    } else {
-      setBaseWorkshops((current) => {
-        const next = current.map((item) =>
-          item.id === workshop.id
-            ? {
-                ...item,
-                ...access,
-                memberIds: [...new Set([...access.studentIds, ...access.teacherIds])],
-                updatedAt: new Date().toISOString(),
-              }
-            : item,
-        );
-        window.localStorage.setItem("cehf-demo-workshops", JSON.stringify(next));
-        return next;
-      });
-    }
+    if (!firebaseReady) throw new Error("Inicia sesión para administrar Talleres.");
+    await updateWorkshopAccess(workshop, access, profile);
   }
 
   async function uploadResource(
     workshop: Workshop,
     input: { title: string; description: string; file: File },
   ) {
-    if (firebaseReady) {
-      await uploadWorkshopResource(workshop, profile, input);
-      return;
-    }
-    const resource: WorkshopResource = {
-      id: `demo-${Date.now()}`,
-      workshopId: workshop.id,
-      institutionId: profile.institutionId,
-      title: input.title,
-      description: input.description,
-      fileName: input.file.name,
-      storagePath: "",
-      contentType: input.file.type || "application/octet-stream",
-      size: input.file.size,
-      uploadedBy: profile.uid,
-      uploadedByName: profile.name,
-      createdAt: new Date().toISOString(),
-    };
-    setBaseWorkshops((current) => {
-      const next = current.map((item) =>
-        item.id === workshop.id
-          ? { ...item, resources: [resource, ...item.resources] }
-          : item,
-      );
-      window.localStorage.setItem("cehf-demo-workshops", JSON.stringify(next));
-      return next;
-    });
+    if (!firebaseReady) throw new Error("Inicia sesión para subir recursos.");
+    await uploadWorkshopResource(workshop, profile, input);
   }
 
   async function removeResource(resource: WorkshopResource) {
-    if (firebaseReady) {
-      await deleteWorkshopResource(resource);
-      return;
-    }
-    setBaseWorkshops((current) => {
-      const next = current.map((item) =>
-        item.id === resource.workshopId
-          ? {
-              ...item,
-              resources: item.resources.filter((entry) => entry.id !== resource.id),
-            }
-          : item,
-      );
-      window.localStorage.setItem("cehf-demo-workshops", JSON.stringify(next));
-      return next;
-    });
+    if (!firebaseReady) throw new Error("Inicia sesión para eliminar recursos.");
+    await deleteWorkshopResource(resource);
   }
 
   async function openResource(resource: WorkshopResource) {
     if (!firebaseReady) {
-      toast.info("En Firebase, este botón abrirá el archivo guardado en Storage.");
+      toast.error("Inicia sesión para abrir este recurso.");
       return;
     }
+    const requestId = ++previewRequest.current;
+    setPreviewResource(resource);
+    setPreviewUrl("");
+    setPreviewLoading(true);
     try {
       const url = await getWorkshopResourceUrl(resource);
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (previewRequest.current === requestId) setPreviewUrl(url);
     } catch (error) {
-      toast.error(errorMessage(error));
+      if (previewRequest.current === requestId) {
+        setPreviewResource(null);
+        toast.error(errorMessage(error));
+      }
+    } finally {
+      if (previewRequest.current === requestId) setPreviewLoading(false);
     }
+  }
+
+  function closeResourcePreview() {
+    previewRequest.current += 1;
+    setPreviewResource(null);
+    setPreviewUrl("");
+    setPreviewLoading(false);
   }
 
   if (loading) {
@@ -322,6 +271,19 @@ export function WorkshopsPage({
         <strong>Abriendo los talleres…</strong>
         <span>Estamos preparando los espacios y sus recursos.</span>
       </div>
+    );
+  }
+
+  if (!firebaseReady) {
+    return (
+      <section className="workshops-empty workshops-firebase-required">
+        <span><LockKeyhole size={27} /></span>
+        <h2>Talleres necesita una sesión de Firebase</h2>
+        <p>
+          Los accesos, recursos, trabajos y entregas de esta sección sólo se
+          muestran desde la base de datos institucional.
+        </p>
+      </section>
     );
   }
 
@@ -361,6 +323,18 @@ export function WorkshopsPage({
             />
           )}
         </AnimatePresence>
+        {previewResource && (
+          <WorkshopFileViewer
+            file={{
+              name: previewResource.fileName,
+              size: previewResource.size,
+              contentType: previewResource.contentType,
+            }}
+            url={previewUrl}
+            loading={previewLoading}
+            onClose={closeResourcePreview}
+          />
+        )}
       </>
     );
   }
@@ -540,6 +514,26 @@ function WorkshopDetail({
       .includes(query.trim().toLocaleLowerCase("es-MX")),
   );
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        !document.querySelector(
+          ".workshop-modal-backdrop, .workshop-attachment-viewer-backdrop",
+        )
+      ) {
+        onBack();
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onBack]);
+
   async function remove(resource: WorkshopResource) {
     if (!window.confirm(`¿Eliminar “${resource.title}”?`)) return;
     setDeletingId(resource.id);
@@ -554,12 +548,74 @@ function WorkshopDetail({
   }
 
   return (
-    <div className={`workshop-detail is-${workshop.kind}`}>
-      <button className="workshop-back" onClick={onBack}>
-        <ArrowLeft size={17} /> Todos los talleres
-      </button>
+    <motion.section
+      className={`workshop-immersive-shell is-${workshop.kind}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${workshop.title}, vista inmersiva`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.28 }}
+    >
+      <div className="workshop-immersive-grain" aria-hidden="true" />
+      <div className="workshop-immersive-art" aria-hidden="true">
+        {reading ? (
+          <>
+            <span className="immersive-library-window"><i /><b /></span>
+            <span className="immersive-library-lamp lamp-left"><i /></span>
+            <span className="immersive-library-lamp lamp-right"><i /></span>
+            <span className="immersive-library-shelf shelf-left">
+              <i /><i /><i /><i /><i /><i /><i />
+            </span>
+            <span className="immersive-library-shelf shelf-right">
+              <i /><i /><i /><i /><i /><i />
+            </span>
+            <span className="immersive-floating-book book-left"><BookOpen size={42} /></span>
+            <span className="immersive-floating-book book-right"><BookMarked size={35} /></span>
+            <span className="immersive-reading-table"><i /><b /></span>
+          </>
+        ) : (
+          <>
+            <span className="immersive-tech-horizon" />
+            <span className="immersive-tech-orbit orbit-large" />
+            <span className="immersive-tech-orbit orbit-small" />
+            <span className="immersive-tech-server">
+              <i /><i /><i /><i />
+            </span>
+            <span className="immersive-tech-console">
+              <code>workshop.init()</code><i /><i /><i />
+            </span>
+            <span className="immersive-tech-node tech-node-a" />
+            <span className="immersive-tech-node tech-node-b" />
+            <span className="immersive-tech-node tech-node-c" />
+            <Bot className="immersive-tech-bot" size={76} />
+          </>
+        )}
+      </div>
 
-      <section className="workshop-detail-hero">
+      <header className="workshop-immersive-header">
+        <div className="workshop-immersive-identity">
+          <span className="workshop-immersive-mark">
+            {reading ? <LibraryBig size={19} /> : <Code2 size={19} />}
+          </span>
+          <span className="workshop-immersive-divider" />
+          <div>
+            <strong>{workshop.title}</strong>
+            <small>{reading ? "Biblioteca creativa" : "Laboratorio digital"} · Campus CEHF</small>
+          </div>
+        </div>
+        <div className="workshop-immersive-status">
+          <span><i /> Espacio del taller</span>
+          <button type="button" autoFocus onClick={onBack} aria-label="Volver a todos los talleres">
+            <ArrowLeft size={17} /><span>Todos los talleres</span><X size={18} />
+          </button>
+        </div>
+      </header>
+
+      <div className="workshop-immersive-scroll">
+        <div className={`workshop-detail is-${workshop.kind}`}>
+          <section className="workshop-detail-hero">
         <div className="workshop-hero-pattern" aria-hidden="true">
           {reading ? (
             <>
@@ -603,19 +659,19 @@ function WorkshopDetail({
             </button>
           )}
         </div>
-      </section>
+          </section>
 
-      {canManage && (
-        <aside className="workshop-manager-note">
-          <ShieldCheck size={20} />
-          <span>
-            <strong>Estás administrando este taller</strong>
-            Puedes compartir recursos, publicar trabajos y retroalimentar a tu grupo. Sólo Dirección cambia tus alumnos.
-          </span>
-        </aside>
-      )}
+          {canManage && (
+            <aside className="workshop-manager-note">
+              <ShieldCheck size={20} />
+              <span>
+                <strong>Estás administrando este taller</strong>
+                Puedes compartir recursos, publicar trabajos y retroalimentar a tu grupo.
+              </span>
+            </aside>
+          )}
 
-      <section className="workshop-resource-section">
+          <section className="workshop-resource-section">
         <div className="workshop-resource-heading">
           <div>
             <span className="eyebrow">Estantería del taller</span>
@@ -693,16 +749,23 @@ function WorkshopDetail({
             )}
           </div>
         )}
-      </section>
+          </section>
 
-      <WorkshopTasks
-        workshop={workshop}
-        profile={profile}
-        role={role}
-        accounts={managedAccounts}
-        firebaseReady={firebaseReady}
-      />
-    </div>
+          <WorkshopTasks
+            workshop={workshop}
+            profile={profile}
+            role={role}
+            accounts={managedAccounts}
+            firebaseReady={firebaseReady}
+          />
+          <footer className="workshop-immersive-footer">
+            <span>{reading ? <BookOpen size={16} /> : <Wifi size={16} />}</span>
+            <p>{reading ? "Cada libro abre una conversación." : "Imagina, crea, prueba y comparte."}</p>
+            <button type="button" onClick={onBack}>Volver a talleres <ArrowRight size={15} /></button>
+          </footer>
+        </div>
+      </div>
+    </motion.section>
   );
 }
 

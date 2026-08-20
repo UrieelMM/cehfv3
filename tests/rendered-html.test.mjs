@@ -76,6 +76,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     workshopFirebaseSource,
     workshopCss,
     workshopTaskUiSource,
+    workshopFileViewerSource,
   ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
@@ -95,6 +96,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("lib/workshops-firebase.ts", projectRoot), "utf8"),
       readFile(new URL("app/workshops.css", projectRoot), "utf8"),
       readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/workshop-file-viewer.tsx", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -225,11 +227,22 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /setCustomUserClaims/);
   assert.match(functionsSource, /claimsChanged: changed/);
   assert.match(functionsSource, /Cada semana sólo puede pertenecer a un trimestre/);
+  assert.match(appSource, /WhatsApp del padre o tutor/);
+  assert.match(firebaseSource, /normalizeGuardianWhatsApp/);
+  assert.match(firebaseSource, /savePortalSettings/);
+  assert.match(usersSource, /guardianWhatsApp/);
+  assert.match(functionsSource, /guardianWhatsApp/);
+  assert.match(functionsSource, /export const listStudentMaterials/);
+  assert.match(firestoreRules, /function canReadMaterial\(data\)/);
+  assert.match(firestoreRules, /request\.auth\.uid in data\.audienceStudentIds/);
   assert.match(taskCss, /task-modern-grid/);
   assert.match(appSource, /workshops: "\/workshops"/);
   assert.match(workshopSource, /Club de lectura/);
   assert.match(workshopSource, /Administrar acceso/);
   assert.match(workshopSource, /Subir recurso/);
+  assert.match(workshopSource, /workshop-immersive-shell/);
+  assert.match(workshopSource, /Biblioteca creativa/);
+  assert.match(workshopSource, /Laboratorio digital/);
   assert.match(workshopFirebaseSource, /ensureDefaultWorkshops/);
   assert.match(workshopFirebaseSource, /uploadWorkshopResource/);
   assert.match(workshopFirebaseSource, /watchWorkshopResources/);
@@ -237,9 +250,18 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(workshopFirebaseSource, /createWorkshopTask/);
   assert.match(workshopFirebaseSource, /submitWorkshopTask/);
   assert.match(workshopFirebaseSource, /saveWorkshopFeedback/);
+  assert.doesNotMatch(workshopFirebaseSource, /demoWorkshops|demoWorkshopTasks/);
+  assert.doesNotMatch(workshopSource, /cehf-demo-workshops/);
+  assert.doesNotMatch(workshopTaskUiSource, /demoSubmissions/);
   assert.match(workshopTaskUiSource, /Trabajos y entregas/);
   assert.match(workshopTaskUiSource, /Enviar nueva versión/);
   assert.match(workshopTaskUiSource, /Finalizar revisión/);
+  assert.match(workshopTaskUiSource, /WorkshopFileViewer/);
+  assert.match(workshopTaskUiSource, /createPortal/);
+  assert.match(workshopTaskUiSource, /workshop-task-detail-backdrop/);
+  assert.match(workshopSource, /WorkshopFileViewer/);
+  assert.match(workshopFileViewerSource, /Haz clic fuera del recurso/);
+  assert.match(workshopFileViewerSource, /createPortal/);
   assert.match(firestoreRules, /match \/workshops\/\{workshopId\}/);
   assert.match(firestoreRules, /match \/tasks\/\{taskId\}/);
   assert.match(firestoreRules, /validWorkshopTaskAudience/);
@@ -253,6 +275,11 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /onWorkshopSubmissionChanged/);
   assert.match(workshopCss, /workshop-cover-card\.is-tics/);
   assert.match(workshopCss, /workshop-cover-card\.is-reading/);
+  assert.match(workshopCss, /position: fixed;[\s\S]*workshop-immersive-header/);
+  assert.match(workshopCss, /immersive-library-window/);
+  assert.match(workshopCss, /immersive-tech-horizon/);
+  assert.match(workshopCss, /workshop-attachment-viewer-backdrop/);
+  assert.match(workshopCss, /workshop-task-detail-backdrop/);
   await access(new URL("public/og-campus.png", projectRoot));
   await access(new URL("public/login-campus.jpg", projectRoot));
   await access(new URL("public/sw.js", projectRoot));

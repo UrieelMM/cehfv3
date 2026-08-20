@@ -21,12 +21,13 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   createWorkshopTask,
-  demoWorkshopTasks,
   getWorkshopTaskAttachmentUrl,
   saveWorkshopFeedback,
   setWorkshopTaskStatus,
@@ -93,27 +94,17 @@ export function WorkshopTasks({
   accounts,
   firebaseReady,
 }: WorkshopTasksProps) {
-  const [tasks, setTasks] = useState<WorkshopTask[]>(() =>
-    demoWorkshopTasks.filter((task) => task.workshopId === workshop.id),
-  );
+  const [tasks, setTasks] = useState<WorkshopTask[]>([]);
   const [loading, setLoading] = useState(firebaseReady);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<WorkshopTask | null>(null);
-  const [demoSubmissions, setDemoSubmissions] = useState<WorkshopSubmission[]>([]);
   const canCreate =
     role === "director" || workshop.managerIds.includes(profile.uid);
 
   useEffect(() => {
     if (!firebaseReady) {
-      const visible = demoWorkshopTasks.filter(
-        (task) =>
-          task.workshopId === workshop.id &&
-          (role === "director" ||
-            (role === "teacher" && task.createdBy === profile.uid) ||
-            (role === "student" && task.audienceStudentIds.includes(profile.uid))),
-      );
       queueMicrotask(() => {
-        setTasks(visible);
+        setTasks([]);
         setLoading(false);
       });
       return;
@@ -134,52 +125,13 @@ export function WorkshopTasks({
   }, [firebaseReady, profile, role, workshop]);
 
   async function createTask(input: WorkshopTaskCreateInput) {
-    if (firebaseReady) {
-      await createWorkshopTask(workshop, profile, input);
-      return;
-    }
-    const now = new Date().toISOString();
-    setTasks((current) => [
-      {
-        id: `demo-work-${Date.now()}`,
-        workshopId: workshop.id,
-        institutionId: workshop.institutionId,
-        title: input.title,
-        description: input.description,
-        dueAt: new Date(input.dueAt).toISOString(),
-        status: input.status,
-        audienceStudentIds: input.audienceStudentIds,
-        attachments: input.files.map((file) => ({
-          id: crypto.randomUUID(),
-          name: file.name,
-          storagePath: "",
-          contentType: file.type,
-          size: file.size,
-        })),
-        createdBy: profile.uid,
-        teacherName: profile.name,
-        createdAt: now,
-        updatedAt: now,
-      },
-      ...current,
-    ]);
+    if (!firebaseReady) throw new Error("Inicia sesión para publicar trabajos.");
+    await createWorkshopTask(workshop, profile, input);
   }
 
   async function changeStatus(task: WorkshopTask, status: WorkshopTask["status"]) {
-    if (firebaseReady) {
-      await setWorkshopTaskStatus(task, status);
-    } else {
-      setTasks((current) =>
-        current.map((item) =>
-          item.id === task.id
-            ? { ...item, status, updatedAt: new Date().toISOString() }
-            : item,
-        ),
-      );
-      setSelectedTask((current) =>
-        current?.id === task.id ? { ...current, status } : current,
-      );
-    }
+    if (!firebaseReady) throw new Error("Inicia sesión para actualizar trabajos.");
+    await setWorkshopTaskStatus(task, status);
   }
 
   return (
@@ -242,32 +194,31 @@ export function WorkshopTasks({
         </div>
       )}
 
-      <AnimatePresence>
-        {createOpen && (
-          <WorkshopTaskCreateDialog
-            workshop={workshop}
-            profile={profile}
-            accounts={accounts}
-            onClose={() => setCreateOpen(false)}
-            onCreate={createTask}
-          />
-        )}
-        {selectedTask && (
-          <WorkshopTaskDetailDialog
-            task={selectedTask}
-            profile={profile}
-            role={role}
-            accounts={accounts}
-            firebaseReady={firebaseReady}
-            demoSubmissions={demoSubmissions.filter(
-              (submission) => submission.taskId === selectedTask.id,
-            )}
-            setDemoSubmissions={setDemoSubmissions}
-            onStatusChange={changeStatus}
-            onClose={() => setSelectedTask(null)}
-          />
-        )}
-      </AnimatePresence>
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {createOpen && (
+            <WorkshopTaskCreateDialog
+              workshop={workshop}
+              profile={profile}
+              accounts={accounts}
+              onClose={() => setCreateOpen(false)}
+              onCreate={createTask}
+            />
+          )}
+          {selectedTask && (
+            <WorkshopTaskDetailDialog
+              task={selectedTask}
+              profile={profile}
+              role={role}
+              accounts={accounts}
+              firebaseReady={firebaseReady}
+              onStatusChange={changeStatus}
+              onClose={() => setSelectedTask(null)}
+            />
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </section>
   );
 }
@@ -386,8 +337,6 @@ function WorkshopTaskDetailDialog({
   role,
   accounts,
   firebaseReady,
-  demoSubmissions,
-  setDemoSubmissions,
   onStatusChange,
   onClose,
 }: {
@@ -396,17 +345,19 @@ function WorkshopTaskDetailDialog({
   role: Role;
   accounts: ManagedAccount[];
   firebaseReady: boolean;
-  demoSubmissions: WorkshopSubmission[];
-  setDemoSubmissions: React.Dispatch<React.SetStateAction<WorkshopSubmission[]>>;
   onStatusChange: (task: WorkshopTask, status: WorkshopTask["status"]) => Promise<void>;
   onClose: () => void;
 }) {
-  const [submissions, setSubmissions] = useState<WorkshopSubmission[]>(demoSubmissions);
+  const [submissions, setSubmissions] = useState<WorkshopSubmission[]>([]);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<WorkshopTaskAttachment | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const previewRequest = useRef(0);
   const staff = role !== "student";
   const selectedSubmission =
     submissions.find((item) => item.id === selectedSubmissionId) ?? submissions[0];
@@ -418,29 +369,58 @@ function WorkshopTaskDetailDialog({
 
   useEffect(() => {
     if (!firebaseReady) {
-      queueMicrotask(() => setSubmissions(demoSubmissions));
+      queueMicrotask(() => setSubmissions([]));
       return;
     }
     return watchWorkshopSubmissions(task, profile, setSubmissions, (error) =>
       toast.error(messageFor(error)),
     );
-  }, [demoSubmissions, firebaseReady, profile, task]);
+  }, [firebaseReady, profile, task]);
 
   useEffect(() => {
     queueMicrotask(() => setFeedback(selectedSubmission?.teacherFeedback ?? ""));
   }, [selectedSubmission]);
 
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        !document.querySelector(".workshop-attachment-viewer-backdrop")
+      ) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
   async function openAttachment(attachment: WorkshopTaskAttachment) {
     if (!firebaseReady || !attachment.storagePath) {
-      toast.info("El archivo estará disponible desde Firebase Storage.");
+      toast.error("El archivo no está disponible en Firebase Storage.");
       return;
     }
+    const requestId = ++previewRequest.current;
+    setPreviewAttachment(attachment);
+    setPreviewUrl("");
+    setPreviewLoading(true);
     try {
       const url = await getWorkshopTaskAttachmentUrl(attachment);
-      window.open(url, "_blank", "noopener,noreferrer");
+      if (previewRequest.current === requestId) setPreviewUrl(url);
     } catch (error) {
-      toast.error(messageFor(error));
+      if (previewRequest.current === requestId) {
+        setPreviewAttachment(null);
+        toast.error(messageFor(error));
+      }
+    } finally {
+      if (previewRequest.current === requestId) setPreviewLoading(false);
     }
+  }
+
+  function closeAttachmentPreview() {
+    previewRequest.current += 1;
+    setPreviewAttachment(null);
+    setPreviewUrl("");
+    setPreviewLoading(false);
   }
 
   async function submitStudentWork(event: FormEvent) {
@@ -451,28 +431,8 @@ function WorkshopTaskDetailDialog({
     }
     setBusy(true);
     try {
-      if (firebaseReady) {
-        await submitWorkshopTask(task, profile, { content, files });
-      } else {
-        const now = new Date().toISOString();
-        const next: WorkshopSubmission = {
-          id: profile.uid,
-          institutionId: task.institutionId,
-          workshopId: task.workshopId,
-          taskId: task.id,
-          studentId: profile.uid,
-          studentName: profile.name,
-          content,
-          attachments: files.map((file) => ({ id: crypto.randomUUID(), name: file.name, storagePath: "", contentType: file.type, size: file.size })),
-          version: (mySubmission?.version ?? 0) + 1,
-          status: "submitted",
-          teacherFeedback: "",
-          submittedAt: now,
-          updatedAt: now,
-        };
-        setDemoSubmissions((current) => [...current.filter((item) => !(item.taskId === task.id && item.studentId === profile.uid)), next]);
-        setSubmissions([next]);
-      }
+      if (!firebaseReady) throw new Error("Inicia sesión para entregar trabajos.");
+      await submitWorkshopTask(task, profile, { content, files });
       setContent("");
       setFiles([]);
       toast.success(mySubmission ? "Nueva versión enviada" : "Trabajo enviado");
@@ -490,14 +450,8 @@ function WorkshopTaskDetailDialog({
     }
     setBusy(true);
     try {
-      if (firebaseReady) {
-        await saveWorkshopFeedback(task, selectedSubmission, feedback, reviewed);
-      } else {
-        const now = new Date().toISOString();
-        const updated = { ...selectedSubmission, teacherFeedback: feedback, status: reviewed ? "reviewed" as const : "feedback" as const, feedbackAt: now, reviewedAt: reviewed ? now : undefined, updatedAt: now };
-        setSubmissions((current) => current.map((item) => item.id === updated.id ? updated : item));
-        setDemoSubmissions((current) => current.map((item) => item.taskId === task.id && item.id === updated.id ? updated : item));
-      }
+      if (!firebaseReady) throw new Error("Inicia sesión para enviar retroalimentación.");
+      await saveWorkshopFeedback(task, selectedSubmission, feedback, reviewed);
       toast.success(reviewed ? "Entrega finalizada" : "Retroalimentación enviada");
     } catch (error) {
       toast.error(messageFor(error));
@@ -519,7 +473,7 @@ function WorkshopTaskDetailDialog({
   }
 
   return (
-    <motion.div className="modal-backdrop workshop-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+    <motion.div className="modal-backdrop workshop-modal-backdrop workshop-task-detail-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
       <motion.section className="workshop-task-detail-modal" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
         <header>
           <div><span className={`workshop-task-status is-${task.status}`}>{task.status === "draft" ? "Borrador" : task.status === "closed" ? "Cerrado" : "Publicado"}</span><h2>{task.title}</h2><p><CalendarClock size={15} /> Entrega: {dueLabel(task.dueAt)} · {task.teacherName}</p></div>
@@ -547,6 +501,14 @@ function WorkshopTaskDetailDialog({
             {staff && <div className="workshop-task-control"><span>Estado del trabajo</span>{task.status === "draft" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar</button>}{task.status === "published" && <button disabled={busy} onClick={() => void changeStatus("closed")}><Clock3 size={15} /> Cerrar entregas</button>}{task.status === "closed" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Reabrir</button>}</div>}
           </aside>
         </div>
+        {previewAttachment && (
+          <WorkshopFileViewer
+            file={previewAttachment}
+            url={previewUrl}
+            loading={previewLoading}
+            onClose={closeAttachmentPreview}
+          />
+        )}
       </motion.section>
     </motion.div>
   );

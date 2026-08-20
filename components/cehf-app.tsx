@@ -52,6 +52,7 @@ import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
 import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
+import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { WorkshopsPage } from "@/components/workshops-page";
 import {
   MaterialCreateModal,
@@ -74,10 +75,12 @@ import {
   loadPortalState,
   loginWithEmail,
   logoutFirebase,
+  normalizeGuardianWhatsApp,
   refreshPortalAccess,
   PROFILE_PHOTO_MIME_TYPES,
   resetPassword,
   savePortalState,
+  savePortalSettings,
   watchAuth,
 } from "@/lib/firebase";
 import {
@@ -123,6 +126,7 @@ import type {
   LearningMaterial,
   LearningMaterialCreateInput,
   PortalState,
+  PortalSettings,
   ProgressLevel,
   Role,
   SchoolLevel,
@@ -510,6 +514,13 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
+    if (profile.role === "student" && activeSection !== "weekly-materials") {
+      queueMicrotask(() => {
+        setMaterialRecords([]);
+        setMaterialRecordsLoading(false);
+      });
+      return;
+    }
     queueMicrotask(() => {
       setMaterialRecords([]);
       setMaterialRecordsLoading(true);
@@ -525,7 +536,7 @@ export function CEHFApp() {
         reportFirebaseError("cargar materiales", error);
       },
     );
-  }, [firebaseUser, profile]);
+  }, [activeSection, firebaseUser, profile]);
 
   useEffect(() => {
     if (firebaseUser) return;
@@ -715,13 +726,29 @@ export function CEHFApp() {
     if (successMessage) toast.success(successMessage);
   }
 
+  function updateSettings(
+    updater: (previous: PortalSettings) => PortalSettings,
+    successMessage?: string,
+  ) {
+    setState((previous) => {
+      const settings = updater(previous.settings);
+      const next = { ...previous, settings };
+      if (usingDemo) {
+        window.localStorage.setItem("cehf-demo-state", JSON.stringify(next));
+      } else if (profile) {
+        void savePortalSettings(settings, profile).catch((error) =>
+          reportFirebaseError("guardar preferencias de apariencia", error),
+        );
+      }
+      return next;
+    });
+    if (successMessage) toast.success(successMessage);
+  }
+
   function toggleTheme() {
-    updateState((previous) => ({
-      ...previous,
-      settings: {
-        ...previous.settings,
+    updateSettings((previous) => ({
+        ...previous,
         theme: darkModeActive ? "light" : "dark",
-      },
     }));
   }
 
@@ -1090,6 +1117,7 @@ export function CEHFApp() {
               state={state}
               navigate={navigate}
               updateState={updateState}
+              updateSettings={updateSettings}
               openDetail={openTaskDetail}
               taskRecords={taskRecords}
               taskRecordsLoading={taskRecordsLoading}
@@ -1665,6 +1693,7 @@ function SectionContent({
   state,
   navigate,
   updateState,
+  updateSettings,
   openDetail,
   taskRecords,
   taskRecordsLoading,
@@ -1688,6 +1717,10 @@ function SectionContent({
   navigate: (section: SectionKey) => void;
   updateState: (
     updater: (previous: PortalState) => PortalState,
+    message?: string,
+  ) => void;
+  updateSettings: (
+    updater: (previous: PortalSettings) => PortalSettings,
     message?: string,
   ) => void;
   openDetail: (id: string) => void;
@@ -1819,11 +1852,14 @@ function SectionContent({
       return (
         <SettingsPage
           state={state}
-          updateState={updateState}
+          updateSettings={updateSettings}
           role={role}
           academicConfig={academicConfig}
           academicCalendar={academicCalendar}
           saveAcademicCalendarConfiguration={saveAcademicCalendarConfiguration}
+          institutionId={profile.institutionId}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
         />
       );
     case "profile":
@@ -2294,7 +2330,7 @@ function VerseEditorModal({
         </label>
         <div className="setup-note compact-note">
           <BookOpen size={19} />
-          <p>Al guardar, el versículo aparecerá en el Inicio de todos los roles.</p>
+          <p>Al guardar, el versículo aparecerá en el Inicio de todos los usuarios.</p>
         </div>
         <div className="modal-actions">
           <button className="secondary-button" type="button" onClick={onClose}>
@@ -2829,15 +2865,18 @@ function ReportsPage({
 
 function SettingsPage({
   state,
-  updateState,
+  updateSettings,
   role,
   academicConfig,
   academicCalendar,
   saveAcademicCalendarConfiguration,
+  institutionId,
+  managedAccounts,
+  firebaseReady,
 }: {
   state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
+  updateSettings: (
+    updater: (previous: PortalSettings) => PortalSettings,
     message?: string,
   ) => void;
   role: Role;
@@ -2846,6 +2885,9 @@ function SettingsPage({
   saveAcademicCalendarConfiguration: (
     input: AcademicCalendarInput,
   ) => Promise<void>;
+  institutionId: string;
+  managedAccounts: ManagedAccount[];
+  firebaseReady: boolean;
 }) {
   return (
     <div className="settings-layout">
@@ -2870,10 +2912,10 @@ function SettingsPage({
                 className={state.settings.theme === theme ? "active" : ""}
                 key={theme}
                 onClick={() =>
-                  updateState(
+                  updateSettings(
                     (previous) => ({
                       ...previous,
-                      settings: { ...previous.settings, theme },
+                      theme,
                     }),
                     "Preferencia guardada",
                   )
@@ -2904,9 +2946,9 @@ function SettingsPage({
             checked={state.settings.reducedMotion}
             label="Reducir movimiento"
             onChange={(checked) =>
-              updateState((previous) => ({
+              updateSettings((previous) => ({
                 ...previous,
-                settings: { ...previous.settings, reducedMotion: checked },
+                reducedMotion: checked,
               }))
             }
           />
@@ -2929,59 +2971,14 @@ function SettingsPage({
           </div>
           <Toggle checked label="Avisos internos" onChange={() => undefined} />
         </div>
-        {role === "director" && (
-          <>
-            <div className="setting-row">
-              <div>
-                <strong>WhatsApp para familias</strong>
-                <span>
-                  Solo avisos genéricos para contactos con consentimiento.
-                </span>
-              </div>
-              <Toggle
-                checked={state.settings.whatsappEnabled}
-                label="WhatsApp para familias"
-                onChange={(checked) =>
-                  updateState(
-                    (previous) => ({
-                      ...previous,
-                      settings: {
-                        ...previous.settings,
-                        whatsappEnabled: checked,
-                      },
-                    }),
-                    checked
-                      ? "WhatsApp habilitado"
-                      : "WhatsApp pausado; el portal sigue funcionando",
-                  )
-                }
-              />
-            </div>
-            <div className="setting-row">
-              <div>
-                <strong>Horario silencioso</strong>
-                <span>No se envían recordatorios no críticos.</span>
-              </div>
-              <select
-                value={state.settings.quietHours}
-                onChange={(event) =>
-                  updateState((previous) => ({
-                    ...previous,
-                    settings: {
-                      ...previous.settings,
-                      quietHours: event.target.value,
-                    },
-                  }))
-                }
-              >
-                <option>20:00–07:00</option>
-                <option>21:00–07:00</option>
-                <option>Sin horario</option>
-              </select>
-            </div>
-          </>
-        )}
       </section>
+      {role === "director" && (
+        <WhatsAppAdminPanel
+          institutionId={institutionId}
+          accounts={managedAccounts}
+          firebaseReady={firebaseReady}
+        />
+      )}
       {role === "director" && (
         <AcademicConfigurationCard
           key={`${academicConfig.schoolYearId}-${academicCalendar.weeks
@@ -3139,6 +3136,7 @@ function AccountRegistrationModal({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [guardianWhatsApp, setGuardianWhatsApp] = useState("");
   const [schoolLevel, setSchoolLevel] = useState<SchoolLevel>("primary");
   const [grade, setGrade] = useState("5.º");
   const [group, setGroup] = useState("A");
@@ -3158,11 +3156,17 @@ function AccountRegistrationModal({
       teacher.subjects.some((subject) => subjects.includes(subject)),
   );
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const validGuardianWhatsApp =
+    accountRole === "teacher" || Boolean(normalizeGuardianWhatsApp(guardianWhatsApp));
   const validStudentAssignment =
     accountRole === "teacher" ||
     (gradesBySchoolLevel[schoolLevel].includes(grade) && Boolean(group));
   const identityComplete = Boolean(
-    firstName.trim() && lastName.trim() && validEmail && photo,
+    firstName.trim() &&
+      lastName.trim() &&
+      validEmail &&
+      validGuardianWhatsApp &&
+      photo,
   );
   const assignmentComplete =
     validStudentAssignment &&
@@ -3256,6 +3260,7 @@ function AccountRegistrationModal({
     setFirstName("");
     setLastName("");
     setEmail("");
+    setGuardianWhatsApp("");
     setSchoolLevel("primary");
     setGrade("5.º");
     setGroup("A");
@@ -3272,7 +3277,7 @@ function AccountRegistrationModal({
       toast.error("Completa el registro", {
         description:
           accountRole === "student"
-            ? "Agrega identidad, fotografía, materias y al menos un maestro."
+            ? "Agrega identidad, WhatsApp del tutor, fotografía, materias y al menos un maestro."
             : "Agrega identidad, fotografía y al menos una materia.",
       });
       return;
@@ -3289,6 +3294,8 @@ function AccountRegistrationModal({
               schoolLevel: accountRole === "student" ? schoolLevel : undefined,
               grade: accountRole === "student" ? grade : undefined,
               group: accountRole === "student" ? group : undefined,
+              guardianWhatsApp:
+                accountRole === "student" ? guardianWhatsApp : undefined,
               subjects,
               teacherIds,
               photo,
@@ -3315,6 +3322,10 @@ function AccountRegistrationModal({
                       accountRole === "student" ? schoolLevel : undefined,
                     grade: accountRole === "student" ? grade : undefined,
                     group: accountRole === "student" ? group : undefined,
+                    guardianWhatsApp:
+                      accountRole === "student"
+                        ? normalizeGuardianWhatsApp(guardianWhatsApp)
+                        : undefined,
                     subjects,
                     teacherIds: accountRole === "student" ? teacherIds : [],
                     createdAt: new Date().toISOString(),
@@ -3536,6 +3547,24 @@ function AccountRegistrationModal({
                     <label>Apellidos<input value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Ej. Flores Hernández" autoComplete="off" required /></label>
                   </div>
                   <label className="registration-field">Correo institucional<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={accountRole === "student" ? "alumno@cehf.edu.mx" : "maestro@cehf.edu.mx"} autoComplete="off" required /></label>
+                  {accountRole === "student" && (
+                    <label className="registration-field">
+                      WhatsApp del padre o tutor
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        value={guardianWhatsApp}
+                        onChange={(event) => setGuardianWhatsApp(event.target.value)}
+                        placeholder="55 1234 5678"
+                        autoComplete="tel"
+                        aria-describedby="guardian-whatsapp-help"
+                        required
+                      />
+                      <small id="guardian-whatsapp-help" className="registration-field-help">
+                        <MessageCircle size={13} /> 10 dígitos de México. Se guardará como contacto del padre o tutor.
+                      </small>
+                    </label>
+                  )}
                   <div className={`registration-photo ${photo ? "has-photo" : ""}`}>
                     <motion.span
                       className="registration-photo-preview"

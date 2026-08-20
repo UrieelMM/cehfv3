@@ -71,4 +71,55 @@ Cada tarea conserva sus subcolecciones `entregas`, `historial` y `prorrogas`. La
 
 ## WhatsApp
 
-El panel y el modelo de preferencias están incluidos. El envío real requiere Cloud Functions y secretos del proveedor; deliberadamente no se colocan tokens de WhatsApp en el cliente. El portal conserva las notificaciones internas aunque WhatsApp esté deshabilitado o falle.
+La integración usa directamente WhatsApp Cloud API de Meta y está aislada del
+flujo académico: una falla del proveedor no bloquea tareas ni entregas. Dirección
+puede administrar contactos, consentimiento, hora de envío, pruebas y
+entregabilidad desde **Configuración → WhatsApp para familias**.
+
+El resumen se ejecuta de lunes a viernes, agrupa hermanos en un solo mensaje y
+considera las tareas académicas y de talleres que vencen ese día. Los mensajes
+no incluyen calificaciones, materias ni observaciones privadas. La cola
+`messageOutbox` usa una clave determinista por fecha y contacto para evitar
+duplicados; el webhook registra envío, entrega, lectura, fallos y la palabra
+`BAJA`.
+
+### Plantilla de Meta
+
+Crea y aprueba en WhatsApp Manager una plantilla de **utilidad** con idioma
+`Spanish (MEX)` y nombre `cehf_resumen_tareas_diario_v1`:
+
+```text
+CEHF Primaria — resumen diario del {{1}}:
+{{2}}
+Este aviso no incluye calificaciones. Responde BAJA para dejar de recibirlo.
+```
+
+Ejemplos de variables para la revisión:
+
+```text
+{{1}} = miércoles, 19 de agosto
+{{2}} = Mateo: 3 de 4 entregadas; 1 pendiente.
+```
+
+### Secretos y webhook
+
+Los cuatro valores viven exclusivamente en Secret Manager de Firebase:
+
+```bash
+npx firebase-tools functions:secrets:set WHATSAPP_ACCESS_TOKEN
+npx firebase-tools functions:secrets:set WHATSAPP_PHONE_NUMBER_ID
+npx firebase-tools functions:secrets:set WHATSAPP_WEBHOOK_VERIFY_TOKEN
+npx firebase-tools functions:secrets:set WHATSAPP_APP_SECRET
+```
+
+Para el proyecto configurado en `.firebaserc`, registra en Meta:
+
+```text
+Callback URL: https://us-central1-cehfv3.cloudfunctions.net/whatsappWebhook
+Verify token: el mismo valor guardado en WHATSAPP_WEBHOOK_VERIFY_TOKEN
+Campo de webhook: messages
+```
+
+Después publica índices, reglas y funciones con
+`npm run firebase:deploy`. Las credenciales nunca deben copiarse a `.env`,
+Firestore, el cliente web ni variables con prefijo `NEXT_PUBLIC_`.

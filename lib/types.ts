@@ -26,6 +26,7 @@ export type ManagedAccount = {
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
+  guardianWhatsApp?: string;
   subjects: string[];
   teacherIds: string[];
   photoURL?: string;
@@ -597,6 +598,74 @@ export type WorkshopSubmission = {
   feedbackAt?: string;
   reviewedAt?: string;
   updatedAt: string;
+};
+
+export type GuardianContactStatus =
+  | "active"
+  | "paused"
+  | "opted_out"
+  | "invalid";
+
+export type GuardianContact = {
+  id: string;
+  institutionId: string;
+  name: string;
+  phoneE164: string;
+  phoneMasked: string;
+  relationship: string;
+  studentIds: string[];
+  studentNames: string[];
+  categories: string[];
+  status: GuardianContactStatus;
+  consentStatus: "active" | "withdrawn";
+  consentVersion: string;
+  consentGrantedAt: string;
+  optedOutAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WhatsAppConfiguration = {
+  institutionId: string;
+  enabled: boolean;
+  dailySummaryEnabled: boolean;
+  sendTime: string;
+  sendOnNoTaskDays: boolean;
+  timeZone: string;
+  templateName: string;
+  templateLanguage: string;
+  graphApiVersion: string;
+  lastSuccessfulSendAt?: string;
+};
+
+export type WhatsAppMessageStatus =
+  | "queued"
+  | "sending"
+  | "sent"
+  | "delivered"
+  | "read"
+  | "failed"
+  | "cancelled";
+
+export type WhatsAppOutboxMessage = {
+  id: string;
+  institutionId: string;
+  guardianContactId: string;
+  recipientName: string;
+  toMasked: string;
+  messageKind: "daily_task_summary" | "daily_task_summary_test";
+  businessDate: string;
+  status: WhatsAppMessageStatus;
+  attemptCount: number;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  failedAt?: string;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+  test: boolean;
 };
 
 export type PortalSettings = {

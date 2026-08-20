@@ -442,7 +442,7 @@ service cloud.firestore {
 
       match /configuracion/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if documentId != "academica"
+        allow create, update: if !(documentId in ["academica", "whatsapp"])
           && isDirector()
           && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;
@@ -647,7 +647,6 @@ service cloud.firestore {
       match /materials/{materialId} {
         function canReadMaterial(data) {
           return isActive()
-            && data.institutionId == institutionId
             && profile().institutionId == institutionId
             && (
               isDirector()
@@ -952,16 +951,17 @@ service cloud.firestore {
     }
 
     match /guardianContacts/{contactId} {
-      allow read, write: if isDirector();
+      allow read: if isDirector() && sameInstitution(resource.data);
+      allow create, update, delete: if false;
     }
 
     match /messageOutbox/{messageId} {
-      allow read: if isDirector();
+      allow read: if isDirector() && sameInstitution(resource.data);
       allow write: if false;
     }
 
     match /auditEvents/{eventId} {
-      allow read: if isDirector();
+      allow read: if isDirector() && sameInstitution(resource.data);
       allow write: if false;
     }
 

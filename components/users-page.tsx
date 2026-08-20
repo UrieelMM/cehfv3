@@ -5,6 +5,7 @@ import {
   GraduationCap,
   Library,
   LockKeyhole,
+  MessageCircle,
   MoreHorizontal,
   Pencil,
   Search,
@@ -23,6 +24,7 @@ import {
   deleteManagedAccount,
   firebaseErrorDetails,
   friendlyFirebaseError,
+  normalizeGuardianWhatsApp,
   PROFILE_PHOTO_MIME_TYPES,
   setManagedAccountActive,
   updateManagedAccount,
@@ -304,6 +306,9 @@ function AccountEditor({
   const [firstName, setFirstName] = useState(account.firstName);
   const [lastName, setLastName] = useState(account.lastName);
   const [email, setEmail] = useState(account.email);
+  const [guardianWhatsApp, setGuardianWhatsApp] = useState(
+    account.guardianWhatsApp ?? "",
+  );
   const [schoolLevel, setSchoolLevel] = useState<SchoolLevel>(account.schoolLevel ?? "primary");
   const [grade, setGrade] = useState(account.grade ?? "1.º");
   const [group, setGroup] = useState(account.group ?? "A");
@@ -321,6 +326,7 @@ function AccountEditor({
     firstName.trim() &&
     lastName.trim() &&
     validEmail &&
+    (account.role === "teacher" || normalizeGuardianWhatsApp(guardianWhatsApp)) &&
     subjects.length &&
     (account.role === "teacher" || teacherIds.length),
   );
@@ -372,6 +378,8 @@ function AccountEditor({
             schoolLevel: account.role === "student" ? schoolLevel : undefined,
             grade: account.role === "student" ? grade : undefined,
             group: account.role === "student" ? group : undefined,
+            guardianWhatsApp:
+              account.role === "student" ? guardianWhatsApp : undefined,
             subjects,
             teacherIds: account.role === "student" ? teacherIds : [],
             photo,
@@ -386,7 +394,14 @@ function AccountEditor({
             initials: `${firstName.trim()[0] ?? ""}${lastName.trim()[0] ?? ""}`.toUpperCase(),
             subjects,
             teacherIds: account.role === "student" ? teacherIds : [],
-            ...(account.role === "student" ? { schoolLevel, grade, group } : {}),
+            ...(account.role === "student"
+              ? {
+                  schoolLevel,
+                  grade,
+                  group,
+                  guardianWhatsApp: normalizeGuardianWhatsApp(guardianWhatsApp),
+                }
+              : {}),
             ...(photoPreview ? { photoURL: photoPreview } : {}),
           };
       onSaved(updated);
@@ -419,6 +434,23 @@ function AccountEditor({
               <label>Apellidos<input value={lastName} maxLength={80} onChange={(event) => setLastName(event.target.value)} /></label>
             </div>
             <label className="registration-field">Correo institucional<input type="email" value={email} maxLength={254} onChange={(event) => setEmail(event.target.value)} /></label>
+            {account.role === "student" && (
+              <label className="registration-field">
+                WhatsApp del padre o tutor
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={guardianWhatsApp}
+                  onChange={(event) => setGuardianWhatsApp(event.target.value)}
+                  placeholder="55 1234 5678"
+                  autoComplete="tel"
+                  required
+                />
+                <small className="registration-field-help">
+                  <MessageCircle size={12} /> Número familiar de 10 dígitos de México.
+                </small>
+              </label>
+            )}
           </section>
           <section className="account-editor-section">
             <div className="registration-section-heading"><span>02</span><div><strong>Asignación académica</strong><small>Materias{account.role === "student" ? ", grupo y acompañamiento" : " del maestro"}</small></div></div>
