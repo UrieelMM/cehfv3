@@ -163,6 +163,11 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(css, /--violet:\s*#1f2985/i);
   assert.match(css, /--coral:\s*#c62e45/i);
   assert.match(css, /url\("\/login-campus\.jpg"\)/i);
+  assert.match(
+    css,
+    /\.whatsapp-admin-panel\s*\{[^}]*display:\s*grid;[^}]*grid-column:\s*1\s*\/\s*-1;/s,
+  );
+  assert.match(css, /\.whatsapp-message-table-wrap\s*\{[^}]*max-width:\s*100%;/s);
   assert.match(firebaseSource, /createManagedAccount/);
   assert.match(firebaseSource, /PROFILE_PHOTO_MIME_TYPES/);
   assert.match(firebaseSource, /await refreshPortalAccess\(director\)/);

@@ -3983,13 +3983,21 @@ code {
 
 /* WhatsApp administration */
 .whatsapp-admin-panel {
+  display: grid;
   gap: 24px;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.whatsapp-admin-panel > * {
+  min-width: 0;
 }
 
 .whatsapp-heading {
   align-items: center;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  margin-bottom: 0;
 }
 
 .whatsapp-provider-state,
@@ -4292,6 +4300,7 @@ code {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .whatsapp-contact-main > div > span {
@@ -4345,7 +4354,10 @@ code {
 }
 
 .whatsapp-message-table-wrap {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
 }
 
 .whatsapp-message-table {
