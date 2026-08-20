@@ -65,8 +65,17 @@
       "collectionGroup": "weeklyReviews",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "institutionId", "order": "ASCENDING" },
         { "fieldPath": "audienceStudentIds", "arrayConfig": "CONTAINS" },
         { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "weeklyReviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "institutionId", "order": "ASCENDING" },
+        { "fieldPath": "managerIds", "arrayConfig": "CONTAINS" }
       ]
     },
     {

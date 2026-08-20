@@ -206,12 +206,12 @@ export function watchWeeklyReviews(
     callback([]);
     return () => undefined;
   }
-  const constraints: QueryConstraint[] = [];
-  if (profile.role === "director") {
-    constraints.push(where("institutionId", "==", profile.institutionId));
-  } else if (profile.role === "teacher") {
+  const constraints: QueryConstraint[] = [
+    where("institutionId", "==", profile.institutionId),
+  ];
+  if (profile.role === "teacher") {
     constraints.push(where("managerIds", "array-contains", profile.uid));
-  } else {
+  } else if (profile.role === "student") {
     constraints.push(where("audienceStudentIds", "array-contains", profile.uid));
     constraints.push(where("status", "in", ["published", "closed"]));
   }
