@@ -46,7 +46,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
@@ -2889,108 +2889,227 @@ function SettingsPage({
   managedAccounts: ManagedAccount[];
   firebaseReady: boolean;
 }) {
+  type SettingsTabId =
+    | "appearance"
+    | "notifications"
+    | "whatsapp"
+    | "academic";
+
+  const [activeSettingsTab, setActiveSettingsTab] =
+    useState<SettingsTabId>("appearance");
+  const settingsTabs: Array<{
+    id: SettingsTabId;
+    label: string;
+    description: string;
+    icon: ReactNode;
+  }> = [
+    {
+      id: "appearance",
+      label: "Apariencia",
+      description: "Tema y accesibilidad",
+      icon: <Sun size={18} />,
+    },
+    {
+      id: "notifications",
+      label: "Notificaciones",
+      description: "Avisos del portal",
+      icon: <Bell size={18} />,
+    },
+    ...(role === "director"
+      ? [
+          {
+            id: "whatsapp" as const,
+            label: "WhatsApp",
+            description: "Mensajes a familias",
+            icon: <MessageCircle size={18} />,
+          },
+          {
+            id: "academic" as const,
+            label: "Académico",
+            description: "Ciclo y calendario",
+            icon: <CalendarDays size={18} />,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="settings-layout">
-      <section className="panel settings-section">
-        <div className="settings-heading">
-          <span className="settings-icon">
-            <Sun size={20} />
-          </span>
-          <div>
-            <h2>Apariencia y accesibilidad</h2>
-            <p>Elige cómo quieres ver y recorrer el portal.</p>
-          </div>
-        </div>
-        <div className="setting-row">
-          <div>
-            <strong>Tema</strong>
-            <span>Claro, oscuro o según tu dispositivo.</span>
-          </div>
-          <div className="theme-options">
-            {(["light", "dark", "system"] as const).map((theme) => (
-              <button
-                className={state.settings.theme === theme ? "active" : ""}
-                key={theme}
-                onClick={() =>
-                  updateSettings(
-                    (previous) => ({
-                      ...previous,
-                      theme,
-                    }),
-                    "Preferencia guardada",
-                  )
+    <div className="settings-page">
+      <nav
+        aria-label="Secciones de configuración"
+        className="panel settings-tabs"
+        role="tablist"
+      >
+        {settingsTabs.map((tab, index) => (
+          <button
+            aria-controls={`settings-panel-${tab.id}`}
+            aria-selected={activeSettingsTab === tab.id}
+            className={activeSettingsTab === tab.id ? "active" : ""}
+            id={`settings-tab-${tab.id}`}
+            key={tab.id}
+            onClick={() => setActiveSettingsTab(tab.id)}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+                return;
+              }
+              event.preventDefault();
+              const direction = event.key === "ArrowRight" ? 1 : -1;
+              const nextIndex =
+                (index + direction + settingsTabs.length) % settingsTabs.length;
+              const nextTab = settingsTabs[nextIndex];
+              setActiveSettingsTab(nextTab.id);
+              document.getElementById(`settings-tab-${nextTab.id}`)?.focus();
+            }}
+            role="tab"
+            tabIndex={activeSettingsTab === tab.id ? 0 : -1}
+            type="button"
+          >
+            <span className="settings-tab-icon">{tab.icon}</span>
+            <span>
+              <strong>{tab.label}</strong>
+              <small>{tab.description}</small>
+            </span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="settings-tab-content">
+        <div
+          aria-labelledby="settings-tab-appearance"
+          className="settings-tab-panel"
+          hidden={activeSettingsTab !== "appearance"}
+          id="settings-panel-appearance"
+          role="tabpanel"
+        >
+          <section className="panel settings-section">
+            <div className="settings-heading">
+              <span className="settings-icon">
+                <Sun size={20} />
+              </span>
+              <div>
+                <h2>Apariencia y accesibilidad</h2>
+                <p>Elige cómo quieres ver y recorrer el portal.</p>
+              </div>
+            </div>
+            <div className="setting-row">
+              <div>
+                <strong>Tema</strong>
+                <span>Claro, oscuro o según tu dispositivo.</span>
+              </div>
+              <div className="theme-options">
+                {(["light", "dark", "system"] as const).map((theme) => (
+                  <button
+                    className={state.settings.theme === theme ? "active" : ""}
+                    key={theme}
+                    onClick={() =>
+                      updateSettings(
+                        (previous) => ({
+                          ...previous,
+                          theme,
+                        }),
+                        "Preferencia guardada",
+                      )
+                    }
+                    type="button"
+                  >
+                    {theme === "light" ? (
+                      <Sun size={16} />
+                    ) : theme === "dark" ? (
+                      <Moon size={16} />
+                    ) : (
+                      <Settings size={16} />
+                    )}
+                    {theme === "light"
+                      ? "Claro"
+                      : theme === "dark"
+                        ? "Oscuro"
+                        : "Sistema"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setting-row">
+              <div>
+                <strong>Reducir movimiento</strong>
+                <span>Disminuye transiciones y animaciones.</span>
+              </div>
+              <Toggle
+                checked={state.settings.reducedMotion}
+                label="Reducir movimiento"
+                onChange={(checked) =>
+                  updateSettings((previous) => ({
+                    ...previous,
+                    reducedMotion: checked,
+                  }))
                 }
-              >
-                {theme === "light" ? (
-                  <Sun size={16} />
-                ) : theme === "dark" ? (
-                  <Moon size={16} />
-                ) : (
-                  <Settings size={16} />
-                )}
-                {theme === "light"
-                  ? "Claro"
-                  : theme === "dark"
-                    ? "Oscuro"
-                    : "Sistema"}
-              </button>
-            ))}
-          </div>
+              />
+            </div>
+          </section>
         </div>
-        <div className="setting-row">
-          <div>
-            <strong>Reducir movimiento</strong>
-            <span>Disminuye transiciones y animaciones.</span>
-          </div>
-          <Toggle
-            checked={state.settings.reducedMotion}
-            label="Reducir movimiento"
-            onChange={(checked) =>
-              updateSettings((previous) => ({
-                ...previous,
-                reducedMotion: checked,
-              }))
-            }
-          />
+
+        <div
+          aria-labelledby="settings-tab-notifications"
+          className="settings-tab-panel"
+          hidden={activeSettingsTab !== "notifications"}
+          id="settings-panel-notifications"
+          role="tabpanel"
+        >
+          <section className="panel settings-section">
+            <div className="settings-heading">
+              <span className="settings-icon">
+                <Bell size={20} />
+              </span>
+              <div>
+                <h2>Notificaciones</h2>
+                <p>Controla los avisos internos y sus horarios.</p>
+              </div>
+            </div>
+            <div className="setting-row">
+              <div>
+                <strong>Avisos internos</strong>
+                <span>Tareas, repasos, materiales y reportes.</span>
+              </div>
+              <Toggle checked label="Avisos internos" onChange={() => undefined} />
+            </div>
+          </section>
         </div>
-      </section>
-      <section className="panel settings-section">
-        <div className="settings-heading">
-          <span className="settings-icon">
-            <Bell size={20} />
-          </span>
-          <div>
-            <h2>Notificaciones</h2>
-            <p>Controla los avisos internos y sus horarios.</p>
-          </div>
-        </div>
-        <div className="setting-row">
-          <div>
-            <strong>Avisos internos</strong>
-            <span>Tareas, repasos, materiales y reportes.</span>
-          </div>
-          <Toggle checked label="Avisos internos" onChange={() => undefined} />
-        </div>
-      </section>
-      {role === "director" && (
-        <WhatsAppAdminPanel
-          institutionId={institutionId}
-          accounts={managedAccounts}
-          firebaseReady={firebaseReady}
-        />
-      )}
-      {role === "director" && (
-        <AcademicConfigurationCard
-          key={`${academicConfig.schoolYearId}-${academicCalendar.weeks
-            .map((week) => `${week.id}:${week.startDate}:${week.endDate}`)
-            .join("|")}-${academicCalendar.terms
-            .map((term) => `${term.id}:${term.weekIds.join(",")}`)
-            .join("|")}`}
-          config={academicConfig}
-          calendar={academicCalendar}
-          onSave={saveAcademicCalendarConfiguration}
-        />
-      )}
+
+        {role === "director" && (
+          <>
+            <div
+              aria-labelledby="settings-tab-whatsapp"
+              className="settings-tab-panel"
+              hidden={activeSettingsTab !== "whatsapp"}
+              id="settings-panel-whatsapp"
+              role="tabpanel"
+            >
+              <WhatsAppAdminPanel
+                institutionId={institutionId}
+                accounts={managedAccounts}
+                firebaseReady={firebaseReady}
+              />
+            </div>
+            <div
+              aria-labelledby="settings-tab-academic"
+              className="settings-tab-panel"
+              hidden={activeSettingsTab !== "academic"}
+              id="settings-panel-academic"
+              role="tabpanel"
+            >
+              <AcademicConfigurationCard
+                key={`${academicConfig.schoolYearId}-${academicCalendar.weeks
+                  .map((week) => `${week.id}:${week.startDate}:${week.endDate}`)
+                  .join("|")}-${academicCalendar.terms
+                  .map((term) => `${term.id}:${term.weekIds.join(",")}`)
+                  .join("|")}`}
+                config={academicConfig}
+                calendar={academicCalendar}
+                onSave={saveAcademicCalendarConfiguration}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

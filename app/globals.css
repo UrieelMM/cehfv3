@@ -4406,6 +4406,15 @@ code {
 }
 
 @media (max-width: 720px) {
+  .settings-tabs {
+    grid-auto-columns: minmax(158px, 72vw);
+    scroll-snap-type: inline proximity;
+  }
+
+  .settings-tabs > button {
+    scroll-snap-align: start;
+  }
+
   .whatsapp-heading {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -6058,6 +6067,110 @@ code {
 }
 
 /* Settings/profile */
+.settings-page {
+  display: grid;
+  gap: 17px;
+  min-width: 0;
+}
+
+.settings-tabs {
+  display: grid;
+  gap: 6px;
+  grid-auto-columns: minmax(160px, 1fr);
+  grid-auto-flow: column;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 6px;
+  scrollbar-width: thin;
+}
+
+.settings-tabs > button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--muted-strong);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 58px;
+  min-width: 0;
+  padding: 10px 13px;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.settings-tabs > button:hover {
+  background: var(--surface-soft);
+  color: var(--foreground);
+}
+
+.settings-tabs > button.active {
+  background: var(--violet-soft);
+  border-color: color-mix(in srgb, var(--violet) 24%, var(--border));
+  color: var(--violet);
+}
+
+.settings-tabs > button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--violet) 22%, transparent);
+  outline-offset: 1px;
+}
+
+.settings-tab-icon {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.settings-tabs > button.active .settings-tab-icon {
+  background: color-mix(in srgb, var(--violet-soft) 70%, var(--surface));
+  border-color: color-mix(in srgb, var(--violet) 22%, var(--border));
+}
+
+.settings-tabs > button > span:last-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-tabs strong,
+.settings-tabs small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-tabs strong {
+  font-size: 0.76rem;
+}
+
+.settings-tabs small {
+  color: var(--muted);
+  font-size: 0.59rem;
+}
+
+.settings-tab-content,
+.settings-tab-panel {
+  min-width: 0;
+}
+
+.settings-tab-panel[hidden] {
+  display: none;
+}
+
+.settings-tab-panel > .panel {
+  min-width: 0;
+}
+
 .settings-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

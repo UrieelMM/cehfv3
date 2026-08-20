@@ -233,6 +233,11 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /claimsChanged: changed/);
   assert.match(functionsSource, /Cada semana sólo puede pertenecer a un trimestre/);
   assert.match(appSource, /WhatsApp del padre o tutor/);
+  assert.match(appSource, /aria-label="Secciones de configuración"/);
+  assert.match(appSource, /role="tablist"/);
+  assert.match(appSource, /settings-tab-whatsapp/);
+  assert.match(css, /\.settings-tabs\s*\{/);
+  assert.match(css, /\.settings-tab-panel\[hidden\]\s*\{[^}]*display:\s*none;/s);
   assert.match(firebaseSource, /normalizeGuardianWhatsApp/);
   assert.match(firebaseSource, /savePortalSettings/);
   assert.match(usersSource, /guardianWhatsApp/);
