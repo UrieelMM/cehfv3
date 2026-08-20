@@ -193,9 +193,9 @@
 .review-group-options button.selected { border-color: color-mix(in srgb, var(--violet) 45%, var(--border)); background: var(--violet-soft); color: var(--violet); }
 .review-question-builder { display: grid; gap: 10px; }
 .review-question-builder > article { padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
-.review-question-builder > article > header { display: grid; margin-bottom: 11px; grid-template-columns: 1fr 170px auto; align-items: center; gap: 7px; }
+.review-question-builder > article > header { display: grid; margin-bottom: 11px; grid-template-columns: 1fr minmax(210px, 245px) auto; align-items: center; gap: 9px; }
 .review-question-builder > article > header strong { font-size: .62rem; }
-.review-question-builder > article > header select { min-height: 34px; padding: 6px 9px; font-size: .56rem; }
+.review-question-builder > article > header select { min-height: 40px; padding: 8px 32px 8px 11px; font-size: .66rem; font-weight: 650; }
 .review-question-builder > article > header button { display: grid; width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--danger); place-items: center; }
 .review-option-builder { display: grid; margin-top: 11px; gap: 6px; }
 .review-option-builder > small { margin-bottom: 2px; color: var(--muted); font-size: .5rem; }
@@ -230,6 +230,7 @@
 .review-create-modal > footer { display: flex; padding: 13px 23px; border-top: 1px solid var(--border); background: var(--surface-soft); align-items: center; justify-content: space-between; gap: 15px; }
 .review-create-modal > footer > span { display: inline-flex; color: var(--muted); font-size: .54rem; align-items: center; gap: 5px; }
 .review-create-modal > footer > div { display: flex; gap: 7px; }
+.review-create-modal > footer button { min-height: 38px; padding: 8px 13px; font-size: .62rem; line-height: 1; }
 
 @media (max-width: 1120px) {
   .reviews-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

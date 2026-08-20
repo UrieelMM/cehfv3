@@ -1621,8 +1621,14 @@ export const createWeeklyReview = onCall(async (request) => {
   if (!Number.isInteger(duration) || duration < 3 || duration > 60) {
     throw new HttpsError("invalid-argument", "La duración debe ser de 3 a 60 minutos.");
   }
-  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) {
-    throw new HttpsError("invalid-argument", "Permite entre 1 y 3 intentos.");
+  if (
+    !Number.isInteger(maxAttempts) ||
+    (maxAttempts !== 0 && (maxAttempts < 1 || maxAttempts > 5))
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Permite entre 1 y 5 intentos o selecciona intentos ilimitados.",
+    );
   }
   const targetGroups = materialGroups(input.targetGroups);
   const attachments = reviewAttachments(
@@ -1992,8 +1998,10 @@ export const restartWeeklyReview = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Primero debes completar el intento actual.");
     }
     const attemptNumber = Math.max(1, Number(attempt.attemptNumber ?? 1));
-    const maxAttempts = Math.max(1, Number(review?.maxAttempts ?? 1));
-    if (attemptNumber >= maxAttempts) {
+    const configuredMaxAttempts = Number(review?.maxAttempts ?? 1);
+    const hasUnlimitedAttempts = configuredMaxAttempts === 0;
+    const maxAttempts = Math.max(1, configuredMaxAttempts);
+    if (!hasUnlimitedAttempts && attemptNumber >= maxAttempts) {
       throw new HttpsError("failed-precondition", "Ya utilizaste todos los intentos disponibles.");
     }
     const now = Timestamp.now();

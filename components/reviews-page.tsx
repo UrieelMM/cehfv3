@@ -102,6 +102,11 @@ function studentReviewState(review: WeeklyReview) {
   return "pending";
 }
 
+function attemptLimitLabel(maxAttempts: number) {
+  if (maxAttempts === 0) return "Intentos ilimitados";
+  return `${maxAttempts} intento${maxAttempts === 1 ? "" : "s"}`;
+}
+
 export function ReviewsPage({
   reviews,
   loading,
@@ -373,7 +378,7 @@ export function ReviewsPage({
                     <Clock3 size={13} /> {review.duration} min
                   </span>
                   <span>
-                    <RotateCcw size={13} /> {review.maxAttempts} intento{review.maxAttempts === 1 ? "" : "s"}
+                    <RotateCcw size={13} /> {attemptLimitLabel(review.maxAttempts)}
                   </span>
                 </div>
                 <div className="review-card-progress">
@@ -506,6 +511,12 @@ function StudentReviewModal({
   ).length;
   const allAnswered = answeredCount === review.questions.length;
   const question = review.questions[current];
+  const canRetry = Boolean(
+    review.myAttempt &&
+      review.status === "published" &&
+      (review.maxAttempts === 0 ||
+        review.myAttempt.attemptNumber < review.maxAttempts),
+  );
 
   useEffect(() => {
     if (!review.attachments.length) return;
@@ -702,10 +713,12 @@ function StudentReviewModal({
               <span><Gauge size={16} /><div><small>Puntaje</small><strong>{review.myAttempt?.score ?? 0} de {review.myAttempt?.maxScore ?? 0}</strong></div></span>
               <span><CalendarDays size={16} /><div><small>Finalizado</small><strong>{formatDateTime(review.myAttempt?.completedAt ?? review.myAttempt?.updatedAt ?? new Date().toISOString())}</strong></div></span>
             </div>
-            {review.myAttempt && review.myAttempt.attemptNumber < review.maxAttempts && review.status === "published" && (
+            {review.myAttempt && canRetry && (
               <button className="secondary-button" onClick={() => void restart()} disabled={restarting}>
                 {restarting ? <LoaderCircle className="spin" size={15} /> : <RotateCcw size={15} />}
-                Intentar de nuevo ({review.maxAttempts - review.myAttempt.attemptNumber} disponible{review.maxAttempts - review.myAttempt.attemptNumber === 1 ? "" : "s"})
+                {review.maxAttempts === 0
+                  ? "Intentar de nuevo · sin límite"
+                  : `Intentar de nuevo (${review.maxAttempts - review.myAttempt.attemptNumber} disponible${review.maxAttempts - review.myAttempt.attemptNumber === 1 ? "" : "s"})`}
               </button>
             )}
             <button className="primary-button" onClick={onClose}>Volver a repasos</button>
@@ -936,7 +949,7 @@ function StaffReviewModal({
               <small>Configuración</small>
               <h3>Vista del repaso</h3>
               <p>{review.description || "Sin descripción adicional."}</p>
-              <div><span><ListChecks size={14} /> {review.questions.length} reactivos</span><span><Clock3 size={14} /> {review.duration} min</span><span><RotateCcw size={14} /> {review.maxAttempts} intento{review.maxAttempts === 1 ? "" : "s"}</span></div>
+              <div><span><ListChecks size={14} /> {review.questions.length} reactivos</span><span><Clock3 size={14} /> {review.duration} min</span><span><RotateCcw size={14} /> {attemptLimitLabel(review.maxAttempts)}</span></div>
             </section>
             <section className="review-question-preview">
               <small>Reactivos</small>
@@ -1090,7 +1103,7 @@ export function ReviewCreateModal({
                 <label>Materia<select value={subject} onChange={(event) => { setSubject(event.target.value); setSelectedGroups([]); }}>{subjectOptions.length ? subjectOptions.map((item) => <option key={item}>{item}</option>) : <option>General</option>}</select></label>
                 <label>Semana<select value={weekId} onChange={(event) => setWeekId(event.target.value)} required><option value="" disabled>Selecciona una semana</option>{calendar.weeks.map((week) => <option value={week.id} key={week.id}>{week.label} · {formatDate(week.startAt)}</option>)}</select></label>
                 <label>Duración estimada<input type="number" min={3} max={60} value={duration} onChange={(event) => setDuration(Number(event.target.value))} /></label>
-                <label>Intentos permitidos<select value={maxAttempts} onChange={(event) => setMaxAttempts(Number(event.target.value))}><option value={1}>1 intento</option><option value={2}>2 intentos</option><option value={3}>3 intentos</option></select></label>
+                <label>Intentos permitidos<select value={maxAttempts} onChange={(event) => setMaxAttempts(Number(event.target.value))}><option value={1}>1 intento</option><option value={2}>2 intentos</option><option value={3}>3 intentos</option><option value={5}>5 intentos</option><option value={0}>Ilimitados</option></select></label>
                 <label className="review-span-2">Instrucciones <small>Opcional</small><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Explica qué deben recordar antes de comenzar" maxLength={800} rows={3} /></label>
               </div>
             </section>

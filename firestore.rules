@@ -787,7 +787,6 @@ service cloud.firestore {
           || (
             roleIs("student")
             && request.auth.uid == studentId
-            && resource.data.studentId == studentId
           )
         );
         allow create, update, delete: if false;

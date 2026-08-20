@@ -164,7 +164,10 @@ function reviewFromData(
     title: String(data.title ?? "Repaso sin nombre"),
     description: String(data.description ?? ""),
     duration: Math.max(1, Number(data.duration ?? 10)),
-    maxAttempts: Math.max(1, Number(data.maxAttempts ?? 1)),
+    maxAttempts:
+      Number(data.maxAttempts ?? 1) === 0
+        ? 0
+        : Math.max(1, Number(data.maxAttempts ?? 1)),
     status: (["draft", "published", "closed"].includes(String(data.status))
       ? data.status
       : "draft") as WeeklyReviewStatus,
