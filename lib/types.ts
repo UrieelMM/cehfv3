@@ -262,6 +262,78 @@ export type Material = {
   reviewed: boolean;
 };
 
+export type LearningMaterialType =
+  | "pdf"
+  | "audio"
+  | "video"
+  | "image"
+  | "document"
+  | "link"
+  | "other";
+
+export type LearningMaterialLink = {
+  id: string;
+  label: string;
+  url: string;
+};
+
+export type LearningMaterialAttachment = {
+  id: string;
+  name: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+  downloadUrl?: string;
+};
+
+export type LearningMaterial = {
+  id: string;
+  firestorePath: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  subjectId: string;
+  subject: string;
+  title: string;
+  description: string;
+  type: LearningMaterialType;
+  links: LearningMaterialLink[];
+  attachments: LearningMaterialAttachment[];
+  required: boolean;
+  audienceStudentIds: string[];
+  targetGroups: string[];
+  managerIds: string[];
+  createdBy: string;
+  createdByName: string;
+  createdByRole: "director" | "teacher";
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LearningMaterialView = {
+  studentId: string;
+  studentName: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  viewCount: number;
+};
+
+export type LearningMaterialCreateInput = {
+  title: string;
+  description: string;
+  type: LearningMaterialType;
+  subject: string;
+  weekId: string;
+  targetGroups: string[];
+  links: Array<{ label: string; url: string }>;
+  files: File[];
+  required: boolean;
+};
+
 export type ProgressLevel =
   | "achieved"
   | "in_progress"
@@ -329,10 +401,20 @@ export type ForumAttachment = {
   name: string;
   type: "image" | "document" | "link";
   sizeLabel?: string;
+  storagePath?: string;
+  contentType?: string;
+  size?: number;
+};
+
+export type ForumParticipant = {
+  uid: string;
+  name: string;
+  initials: string;
 };
 
 export type ForumReply = {
   id: string;
+  authorId?: string;
   author: string;
   initials: string;
   body: string;
@@ -346,6 +428,7 @@ export type ForumReply = {
   reports?: number;
   markedAnswer?: boolean;
   edited?: boolean;
+  reportedByMe?: boolean;
 };
 
 export type ForumTopicKind =
@@ -359,6 +442,8 @@ export type ForumTopicKind =
 
 export type ForumTopic = {
   id: string;
+  creatorId?: string;
+  creatorRole?: "director" | "teacher";
   forumId: string;
   forumName: string;
   title: string;
@@ -368,6 +453,7 @@ export type ForumTopic = {
   group: string;
   responsible: string;
   participants: string[];
+  participantProfiles?: ForumParticipant[];
   opensAt?: string;
   closesAt: string;
   status: "open" | "scheduled" | "closed" | "archived";
@@ -376,6 +462,7 @@ export type ForumTopic = {
   pinned?: boolean;
   unreadCount?: number;
   lastActivity: string;
+  lastActivityAt?: string;
   replies: ForumReply[];
 };
 
@@ -389,6 +476,20 @@ export type ForumModerationCase = {
   reportedAt: string;
   status: "open" | "hidden" | "dismissed" | "restored";
   resolvedBy?: string;
+  resolvedAt?: string;
+  originalBody?: string;
+  reportCount?: number;
+};
+
+export type ForumBan = {
+  userId: string;
+  userName: string;
+  active: boolean;
+  reason: string;
+  bannedBy: string;
+  bannedAt: string;
+  restoredBy?: string;
+  restoredAt?: string;
 };
 
 export type AppNotification = {
@@ -403,9 +504,167 @@ export type AppNotification = {
     | "material"
     | "wall"
     | "forum"
+    | "workshop"
     | "system";
   createdAt: string;
   read: boolean;
+};
+
+export type WorkshopKind = "tics" | "reading";
+
+export type WorkshopResource = {
+  id: string;
+  workshopId: string;
+  institutionId: string;
+  title: string;
+  description: string;
+  fileName: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+  uploadedBy: string;
+  uploadedByName: string;
+  createdAt: string;
+};
+
+export type Workshop = {
+  id: string;
+  institutionId: string;
+  kind: WorkshopKind;
+  title: string;
+  shortTitle: string;
+  description: string;
+  studentIds: string[];
+  teacherIds: string[];
+  managerIds: string[];
+  teacherStudentIds: Record<string, string[]>;
+  memberIds: string[];
+  resources: WorkshopResource[];
+  updatedAt: string;
+};
+
+export type WorkshopAccessInput = {
+  studentIds: string[];
+  teacherIds: string[];
+  managerIds: string[];
+  teacherStudentIds: Record<string, string[]>;
+};
+
+export type WorkshopTaskStatus = "draft" | "published" | "closed";
+
+export type WorkshopTaskAttachment = {
+  id: string;
+  name: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+};
+
+export type WorkshopTask = {
+  id: string;
+  workshopId: string;
+  institutionId: string;
+  title: string;
+  description: string;
+  dueAt: string;
+  status: WorkshopTaskStatus;
+  audienceStudentIds: string[];
+  attachments: WorkshopTaskAttachment[];
+  createdBy: string;
+  teacherName: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkshopSubmissionStatus =
+  | "submitted"
+  | "feedback"
+  | "reviewed";
+
+export type WorkshopSubmission = {
+  id: string;
+  taskId: string;
+  workshopId: string;
+  institutionId: string;
+  studentId: string;
+  studentName: string;
+  content: string;
+  attachments: WorkshopTaskAttachment[];
+  version: number;
+  status: WorkshopSubmissionStatus;
+  teacherFeedback: string;
+  submittedAt: string;
+  feedbackAt?: string;
+  reviewedAt?: string;
+  updatedAt: string;
+};
+
+export type GuardianContactStatus =
+  | "active"
+  | "paused"
+  | "opted_out"
+  | "invalid";
+
+export type GuardianContact = {
+  id: string;
+  institutionId: string;
+  name: string;
+  phoneE164: string;
+  phoneMasked: string;
+  relationship: string;
+  studentIds: string[];
+  studentNames: string[];
+  categories: string[];
+  status: GuardianContactStatus;
+  consentStatus: "active" | "withdrawn";
+  consentVersion: string;
+  consentGrantedAt: string;
+  optedOutAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WhatsAppConfiguration = {
+  institutionId: string;
+  enabled: boolean;
+  dailySummaryEnabled: boolean;
+  sendTime: string;
+  sendOnNoTaskDays: boolean;
+  timeZone: string;
+  templateName: string;
+  templateLanguage: string;
+  graphApiVersion: string;
+  lastSuccessfulSendAt?: string;
+};
+
+export type WhatsAppMessageStatus =
+  | "queued"
+  | "sending"
+  | "sent"
+  | "delivered"
+  | "read"
+  | "failed"
+  | "cancelled";
+
+export type WhatsAppOutboxMessage = {
+  id: string;
+  institutionId: string;
+  guardianContactId: string;
+  recipientName: string;
+  toMasked: string;
+  messageKind: "daily_task_summary" | "daily_task_summary_test";
+  businessDate: string;
+  status: WhatsAppMessageStatus;
+  attemptCount: number;
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
+  failedAt?: string;
+  lastErrorCode?: string;
+  lastErrorMessage?: string;
+  test: boolean;
 };
 
 export type PortalSettings = {
@@ -426,6 +685,7 @@ export type PortalState = {
   wallPosts: WallPost[];
   forumTopics: ForumTopic[];
   forumModeration: ForumModerationCase[];
+  forumBans: ForumBan[];
   notifications: AppNotification[];
   settings: PortalSettings;
   updatedAt?: string;
@@ -441,6 +701,7 @@ export type SectionKey =
   | "weekly-materials"
   | "wall-newspaper"
   | "forum"
+  | "workshops"
   | "users"
   | "settings"
   | "profile";

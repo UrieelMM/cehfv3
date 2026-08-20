@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import {
@@ -10,9 +11,11 @@ import {
   type WriteBatch,
 } from "firebase-admin/firestore";
 import { logger, setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
 import {
   HttpsError,
   onCall,
+  onRequest,
   type CallableRequest,
 } from "firebase-functions/v2/https";
 import {
@@ -20,15 +23,43 @@ import {
   onDocumentWritten,
 } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import {
+  WHATSAPP_CONSENT_VERSION,
+  WHATSAPP_DAILY_TEMPLATE,
+  WHATSAPP_TEMPLATE_LANGUAGE,
+  WHATSAPP_TIMEZONE,
+  buildTemplateParameters,
+  dailyOutboxId,
+  firstName,
+  isOptOutMessage,
+  isTransientWhatsAppError,
+  isValidSendTime,
+  localDateKey,
+  maskPhone,
+  normalizeMexicanPhone,
+  retryDelayMinutes,
+  shouldRunDailySummary,
+  type DailyStudentSummary,
+} from "./whatsapp-core.js";
 
 initializeApp();
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
 
 const db = getFirestore();
+const whatsappAccessToken = defineSecret("WHATSAPP_ACCESS_TOKEN");
+const whatsappPhoneNumberId = defineSecret("WHATSAPP_PHONE_NUMBER_ID");
+const whatsappWebhookVerifyToken = defineSecret("WHATSAPP_WEBHOOK_VERIFY_TOKEN");
+const whatsappAppSecret = defineSecret("WHATSAPP_APP_SECRET");
 const TASK_PATH =
   "institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}";
 const HISTORY_PATH = `${TASK_PATH}/entregas/{studentId}/historial/{eventId}`;
 const EXTENSION_PATH = `${TASK_PATH}/prorrogas/{studentId}`;
+const WORKSHOP_PATH =
+  "institutions/{institutionId}/workshops/{workshopId}";
+const WORKSHOP_RESOURCE_PATH = `${WORKSHOP_PATH}/resources/{resourceId}`;
+const WORKSHOP_TASK_PATH = `${WORKSHOP_PATH}/tasks/{taskId}`;
+const WORKSHOP_SUBMISSION_PATH =
+  `${WORKSHOP_TASK_PATH}/submissions/{studentId}`;
 const ACADEMIC_TIMEZONE = "America/Mexico_City";
 
 type CalendarWeek = {
@@ -889,6 +920,572 @@ async function writeNotifications(
   }
 }
 
+function notificationRecipients(value: unknown) {
+  return Array.isArray(value)
+    ? [...new Set(value.map(String).filter(Boolean))]
+    : [];
+}
+
+type MaterialStaff = {
+  uid: string;
+  institutionId: string;
+  name: string;
+  role: "director" | "teacher";
+  subjects: string[];
+};
+
+const MATERIAL_TYPES = [
+  "pdf",
+  "audio",
+  "video",
+  "image",
+  "document",
+  "link",
+  "other",
+] as const;
+
+async function requireMaterialStaff(
+  auth: CallableRequest<unknown>["auth"],
+): Promise<MaterialStaff> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const snapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = snapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  const directorClaimsAreValid =
+    role !== "director" ||
+    (
+      auth.token.role === "director" &&
+      auth.token.allPermissions === true &&
+      auth.token.institutionId === institutionId
+    );
+  if (
+    !snapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher"].includes(role) ||
+    !institutionId ||
+    !directorClaimsAreValid
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil no tiene permiso para publicar materiales.",
+    );
+  }
+  return {
+    uid: auth.uid,
+    institutionId,
+    name: String(profile?.name ?? "Campus CEHF"),
+    role: role as MaterialStaff["role"],
+    subjects: Array.isArray(profile?.subjects) ? profile.subjects.map(String) : [],
+  };
+}
+
+function materialId(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{8,128}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", "El identificador del material no es válido.");
+  }
+  return normalized;
+}
+
+function materialText(
+  value: unknown,
+  field: string,
+  minimum: number,
+  maximum: number,
+) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < minimum || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} debe tener entre ${minimum} y ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function optionalMaterialText(value: unknown, field: string, maximum: number) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .trim();
+  if (normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} puede tener hasta ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function materialGroups(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Los grupos no tienen un formato válido.");
+  }
+  const groups = [...new Set(value.map((item) => String(item).trim()).filter(Boolean))];
+  if (groups.length > 30 || groups.some((group) => group.length > 30)) {
+    throw new HttpsError("invalid-argument", "Selecciona grupos válidos.");
+  }
+  return groups;
+}
+
+function materialLinks(value: unknown) {
+  if (!Array.isArray(value) || value.length > 10) {
+    throw new HttpsError("invalid-argument", "Puedes agregar hasta 10 enlaces.");
+  }
+  return value.map((item, index) => {
+    const input = (item ?? {}) as Record<string, unknown>;
+    const url = String(input.url ?? "").trim();
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new HttpsError("invalid-argument", `El enlace ${index + 1} no es válido.`);
+    }
+    if (!["http:", "https:"].includes(parsed.protocol) || url.length > 2_000) {
+      throw new HttpsError("invalid-argument", `El enlace ${index + 1} no es seguro.`);
+    }
+    return {
+      id: materialId(input.id),
+      label: materialText(input.label || "Enlace", "El nombre del enlace", 1, 100),
+      url,
+    };
+  });
+}
+
+function materialAttachments(
+  value: unknown,
+  institutionId: string,
+  selectedMaterialId: string,
+) {
+  if (!Array.isArray(value) || value.length > 8) {
+    throw new HttpsError("invalid-argument", "Puedes agregar hasta 8 archivos.");
+  }
+  return value.map((item, index) => {
+    const input = (item ?? {}) as Record<string, unknown>;
+    const id = materialId(input.id);
+    const storagePath = String(input.storagePath ?? "");
+    const expectedPath = `institutions/${institutionId}/materials/${selectedMaterialId}/${id}`;
+    const size = Number(input.size ?? 0);
+    if (storagePath !== expectedPath || !Number.isFinite(size) || size <= 0 || size >= 100 * 1024 * 1024) {
+      throw new HttpsError(
+        "invalid-argument",
+        `El archivo ${index + 1} no coincide con la carga autorizada.`,
+      );
+    }
+    return {
+      id,
+      name: materialText(input.name, "El nombre del archivo", 1, 180),
+      storagePath,
+      contentType: materialText(input.contentType, "El tipo del archivo", 1, 120),
+      size,
+    };
+  });
+}
+
+export const createMaterial = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  if (String(input.institutionId ?? "") !== actor.institutionId) {
+    throw new HttpsError("permission-denied", "La institución no coincide con tu perfil.");
+  }
+  const selectedMaterialId = materialId(input.materialId);
+  const title = materialText(input.title, "El nombre", 3, 120);
+  const description = optionalMaterialText(input.description, "La descripción", 800);
+  const subject = materialText(input.subject, "La materia", 2, 80);
+  const subjectId = calendarId(input.subjectId, "La materia");
+  const type = String(input.type ?? "");
+  if (!MATERIAL_TYPES.includes(type as typeof MATERIAL_TYPES[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un tipo de material válido.");
+  }
+  if (actor.role === "teacher" && !actor.subjects.includes(subject)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo puedes publicar materiales de las materias que impartes.",
+    );
+  }
+  const targetGroups = materialGroups(input.targetGroups);
+  const links = materialLinks(input.links);
+  const attachments = materialAttachments(
+    input.attachments,
+    actor.institutionId,
+    selectedMaterialId,
+  );
+  if (!links.length && !attachments.length) {
+    throw new HttpsError("invalid-argument", "Agrega al menos un enlace o archivo.");
+  }
+  const schoolYearId = calendarId(input.schoolYearId, "El ciclo escolar");
+  const termId = calendarId(input.termId, "El trimestre");
+  const weekId = calendarId(input.weekId, "La semana");
+  const weekReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/semanas/${weekId}`,
+  );
+  const termReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/trimestres/${termId}`,
+  );
+  const configReference = db.doc(
+    `institutions/${actor.institutionId}/configuracion/academica`,
+  );
+  const [weekSnapshot, termSnapshot, configSnapshot] = await db.getAll(
+    weekReference,
+    termReference,
+    configReference,
+  );
+  const week = weekSnapshot.data();
+  const term = termSnapshot.data();
+  const config = configSnapshot.data();
+  if (
+    !weekSnapshot.exists ||
+    !termSnapshot.exists ||
+    week?.active !== true ||
+    term?.active !== true ||
+    !Array.isArray(term?.weekIds) ||
+    !term.weekIds.includes(weekId)
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La semana seleccionada no pertenece al calendario académico activo.",
+    );
+  }
+
+  const peopleSnapshot = await db
+    .collection("users")
+    .where("institutionId", "==", actor.institutionId)
+    .get();
+  const people = peopleSnapshot.docs.map((snapshot) => ({
+    uid: snapshot.id,
+    ...snapshot.data(),
+  })) as Array<DocumentData & { uid: string }>;
+  const recipients = people.filter((person) => {
+    if (person.active !== true || person.role !== "student") return false;
+    const subjects = Array.isArray(person.subjects) ? person.subjects.map(String) : [];
+    const teacherIds = Array.isArray(person.teacherIds)
+      ? person.teacherIds.map(String)
+      : [];
+    const group = `${String(person.grade ?? "")} ${String(person.group ?? "")}`.trim();
+    return (
+      subjects.includes(subject) &&
+      (actor.role === "director" || teacherIds.includes(actor.uid)) &&
+      (!targetGroups.length || targetGroups.includes(group))
+    );
+  });
+  if (!recipients.length) {
+    throw new HttpsError(
+      "failed-precondition",
+      actor.role === "teacher"
+        ? "No tienes alumnos asignados en esa materia y grupos."
+        : "No hay alumnos activos para esa materia y grupos.",
+    );
+  }
+  const resolvedGroups = [
+    ...new Set(
+      recipients.map((person) =>
+        `${String(person.grade ?? "")} ${String(person.group ?? "")}`.trim(),
+      ),
+    ),
+  ].filter(Boolean);
+  const managerIds = actor.role === "teacher"
+    ? [actor.uid]
+    : people
+        .filter((person) => {
+          if (person.active !== true || person.role !== "teacher") return false;
+          const teacherSubjects = Array.isArray(person.subjects)
+            ? person.subjects.map(String)
+            : [];
+          return teacherSubjects.includes(subject) && recipients.some((student) => {
+            const teacherIds = Array.isArray(student.teacherIds)
+              ? student.teacherIds.map(String)
+              : [];
+            return teacherIds.includes(person.uid);
+          });
+        })
+        .map((person) => person.uid);
+
+  const reference = db.doc(
+    `institutions/${actor.institutionId}/materials/${selectedMaterialId}`,
+  );
+  const existing = await reference.get();
+  if (existing.exists) {
+    const data = existing.data();
+    if (data?.createdBy === actor.uid) {
+      return {
+        materialId: selectedMaterialId,
+        recipientCount: notificationRecipients(data.audienceStudentIds).length,
+      };
+    }
+    throw new HttpsError("already-exists", "Ese material ya existe.");
+  }
+  const now = Timestamp.now();
+  const material = {
+    institutionId: actor.institutionId,
+    schoolYearId,
+    schoolYearLabel: String(config?.schoolYearLabel ?? input.schoolYearLabel ?? schoolYearId),
+    termId,
+    termLabel: String(term?.label ?? input.termLabel ?? "Trimestre"),
+    weekId,
+    weekLabel: String(week?.label ?? input.weekLabel ?? "Semana"),
+    subjectId,
+    subject,
+    title,
+    description,
+    type,
+    links,
+    attachments,
+    required: input.required === true,
+    audienceStudentIds: recipients.map((person) => person.uid),
+    targetGroups: resolvedGroups,
+    managerIds,
+    createdBy: actor.uid,
+    createdByName: actor.name,
+    createdByRole: actor.role,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const batch = db.batch();
+  batch.create(reference, material);
+  batch.create(db.collection("auditEvents").doc(), {
+    entityType: "material",
+    entityId: selectedMaterialId,
+    institutionId: actor.institutionId,
+    action: "material.published",
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    after: {
+      subject,
+      weekId,
+      type,
+      required: input.required === true,
+      recipientCount: recipients.length,
+    },
+    createdAt: now,
+  });
+  await batch.commit();
+
+  await writeNotifications(
+    recipients.map((person) => person.uid),
+    `material-${selectedMaterialId}`,
+    {
+      category: "material",
+      title: `Nuevo material: ${title}`,
+      detail: `${subject} · ${String(week?.label ?? "Semana")}${input.required === true ? " · Obligatorio" : ""}`,
+      materialId: selectedMaterialId,
+      url: "/weekly-materials",
+      eventType: "material_published",
+    },
+  );
+  const managerRecipients = managerIds.filter((uid) => uid !== actor.uid);
+  if (managerRecipients.length) {
+    await writeNotifications(
+      managerRecipients,
+      `material-manager-${selectedMaterialId}`,
+      {
+        category: "material",
+        title: "Nuevo material para tus alumnos",
+        detail: `${title} · ${subject} · ${String(week?.label ?? "Semana")}`,
+        materialId: selectedMaterialId,
+        url: "/weekly-materials",
+        eventType: "material_assigned_to_students",
+      },
+    );
+  }
+  logger.info("Learning material published", {
+    materialId: selectedMaterialId,
+    institutionId: actor.institutionId,
+    actorId: actor.uid,
+    recipientCount: recipients.length,
+  });
+  return { materialId: selectedMaterialId, recipientCount: recipients.length };
+});
+
+export const onWorkshopAccessChanged = onDocumentWritten(
+  { document: WORKSHOP_PATH },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (!after) return;
+    const beforeMembers = new Set(notificationRecipients(before?.memberIds));
+    const beforeManagers = new Set(notificationRecipients(before?.managerIds));
+    const nextMembers = notificationRecipients(after.memberIds);
+    const nextManagers = notificationRecipients(after.managerIds);
+    const newManagers = nextManagers.filter((userId) => !beforeManagers.has(userId));
+    const managerSet = new Set(newManagers);
+    const newParticipants = nextMembers.filter(
+      (userId) => !beforeMembers.has(userId) && !managerSet.has(userId),
+    );
+    const workshopId = String(event.params.workshopId);
+    const workshopTitle = String(after.title ?? "Talleres");
+
+    if (newParticipants.length) {
+      await writeNotifications(
+        newParticipants,
+        `workshop-access-${workshopId}-${event.id}`,
+        {
+          category: "workshop",
+          title: `Ya tienes acceso a ${workshopTitle}`,
+          detail: "Entra para descubrir las actividades y recursos disponibles.",
+          workshopId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: "workshop_access_granted",
+        },
+      );
+    }
+
+    if (newManagers.length) {
+      await writeNotifications(
+        newManagers,
+        `workshop-manager-${workshopId}-${event.id}`,
+        {
+          category: "workshop",
+          title: `Ahora administras ${workshopTitle}`,
+          detail: "Ya puedes subir y retirar recursos de este taller.",
+          workshopId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: "workshop_manager_granted",
+        },
+      );
+    }
+  },
+);
+
+export const onWorkshopResourceCreated = onDocumentCreated(
+  { document: WORKSHOP_RESOURCE_PATH },
+  async (event) => {
+    const resource = event.data?.data();
+    if (!resource) return;
+    const workshopReference = event.data?.ref.parent.parent;
+    if (!workshopReference) return;
+    const workshopSnapshot = await workshopReference.get();
+    if (!workshopSnapshot.exists) return;
+    const workshop = workshopSnapshot.data();
+    const uploadedBy = String(resource.uploadedBy ?? "");
+    const recipients = notificationRecipients(workshop?.memberIds).filter(
+      (userId) => userId !== uploadedBy,
+    );
+    if (!recipients.length) return;
+    const workshopId = String(event.params.workshopId);
+    await writeNotifications(
+      recipients,
+      `workshop-resource-${event.params.resourceId}`,
+      {
+        category: "workshop",
+        title: `Nuevo recurso en ${String(workshop?.title ?? "Talleres")}`,
+        detail: String(resource.title ?? resource.fileName ?? "Material disponible"),
+        workshopId,
+        resourceId: event.params.resourceId,
+        url: `/workshops/${encodeURIComponent(workshopId)}`,
+        eventType: "workshop_resource_created",
+      },
+    );
+  },
+);
+
+export const onWorkshopTaskChanged = onDocumentWritten(
+  { document: WORKSHOP_TASK_PATH },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (!after || after.status !== "published" || before?.status === "published") {
+      return;
+    }
+    const recipients = notificationRecipients(after.audienceStudentIds);
+    if (!recipients.length) return;
+    const workshopId = String(event.params.workshopId);
+    const reopened = before?.status === "closed";
+    await writeNotifications(
+      recipients,
+      `workshop-task-${event.params.taskId}-${event.id}`,
+      {
+        category: "workshop",
+        title: reopened
+          ? `Trabajo reabierto: ${String(after.title ?? "Talleres")}`
+          : `Nuevo trabajo: ${String(after.title ?? "Talleres")}`,
+        detail: `${String(after.teacherName ?? "Tu maestro")} · revisa la fecha de entrega.`,
+        workshopId,
+        taskId: event.params.taskId,
+        url: `/workshops/${encodeURIComponent(workshopId)}`,
+        eventType: reopened
+          ? "workshop_task_reopened"
+          : "workshop_task_published",
+      },
+    );
+  },
+);
+
+export const onWorkshopSubmissionChanged = onDocumentWritten(
+  { document: WORKSHOP_SUBMISSION_PATH },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (!after) return;
+    const taskReference = afterSnapshot.ref.parent.parent;
+    if (!taskReference) return;
+    const taskSnapshot = await taskReference.get();
+    if (!taskSnapshot.exists) return;
+    const task = taskSnapshot.data();
+    const workshopId = String(event.params.workshopId);
+    const version = Number(after.version ?? 1);
+    const submitted =
+      after.status === "submitted" &&
+      (!before || Number(before.version ?? 0) < version);
+
+    if (submitted) {
+      await writeNotifications(
+        [String(task?.createdBy ?? "")],
+        `workshop-submission-${event.params.taskId}-${event.params.studentId}-v${version}`,
+        {
+          category: "workshop",
+          title: `${String(after.studentName ?? "Un alumno")} entregó ${String(task?.title ?? "un trabajo")}`,
+          detail: `Versión ${version} lista para revisar.`,
+          workshopId,
+          taskId: event.params.taskId,
+          studentId: event.params.studentId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: version > 1
+            ? "workshop_task_resubmitted"
+            : "workshop_task_submitted",
+        },
+      );
+      return;
+    }
+
+    if (
+      ["feedback", "reviewed"].includes(String(after.status)) &&
+      (before?.status !== after.status ||
+        before?.teacherFeedback !== after.teacherFeedback)
+    ) {
+      const reviewed = after.status === "reviewed";
+      await writeNotifications(
+        [String(event.params.studentId)],
+        `workshop-feedback-${event.params.taskId}-${event.params.studentId}-v${version}-${after.status}-${event.id}`,
+        {
+          category: "workshop",
+          title: reviewed
+            ? `Trabajo finalizado: ${String(task?.title ?? "Talleres")}`
+            : `Nueva retroalimentación: ${String(task?.title ?? "Talleres")}`,
+          detail: reviewed
+            ? "Tu maestro concluyó la revisión."
+            : "Tu maestro dejó comentarios para tu siguiente versión.",
+          workshopId,
+          taskId: event.params.taskId,
+          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          eventType: reviewed
+            ? "workshop_task_reviewed"
+            : "workshop_task_feedback",
+        },
+      );
+    }
+  },
+);
+
 const MURAL_CATEGORIES = [
   "Ciencia y curiosidades",
   "Comunidad",
@@ -1641,5 +2238,1983 @@ export const publishScheduledTasks = onSchedule(
     );
     await batch.commit();
     logger.info("Scheduled tasks published", { count: snapshot.size });
+  },
+);
+
+type GuardianContactStatus =
+  | "active"
+  | "paused"
+  | "opted_out"
+  | "invalid";
+
+type WhatsAppConfiguration = {
+  institutionId: string;
+  enabled: boolean;
+  dailySummaryEnabled: boolean;
+  sendTime: string;
+  sendOnNoTaskDays: boolean;
+  timeZone: string;
+  templateName: string;
+  templateLanguage: string;
+  graphApiVersion: string;
+};
+
+type SummaryTask = {
+  kind: "academic" | "workshop";
+  reference: DocumentReference;
+  targetGroup?: string;
+  audienceStudentIds?: string[];
+};
+
+type SummaryStudent = {
+  uid: string;
+  name: string;
+  groupKey: string;
+};
+
+const DEFAULT_WHATSAPP_CONFIGURATION: WhatsAppConfiguration = {
+  institutionId: "cehf-primaria",
+  enabled: false,
+  dailySummaryEnabled: true,
+  sendTime: "18:00",
+  sendOnNoTaskDays: true,
+  timeZone: WHATSAPP_TIMEZONE,
+  templateName: WHATSAPP_DAILY_TEMPLATE,
+  templateLanguage: WHATSAPP_TEMPLATE_LANGUAGE,
+  graphApiVersion: "v23.0",
+};
+
+function whatsappText(
+  value: unknown,
+  label: string,
+  minimum = 1,
+  maximum = 100,
+) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u001F\u007F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < minimum || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${label} debe tener entre ${minimum} y ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function whatsappContactId(value: unknown) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", "El contacto seleccionado no es válido.");
+  }
+  return normalized;
+}
+
+function whatsappStudentIds(value: unknown) {
+  if (!Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Selecciona al menos un estudiante.");
+  }
+  const ids = [...new Set(value.map(String).map((item) => item.trim()).filter(Boolean))];
+  if (
+    !ids.length ||
+    ids.length > 10 ||
+    ids.some((id) => !/^[A-Za-z0-9_-]{1,128}$/.test(id))
+  ) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Selecciona entre 1 y 10 estudiantes válidos.",
+    );
+  }
+  return ids;
+}
+
+function whatsappConfigFromData(
+  institutionId: string,
+  data?: DocumentData,
+): WhatsAppConfiguration {
+  return {
+    ...DEFAULT_WHATSAPP_CONFIGURATION,
+    institutionId,
+    enabled: data?.enabled === true,
+    dailySummaryEnabled: data?.dailySummaryEnabled !== false,
+    sendTime: isValidSendTime(data?.sendTime) ? String(data?.sendTime) : "18:00",
+    sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
+    templateName: /^[a-z0-9_]{1,512}$/.test(String(data?.templateName ?? ""))
+      ? String(data?.templateName)
+      : WHATSAPP_DAILY_TEMPLATE,
+    templateLanguage: /^[A-Za-z_]{2,10}$/.test(
+      String(data?.templateLanguage ?? ""),
+    )
+      ? String(data?.templateLanguage)
+      : WHATSAPP_TEMPLATE_LANGUAGE,
+    graphApiVersion: /^v\d{1,2}\.0$/.test(String(data?.graphApiVersion ?? ""))
+      ? String(data?.graphApiVersion)
+      : "v23.0",
+    timeZone: WHATSAPP_TIMEZONE,
+  };
+}
+
+async function readWhatsAppConfiguration(institutionId: string) {
+  const snapshot = await db
+    .doc(`institutions/${institutionId}/configuracion/whatsapp`)
+    .get();
+  return whatsappConfigFromData(institutionId, snapshot.data());
+}
+
+async function verifyGuardianStudents(
+  institutionId: string,
+  studentIds: string[],
+) {
+  const snapshots = await db.getAll(
+    ...studentIds.map((studentId) => db.doc(`users/${studentId}`)),
+  );
+  const invalid = snapshots.find((snapshot) => {
+    const student = snapshot.data();
+    return (
+      !snapshot.exists ||
+      student?.institutionId !== institutionId ||
+      student?.role !== "student" ||
+      student?.active !== true
+    );
+  });
+  if (invalid) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Uno de los estudiantes seleccionados ya no está activo.",
+    );
+  }
+  return snapshots.map((snapshot) => ({
+    id: snapshot.id,
+    name: String(snapshot.data()?.name ?? "Alumno"),
+  }));
+}
+
+export const saveGuardianContact = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const name = whatsappText(input.name, "El nombre", 2, 100);
+  const relationship = whatsappText(input.relationship, "El parentesco", 2, 40);
+  let phoneE164: string;
+  try {
+    phoneE164 = normalizeMexicanPhone(input.phone);
+  } catch (error) {
+    throw new HttpsError(
+      "invalid-argument",
+      error instanceof Error ? error.message : "El teléfono no es válido.",
+    );
+  }
+  const studentIds = whatsappStudentIds(input.studentIds);
+  const students = await verifyGuardianStudents(director.institutionId, studentIds);
+  if (input.consentConfirmed !== true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Confirma que el tutor autorizó recibir estos avisos por WhatsApp.",
+    );
+  }
+  const contactId = input.id ? whatsappContactId(input.id) : db.collection("guardianContacts").doc().id;
+  const reference = db.doc(`guardianContacts/${contactId}`);
+  const existing = await reference.get();
+  if (
+    existing.exists &&
+    existing.data()?.institutionId !== director.institutionId
+  ) {
+    throw new HttpsError("permission-denied", "El contacto no pertenece a esta institución.");
+  }
+  const contacts = await db
+    .collection("guardianContacts")
+    .where("institutionId", "==", director.institutionId)
+    .get();
+  const duplicate = contacts.docs.find(
+    (contact) => contact.id !== contactId && contact.data().phoneE164 === phoneE164,
+  );
+  if (duplicate) {
+    throw new HttpsError(
+      "already-exists",
+      "Ese teléfono ya está registrado como contacto familiar.",
+    );
+  }
+  const now = FieldValue.serverTimestamp();
+  const data = {
+    institutionId: director.institutionId,
+    name,
+    phoneE164,
+    phoneMasked: maskPhone(phoneE164),
+    relationship,
+    studentIds,
+    studentNames: students.map((student) => student.name),
+    categories: ["daily_task_summary"],
+    language: WHATSAPP_TEMPLATE_LANGUAGE,
+    timeZone: WHATSAPP_TIMEZONE,
+    status: "active" satisfies GuardianContactStatus,
+    consentStatus: "active",
+    consentSource: "school_admin",
+    consentVersion: WHATSAPP_CONSENT_VERSION,
+    consentGrantedAt: now,
+    consentRecordedBy: director.uid,
+    updatedAt: now,
+    updatedBy: director.uid,
+    ...(existing.exists ? {} : { createdAt: now, createdBy: director.uid }),
+  };
+  const batch = db.batch();
+  batch.set(reference, data, { merge: true });
+  batch.set(db.collection("auditEvents").doc(), {
+    institutionId: director.institutionId,
+    action: existing.exists ? "guardian_contact_updated" : "guardian_contact_created",
+    contactId,
+    actorUid: director.uid,
+    actorName: director.name,
+    studentIds,
+    createdAt: now,
+  });
+  await batch.commit();
+  return {
+    contact: {
+      id: contactId,
+      ...data,
+      consentGrantedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...(existing.exists ? {} : { createdAt: new Date().toISOString() }),
+    },
+  };
+});
+
+export const setGuardianContactStatus = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const contactId = whatsappContactId(input.id);
+  const status = String(input.status ?? "") as GuardianContactStatus;
+  if (!["active", "paused", "opted_out"].includes(status)) {
+    throw new HttpsError("invalid-argument", "El estado solicitado no es válido.");
+  }
+  const reference = db.doc(`guardianContacts/${contactId}`);
+  const snapshot = await reference.get();
+  if (
+    !snapshot.exists ||
+    snapshot.data()?.institutionId !== director.institutionId
+  ) {
+    throw new HttpsError("not-found", "El contacto ya no existe.");
+  }
+  if (
+    status === "active" &&
+    snapshot.data()?.status === "opted_out" &&
+    input.consentConfirmed !== true
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Se requiere un nuevo consentimiento para reactivar este contacto.",
+    );
+  }
+  const now = FieldValue.serverTimestamp();
+  const update: Record<string, unknown> = {
+    status,
+    updatedAt: now,
+    updatedBy: director.uid,
+  };
+  if (status === "opted_out") {
+    update.consentStatus = "withdrawn";
+    update.optedOutAt = now;
+    update.optOutSource = "school_admin";
+  } else if (status === "active") {
+    update.consentStatus = "active";
+    if (snapshot.data()?.status === "opted_out") {
+      update.consentGrantedAt = now;
+      update.consentVersion = WHATSAPP_CONSENT_VERSION;
+      update.consentRecordedBy = director.uid;
+    }
+  }
+  const batch = db.batch();
+  batch.update(reference, update);
+  batch.set(db.collection("auditEvents").doc(), {
+    institutionId: director.institutionId,
+    action: `guardian_contact_${status}`,
+    contactId,
+    actorUid: director.uid,
+    actorName: director.name,
+    createdAt: now,
+  });
+  await batch.commit();
+  return { id: contactId, status };
+});
+
+export const saveWhatsAppConfiguration = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  if (
+    typeof input.enabled !== "boolean" ||
+    typeof input.dailySummaryEnabled !== "boolean" ||
+    typeof input.sendOnNoTaskDays !== "boolean" ||
+    !isValidSendTime(input.sendTime)
+  ) {
+    throw new HttpsError("invalid-argument", "La configuración no es válida.");
+  }
+  const templateName = String(input.templateName ?? WHATSAPP_DAILY_TEMPLATE);
+  if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
+    throw new HttpsError("invalid-argument", "El nombre de la plantilla no es válido.");
+  }
+  const configuration: WhatsAppConfiguration = {
+    ...DEFAULT_WHATSAPP_CONFIGURATION,
+    institutionId: director.institutionId,
+    enabled: input.enabled,
+    dailySummaryEnabled: input.dailySummaryEnabled,
+    sendTime: String(input.sendTime),
+    sendOnNoTaskDays: input.sendOnNoTaskDays,
+    templateName,
+  };
+  const now = FieldValue.serverTimestamp();
+  const batch = db.batch();
+  batch.set(
+    db.doc(`institutions/${director.institutionId}/configuracion/whatsapp`),
+    {
+      ...configuration,
+      updatedAt: now,
+      updatedBy: director.uid,
+    },
+    { merge: true },
+  );
+  batch.set(db.collection("auditEvents").doc(), {
+    institutionId: director.institutionId,
+    action: "whatsapp_configuration_updated",
+    actorUid: director.uid,
+    actorName: director.name,
+    enabled: configuration.enabled,
+    sendTime: configuration.sendTime,
+    createdAt: now,
+  });
+  await batch.commit();
+  return { configuration };
+});
+
+function dueOnBusinessDate(
+  value: unknown,
+  businessDate: string,
+  timeZone: string,
+) {
+  const date = value instanceof Timestamp ? value.toDate() : new Date(String(value));
+  return !Number.isNaN(date.getTime()) && localDateKey(date, timeZone) === businessDate;
+}
+
+async function loadSummaryTasks(
+  institutionId: string,
+  businessDate: string,
+  timeZone: string,
+) {
+  const academicConfig = await db
+    .doc(`institutions/${institutionId}/configuracion/academica`)
+    .get();
+  const schoolYearId = String(academicConfig.data()?.schoolYearId ?? "");
+  const academicTasks = schoolYearId
+    ? await db
+        .collectionGroup("tareas")
+        .where("institutionId", "==", institutionId)
+        .where("schoolYearId", "==", schoolYearId)
+        .get()
+    : null;
+  const workshopTasks = await db
+    .collectionGroup("tasks")
+    .where("institutionId", "==", institutionId)
+    .get();
+  const tasks: SummaryTask[] = [];
+  academicTasks?.docs.forEach((snapshot) => {
+    const task = snapshot.data();
+    if (
+      ["published", "closed"].includes(String(task.status)) &&
+      dueOnBusinessDate(task.dueAt, businessDate, timeZone)
+    ) {
+      tasks.push({
+        kind: "academic",
+        reference: snapshot.ref,
+        targetGroup: String(task.targetGroup ?? ""),
+      });
+    }
+  });
+  workshopTasks.docs.forEach((snapshot) => {
+    const task = snapshot.data();
+    if (
+      snapshot.ref.path.includes("/workshops/") &&
+      ["published", "closed"].includes(String(task.status)) &&
+      dueOnBusinessDate(task.dueAt, businessDate, timeZone)
+    ) {
+      tasks.push({
+        kind: "workshop",
+        reference: snapshot.ref,
+        audienceStudentIds: notificationRecipients(task.audienceStudentIds),
+      });
+    }
+  });
+  return tasks;
+}
+
+async function loadSummaryStudents(
+  institutionId: string,
+  studentIds: string[],
+) {
+  if (!studentIds.length) return new Map<string, SummaryStudent>();
+  const snapshots = await db.getAll(
+    ...studentIds.map((studentId) => db.doc(`users/${studentId}`)),
+  );
+  return new Map(
+    snapshots
+      .filter((snapshot) => {
+        const student = snapshot.data();
+        return (
+          snapshot.exists &&
+          student?.institutionId === institutionId &&
+          student?.role === "student" &&
+          student?.active === true
+        );
+      })
+      .map((snapshot) => {
+        const student = snapshot.data() as DocumentData;
+        return [
+          snapshot.id,
+          {
+            uid: snapshot.id,
+            name: String(student.name ?? "Alumno"),
+            groupKey: `${String(student.grade ?? "")} ${String(student.group ?? "")}`.trim(),
+          } satisfies SummaryStudent,
+        ];
+      }),
+  );
+}
+
+async function buildStudentSummaries(
+  students: Map<string, SummaryStudent>,
+  tasks: SummaryTask[],
+) {
+  const summaries = new Map<string, DailyStudentSummary>();
+  const submissionChecks: Array<{
+    studentId: string;
+    reference: DocumentReference;
+  }> = [];
+  students.forEach((student) => {
+    const summary: DailyStudentSummary = {
+      studentId: student.uid,
+      firstName: firstName(student.name),
+      submitted: 0,
+      total: 0,
+      pending: 0,
+    };
+    tasks.forEach((task) => {
+      const assigned =
+        task.kind === "academic"
+          ? task.targetGroup === student.groupKey
+          : task.audienceStudentIds?.includes(student.uid) === true;
+      if (!assigned) return;
+      summary.total += 1;
+      submissionChecks.push({
+        studentId: student.uid,
+        reference:
+          task.kind === "academic"
+            ? task.reference.collection("entregas").doc(student.uid)
+            : task.reference.collection("submissions").doc(student.uid),
+      });
+    });
+    summaries.set(student.uid, summary);
+  });
+  for (let offset = 0; offset < submissionChecks.length; offset += 400) {
+    const checks = submissionChecks.slice(offset, offset + 400);
+    const snapshots = await db.getAll(...checks.map((check) => check.reference));
+    snapshots.forEach((snapshot, index) => {
+      const status = String(snapshot.data()?.status ?? "");
+      if (
+        snapshot.exists &&
+        ["submitted", "feedback", "reviewed"].includes(status)
+      ) {
+        const summary = summaries.get(checks[index].studentId);
+        if (summary) summary.submitted += 1;
+      }
+    });
+  }
+  summaries.forEach((summary) => {
+    summary.pending = Math.max(0, summary.total - summary.submitted);
+  });
+  return summaries;
+}
+
+async function createDailySummaryOutbox(
+  institutionId: string,
+  businessDate: string,
+  options: { contactId?: string; test?: boolean } = {},
+) {
+  const configuration = await readWhatsAppConfiguration(institutionId);
+  const contactsSnapshot = options.contactId
+    ? await db.getAll(db.doc(`guardianContacts/${options.contactId}`))
+    : (
+        await db
+          .collection("guardianContacts")
+          .where("institutionId", "==", institutionId)
+          .get()
+      ).docs;
+  const contacts = contactsSnapshot.filter((snapshot) => {
+    const contact = snapshot.data();
+    return (
+      snapshot.exists &&
+      contact?.institutionId === institutionId &&
+      contact?.status === "active" &&
+      contact?.consentStatus === "active" &&
+      Array.isArray(contact?.categories) &&
+      contact.categories.includes("daily_task_summary")
+    );
+  });
+  const studentIds = [
+    ...new Set(
+      contacts.flatMap((contact) => notificationRecipients(contact.data()?.studentIds)),
+    ),
+  ];
+  const students = await loadSummaryStudents(institutionId, studentIds);
+  const tasks = await loadSummaryTasks(
+    institutionId,
+    businessDate,
+    configuration.timeZone,
+  );
+  const summaries = await buildStudentSummaries(students, tasks);
+  let queued = 0;
+  let skipped = 0;
+  const outboxIds: string[] = [];
+  for (const contactSnapshot of contacts) {
+    const contact = contactSnapshot.data() as DocumentData;
+    const contactSummaries = notificationRecipients(contact.studentIds)
+      .map((studentId) => summaries.get(studentId))
+      .filter((summary): summary is DailyStudentSummary => Boolean(summary));
+    if (
+      !contactSummaries.length ||
+      (!configuration.sendOnNoTaskDays &&
+        contactSummaries.every((summary) => summary.total === 0) &&
+        options.test !== true)
+    ) {
+      skipped += 1;
+      continue;
+    }
+    const outboxId = options.test
+      ? `test_${Date.now()}_${contactSnapshot.id}`
+      : dailyOutboxId(businessDate, contactSnapshot.id);
+    const parameters = buildTemplateParameters(businessDate, contactSummaries);
+    const now = Timestamp.now();
+    try {
+      await db.doc(`messageOutbox/${outboxId}`).create({
+        institutionId,
+        guardianContactId: contactSnapshot.id,
+        recipientName: String(contact.name ?? "Familia CEHF"),
+        to: String(contact.phoneE164),
+        toMasked: String(contact.phoneMasked ?? maskPhone(String(contact.phoneE164))),
+        messageKind: options.test ? "daily_task_summary_test" : "daily_task_summary",
+        businessDate,
+        studentIds: contactSummaries.map((summary) => summary.studentId),
+        studentSummaries: contactSummaries,
+        templateName: configuration.templateName,
+        templateLanguage: configuration.templateLanguage,
+        templateParameters: parameters,
+        graphApiVersion: configuration.graphApiVersion,
+        status: "queued",
+        attemptCount: 0,
+        nextAttemptAt: now,
+        createdAt: now,
+        updatedAt: now,
+        test: options.test === true,
+      });
+      queued += 1;
+      outboxIds.push(outboxId);
+    } catch (error) {
+      const code =
+        typeof error === "object" && error && "code" in error
+          ? String(error.code)
+          : "";
+      if (!["6", "already-exists"].includes(code)) throw error;
+      skipped += 1;
+    }
+  }
+  return { queued, skipped, outboxIds, businessDate };
+}
+
+export const queueDailyWhatsAppSummaries = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const businessDate = input.businessDate
+    ? calendarDate(input.businessDate, "La fecha")
+    : localDateKey(new Date(), WHATSAPP_TIMEZONE);
+  const configuration = await readWhatsAppConfiguration(director.institutionId);
+  if (!configuration.enabled || !configuration.dailySummaryEnabled) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Activa los resúmenes diarios antes de encolarlos.",
+    );
+  }
+  const result = await createDailySummaryOutbox(
+    director.institutionId,
+    businessDate,
+  );
+  await db.collection("auditEvents").add({
+    institutionId: director.institutionId,
+    action: "whatsapp_daily_summary_queued_manually",
+    actorUid: director.uid,
+    actorName: director.name,
+    ...result,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return result;
+});
+
+export const enqueueDailyWhatsAppSummaries = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    timeZone: WHATSAPP_TIMEZONE,
+    retryCount: 3,
+  },
+  async () => {
+    const institutionId = "cehf-primaria";
+    const configuration = await readWhatsAppConfiguration(institutionId);
+    const now = new Date();
+    if (
+      !configuration.enabled ||
+      !configuration.dailySummaryEnabled ||
+      !shouldRunDailySummary(configuration.sendTime, now, configuration.timeZone)
+    ) {
+      return;
+    }
+    const result = await createDailySummaryOutbox(
+      institutionId,
+      localDateKey(now, configuration.timeZone),
+    );
+    logger.info("Daily WhatsApp summaries queued", result);
+  },
+);
+
+class WhatsAppSendError extends Error {
+  readonly httpStatus: number;
+  readonly providerCode: string;
+  readonly transient: boolean;
+
+  constructor(
+    message: string,
+    httpStatus: number,
+    providerCode = "",
+  ) {
+    super(message);
+    this.name = "WhatsAppSendError";
+    this.httpStatus = httpStatus;
+    this.providerCode = providerCode;
+    this.transient = isTransientWhatsAppError(httpStatus, providerCode);
+  }
+}
+
+function providerMessageKey(messageId: string) {
+  return Buffer.from(messageId).toString("base64url");
+}
+
+async function claimWhatsAppOutbox(reference: DocumentReference) {
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const data = snapshot.data();
+    if (
+      !snapshot.exists ||
+      data?.status !== "queued" ||
+      !(data.nextAttemptAt instanceof Timestamp) ||
+      data.nextAttemptAt.toMillis() > Date.now()
+    ) {
+      return null;
+    }
+    const attemptCount = Number(data.attemptCount ?? 0) + 1;
+    transaction.update(reference, {
+      status: "sending",
+      attemptCount,
+      sendingAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return { ...data, attemptCount } as DocumentData;
+  });
+}
+
+async function sendWhatsAppOutboxDocument(reference: DocumentReference) {
+  const message = await claimWhatsAppOutbox(reference);
+  if (!message) return { id: reference.id, status: "skipped" };
+  const token = whatsappAccessToken.value().trim();
+  const phoneNumberId = whatsappPhoneNumberId.value().trim();
+  try {
+    if (!token || !phoneNumberId) {
+      throw new WhatsAppSendError(
+        "Faltan las credenciales de WhatsApp en Secret Manager.",
+        400,
+        "configuration_missing",
+      );
+    }
+    const response = await fetch(
+      `https://graph.facebook.com/${String(message.graphApiVersion ?? "v23.0")}/${encodeURIComponent(phoneNumberId)}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: String(message.to ?? "").replace(/^\+/, ""),
+          type: "template",
+          template: {
+            name: String(message.templateName),
+            language: { code: String(message.templateLanguage) },
+            components: [
+              {
+                type: "body",
+                parameters: notificationRecipients(message.templateParameters).map(
+                  (parameter) => ({ type: "text", text: parameter }),
+                ),
+              },
+            ],
+          },
+        }),
+      },
+    );
+    const payload = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    if (!response.ok) {
+      const providerError =
+        payload.error && typeof payload.error === "object"
+          ? (payload.error as Record<string, unknown>)
+          : {};
+      throw new WhatsAppSendError(
+        String(providerError.message ?? "Meta rechazó el mensaje."),
+        response.status,
+        String(providerError.code ?? ""),
+      );
+    }
+    const providerMessageId = String(
+      Array.isArray(payload.messages)
+        ? (payload.messages[0] as Record<string, unknown> | undefined)?.id ?? ""
+        : "",
+    );
+    if (!providerMessageId) {
+      throw new WhatsAppSendError(
+        "Meta no devolvió un identificador de mensaje.",
+        502,
+      );
+    }
+    const now = FieldValue.serverTimestamp();
+    const batch = db.batch();
+    batch.update(reference, {
+      status: "sent",
+      providerMessageId,
+      sentAt: now,
+      updatedAt: now,
+      lastErrorCode: FieldValue.delete(),
+      lastErrorMessage: FieldValue.delete(),
+    });
+    batch.set(
+      db.doc(`whatsappProviderMessages/${providerMessageKey(providerMessageId)}`),
+      {
+        outboxId: reference.id,
+        providerMessageId,
+        institutionId: String(message.institutionId),
+        createdAt: now,
+      },
+    );
+    batch.set(
+      db.doc(
+        `institutions/${String(message.institutionId)}/configuracion/whatsapp`,
+      ),
+      { lastSuccessfulSendAt: now, lastSuccessfulOutboxId: reference.id },
+      { merge: true },
+    );
+    await batch.commit();
+    return { id: reference.id, status: "sent", providerMessageId };
+  } catch (error) {
+    const sendError =
+      error instanceof WhatsAppSendError
+        ? error
+        : new WhatsAppSendError(
+            error instanceof Error ? error.message : "No se pudo enviar el mensaje.",
+            500,
+          );
+    const attemptCount = Number(message.attemptCount ?? 1);
+    const retry = sendError.transient && attemptCount < 5;
+    await reference.update({
+      status: retry ? "queued" : "failed",
+      nextAttemptAt: retry
+        ? Timestamp.fromMillis(
+            Date.now() + retryDelayMinutes(attemptCount) * 60_000,
+          )
+        : FieldValue.delete(),
+      failedAt: retry ? FieldValue.delete() : FieldValue.serverTimestamp(),
+      lastErrorCode: sendError.providerCode || String(sendError.httpStatus),
+      lastErrorMessage: sendError.message.slice(0, 500),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    logger.error("WhatsApp message delivery failed", {
+      outboxId: reference.id,
+      attemptCount,
+      retry,
+      code: sendError.providerCode,
+      httpStatus: sendError.httpStatus,
+    });
+    return { id: reference.id, status: retry ? "queued" : "failed" };
+  }
+}
+
+async function processQueuedWhatsAppMessages(limit = 100) {
+  const snapshot = await db
+    .collection("messageOutbox")
+    .where("status", "==", "queued")
+    .where("nextAttemptAt", "<=", Timestamp.now())
+    .limit(limit)
+    .get();
+  const results = [];
+  for (let offset = 0; offset < snapshot.docs.length; offset += 10) {
+    results.push(
+      ...(await Promise.all(
+        snapshot.docs
+          .slice(offset, offset + 10)
+          .map((document) => sendWhatsAppOutboxDocument(document.ref)),
+      )),
+    );
+  }
+  return results;
+}
+
+export const processWhatsAppOutbox = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    timeZone: WHATSAPP_TIMEZONE,
+    retryCount: 0,
+    secrets: [whatsappAccessToken, whatsappPhoneNumberId],
+  },
+  async () => {
+    const results = await processQueuedWhatsAppMessages();
+    if (results.length) logger.info("WhatsApp outbox processed", { results });
+  },
+);
+
+export const sendWhatsAppTest = onCall(
+  { secrets: [whatsappAccessToken, whatsappPhoneNumberId] },
+  async (request) => {
+    const director = await requireAccountDirector(request.auth);
+    const input = (request.data ?? {}) as Record<string, unknown>;
+    const contactId = whatsappContactId(input.contactId);
+    const result = await createDailySummaryOutbox(
+      director.institutionId,
+      localDateKey(new Date(), WHATSAPP_TIMEZONE),
+      { contactId, test: true },
+    );
+    const outboxId = result.outboxIds[0];
+    if (!outboxId) {
+      throw new HttpsError(
+        "failed-precondition",
+        "El contacto no está activo o no tiene consentimiento vigente.",
+      );
+    }
+    const delivery = await sendWhatsAppOutboxDocument(
+      db.doc(`messageOutbox/${outboxId}`),
+    );
+    await db.collection("auditEvents").add({
+      institutionId: director.institutionId,
+      action: "whatsapp_test_sent",
+      actorUid: director.uid,
+      actorName: director.name,
+      contactId,
+      outboxId,
+      deliveryStatus: delivery.status,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return { outboxId, status: delivery.status };
+  },
+);
+
+function verifyWhatsAppSignature(rawBody: Buffer, signature: string) {
+  const secret = whatsappAppSecret.value();
+  if (!secret || !signature.startsWith("sha256=")) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+  const receivedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  return (
+    receivedBuffer.length === expectedBuffer.length &&
+    timingSafeEqual(receivedBuffer, expectedBuffer)
+  );
+}
+
+async function applyWhatsAppDeliveryStatus(status: Record<string, unknown>) {
+  const providerMessageId = String(status.id ?? "");
+  const nextStatus = String(status.status ?? "");
+  if (
+    !providerMessageId ||
+    !["sent", "delivered", "read", "failed"].includes(nextStatus)
+  ) {
+    return;
+  }
+  const mapping = await db
+    .doc(`whatsappProviderMessages/${providerMessageKey(providerMessageId)}`)
+    .get();
+  const outboxId = String(mapping.data()?.outboxId ?? "");
+  if (!outboxId) return;
+  const reference = db.doc(`messageOutbox/${outboxId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists) return;
+    const currentStatus = String(snapshot.data()?.status ?? "");
+    const rank: Record<string, number> = {
+      queued: 0,
+      sending: 1,
+      sent: 2,
+      delivered: 3,
+      read: 4,
+      failed: 4,
+    };
+    if ((rank[nextStatus] ?? 0) < (rank[currentStatus] ?? 0)) return;
+    const providerErrors = Array.isArray(status.errors)
+      ? (status.errors as Array<Record<string, unknown>>)
+      : [];
+    const firstError = providerErrors[0];
+    transaction.update(reference, {
+      status: nextStatus,
+      [`${nextStatus}At`]: FieldValue.serverTimestamp(),
+      providerTimestamp: String(status.timestamp ?? ""),
+      ...(nextStatus === "failed"
+        ? {
+            lastErrorCode: String(firstError?.code ?? "provider_failed"),
+            lastErrorMessage: String(
+              firstError?.title ?? firstError?.message ?? "Meta reportó un fallo.",
+            ).slice(0, 500),
+          }
+        : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+function inboundMessageText(message: Record<string, unknown>) {
+  if (message.type === "text" && message.text && typeof message.text === "object") {
+    return String((message.text as Record<string, unknown>).body ?? "");
+  }
+  if (
+    message.type === "button" &&
+    message.button &&
+    typeof message.button === "object"
+  ) {
+    return String((message.button as Record<string, unknown>).text ?? "");
+  }
+  if (
+    message.type === "interactive" &&
+    message.interactive &&
+    typeof message.interactive === "object"
+  ) {
+    const interactive = message.interactive as Record<string, unknown>;
+    const reply =
+      (interactive.button_reply as Record<string, unknown> | undefined) ??
+      (interactive.list_reply as Record<string, unknown> | undefined);
+    return String(reply?.id ?? reply?.title ?? "");
+  }
+  return "";
+}
+
+async function applyWhatsAppOptOut(message: Record<string, unknown>) {
+  const messageId = String(message.id ?? "");
+  const from = String(message.from ?? "").replace(/\D/g, "");
+  if (!messageId || !from || !isOptOutMessage(inboundMessageText(message))) return;
+  const eventReference = db.doc(
+    `whatsappWebhookEvents/${providerMessageKey(messageId)}`,
+  );
+  const created = await db.runTransaction(async (transaction) => {
+    const existing = await transaction.get(eventReference);
+    if (existing.exists) return false;
+    transaction.create(eventReference, {
+      type: "opt_out",
+      providerMessageId: messageId,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  });
+  if (!created) return;
+  const contacts = await db
+    .collection("guardianContacts")
+    .where("phoneE164", "==", `+${from}`)
+    .get();
+  if (contacts.empty) return;
+  const now = FieldValue.serverTimestamp();
+  const batch = db.batch();
+  contacts.docs.forEach((contact) => {
+    batch.update(contact.ref, {
+      status: "opted_out",
+      consentStatus: "withdrawn",
+      optedOutAt: now,
+      optOutSource: "whatsapp",
+      updatedAt: now,
+    });
+    batch.set(db.collection("auditEvents").doc(), {
+      institutionId: String(contact.data().institutionId ?? ""),
+      action: "guardian_contact_opted_out",
+      contactId: contact.id,
+      source: "whatsapp",
+      createdAt: now,
+    });
+  });
+  await batch.commit();
+}
+
+function whatsappWebhookValues(body: unknown) {
+  if (!body || typeof body !== "object") return [];
+  const entries = Array.isArray((body as Record<string, unknown>).entry)
+    ? ((body as Record<string, unknown>).entry as Array<Record<string, unknown>>)
+    : [];
+  return entries.flatMap((entry) => {
+    const changes = Array.isArray(entry.changes)
+      ? (entry.changes as Array<Record<string, unknown>>)
+      : [];
+    return changes
+      .map((change) => change.value)
+      .filter(
+        (value): value is Record<string, unknown> =>
+          Boolean(value) && typeof value === "object",
+      );
+  });
+}
+
+export const whatsappWebhook = onRequest(
+  { secrets: [whatsappWebhookVerifyToken, whatsappAppSecret] },
+  async (request, response) => {
+    if (request.method === "GET") {
+      const mode = String(request.query["hub.mode"] ?? "");
+      const token = String(request.query["hub.verify_token"] ?? "");
+      const challenge = String(request.query["hub.challenge"] ?? "");
+      if (
+        mode === "subscribe" &&
+        token &&
+        token === whatsappWebhookVerifyToken.value()
+      ) {
+        response.status(200).send(challenge);
+        return;
+      }
+      response.status(403).send("Verification failed");
+      return;
+    }
+    if (request.method !== "POST") {
+      response.status(405).send("Method not allowed");
+      return;
+    }
+    const signature = String(request.header("x-hub-signature-256") ?? "");
+    if (!request.rawBody || !verifyWhatsAppSignature(request.rawBody, signature)) {
+      response.status(401).send("Invalid signature");
+      return;
+    }
+    try {
+      const values = whatsappWebhookValues(request.body);
+      await Promise.all(
+        values.flatMap((value) => {
+          const statuses = Array.isArray(value.statuses)
+            ? (value.statuses as Array<Record<string, unknown>>)
+            : [];
+          const messages = Array.isArray(value.messages)
+            ? (value.messages as Array<Record<string, unknown>>)
+            : [];
+          return [
+            ...statuses.map(applyWhatsAppDeliveryStatus),
+            ...messages.map(applyWhatsAppOptOut),
+          ];
+        }),
+      );
+      response.status(200).send("EVENT_RECEIVED");
+    } catch (error) {
+      logger.error("WhatsApp webhook processing failed", error);
+      response.status(500).send("Webhook processing failed");
+    }
+  },
+);
+
+type ForumRole = "director" | "teacher" | "student";
+
+type ForumUser = {
+  uid: string;
+  institutionId: string;
+  name: string;
+  initials: string;
+  role: ForumRole;
+  grade: string;
+  group: string;
+};
+
+const FORUM_TOPIC_KINDS = [
+  "weekly_question",
+  "subject",
+  "reading_club",
+  "task_help",
+  "group_chat",
+  "wall",
+  "announcement",
+] as const;
+
+const FORUM_TOPIC_STATUSES = ["open", "scheduled", "closed", "archived"] as const;
+const FORUM_REACTIONS = ["helpful", "interesting", "celebrate"] as const;
+
+function forumId(value: unknown, label: string) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", `${label} no es válido.`);
+  }
+  return normalized;
+}
+
+function forumText(
+  value: unknown,
+  label: string,
+  minimum: number,
+  maximum: number,
+) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length < minimum || normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${label} debe tener entre ${minimum} y ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function forumOptionalText(value: unknown, maximum: number) {
+  const normalized = String(value ?? "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `El texto puede tener hasta ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function forumTimestamp(value: unknown, label: string, required: boolean) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized && !required) return null;
+  const milliseconds = Date.parse(normalized);
+  if (!Number.isFinite(milliseconds)) {
+    throw new HttpsError("invalid-argument", `${label} no es una fecha válida.`);
+  }
+  return Timestamp.fromMillis(milliseconds);
+}
+
+async function requireForumUser(
+  auth: CallableRequest<unknown>["auth"],
+  allowBanned = false,
+): Promise<ForumUser> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const profileSnapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = profileSnapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  if (
+    !profileSnapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher", "student"].includes(role) ||
+    !institutionId
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil institucional no está activo o está incompleto.",
+    );
+  }
+  if (!allowBanned) {
+    const banSnapshot = await db.doc(`forumBans/${institutionId}/users/${auth.uid}`).get();
+    if (banSnapshot.exists && banSnapshot.data()?.active === true) {
+      throw new HttpsError(
+        "permission-denied",
+        "Tu participación en el foro está suspendida. Puedes seguir consultando los temas.",
+      );
+    }
+  }
+  return {
+    uid: auth.uid,
+    institutionId,
+    name: String(profile?.name ?? "Integrante CEHF"),
+    initials: String(profile?.initials ?? "CE"),
+    role: role as ForumRole,
+    grade: String(profile?.grade ?? ""),
+    group: String(profile?.group ?? ""),
+  };
+}
+
+function requireForumStaff(user: ForumUser) {
+  if (user.role !== "teacher" && user.role !== "director") {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo maestros y Dirección pueden realizar esta acción.",
+    );
+  }
+}
+
+function canManageForumTopic(user: ForumUser, topic: DocumentData) {
+  return (
+    user.role === "director" ||
+    (user.role === "teacher" && topic.creatorId === user.uid)
+  );
+}
+
+function canParticipateInForumEntity(user: ForumUser, data: DocumentData) {
+  return (
+    user.role === "director" ||
+    user.role === "teacher" ||
+    (Array.isArray(data.participantIds) && data.participantIds.includes(user.uid))
+  );
+}
+
+function forumGroupMatches(profile: DocumentData, targetGroup: string) {
+  if (targetGroup === "Todo el campus") return true;
+  if (profile.role !== "student") return false;
+  const exactGroup = `${String(profile.grade ?? "")} ${String(profile.group ?? "")}`.trim();
+  if (exactGroup === targetGroup) return true;
+  const range = /^(\d)\.º[–-](\d)\.º$/.exec(targetGroup);
+  const grade = Number.parseInt(String(profile.grade ?? ""), 10);
+  return Boolean(range && grade >= Number(range[1]) && grade <= Number(range[2]));
+}
+
+async function forumAudience(institutionId: string, targetGroup: string) {
+  const snapshot = await db
+    .collection("users")
+    .where("institutionId", "==", institutionId)
+    .get();
+  return snapshot.docs
+    .filter((entry) => {
+      const profile = entry.data();
+      return profile.active === true && forumGroupMatches(profile, targetGroup);
+    })
+    .map((entry) => {
+      const profile = entry.data();
+      return {
+        uid: entry.id,
+        name: String(profile.name ?? "Integrante CEHF"),
+        initials: String(profile.initials ?? "CE"),
+      };
+    });
+}
+
+function forumTopicStatus(value: unknown) {
+  const status = String(value ?? "");
+  if (!FORUM_TOPIC_STATUSES.includes(status as typeof FORUM_TOPIC_STATUSES[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un estado válido.");
+  }
+  return status as typeof FORUM_TOPIC_STATUSES[number];
+}
+
+function forumTopicKind(value: unknown) {
+  const kind = String(value ?? "");
+  if (!FORUM_TOPIC_KINDS.includes(kind as typeof FORUM_TOPIC_KINDS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un tipo de foro válido.");
+  }
+  return kind as typeof FORUM_TOPIC_KINDS[number];
+}
+
+function forumDates(
+  status: typeof FORUM_TOPIC_STATUSES[number],
+  opensValue: unknown,
+  closesValue: unknown,
+) {
+  const requestedOpening =
+    status === "scheduled"
+      ? forumTimestamp(opensValue, "La apertura", true)
+      : forumTimestamp(opensValue, "La apertura", false);
+  const opensAt = requestedOpening ?? Timestamp.now();
+  const closesAt = forumTimestamp(closesValue, "El cierre", false);
+  if (status === "scheduled" && opensAt.toMillis() <= Date.now()) {
+    throw new HttpsError(
+      "invalid-argument",
+      "La apertura programada debe estar en el futuro.",
+    );
+  }
+  if (closesAt && closesAt.toMillis() <= opensAt.toMillis()) {
+    throw new HttpsError(
+      "invalid-argument",
+      "El cierre debe ocurrir después de la apertura.",
+    );
+  }
+  return { opensAt, closesAt };
+}
+
+async function writeForumAudit(
+  action: string,
+  entityType: "forumTopic" | "forumPost" | "forumBan",
+  entityId: string,
+  actor: ForumUser,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+) {
+  await db.collection("auditEvents").add({
+    entityType,
+    entityId,
+    institutionId: actor.institutionId,
+    action,
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    before,
+    after,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+}
+
+export const createForumTopic = onCall(async (request) => {
+  const creator = await requireForumUser(request.auth);
+  requireForumStaff(creator);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const title = forumText(input.title, "El título", 3, 140);
+  const prompt = forumText(input.prompt, "La consigna", 8, 2_000);
+  const subject = forumText(input.subject, "La materia", 2, 80);
+  const targetGroup = forumText(input.group, "El grupo", 2, 80);
+  const forumName = forumText(input.forumName, "El espacio", 2, 100);
+  const kind = forumTopicKind(input.kind);
+  const status = forumTopicStatus(input.status);
+  const { opensAt, closesAt } = forumDates(status, input.opensAt, input.closesAt);
+  if (typeof input.allowReplies !== "boolean" || typeof input.allowAttachments !== "boolean") {
+    throw new HttpsError("invalid-argument", "Revisa las reglas de participación.");
+  }
+  const audience = await forumAudience(creator.institutionId, targetGroup);
+  const participants = [...audience];
+  if (!participants.some((participant) => participant.uid === creator.uid)) {
+    participants.unshift({
+      uid: creator.uid,
+      name: creator.name,
+      initials: creator.initials,
+    });
+  }
+  const reference = db.collection("forumTopics").doc();
+  const now = Timestamp.now();
+  const topic = {
+    institutionId: creator.institutionId,
+    forumId: `space-${subject.toLocaleLowerCase("es-MX").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${targetGroup.toLocaleLowerCase("es-MX").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`,
+    forumName,
+    title,
+    prompt,
+    kind,
+    subject,
+    targetGroup,
+    creatorId: creator.uid,
+    creatorName: creator.name,
+    creatorRole: creator.role,
+    participants,
+    participantIds: participants.map((participant) => participant.uid),
+    opensAt,
+    closesAt,
+    status,
+    allowReplies: input.allowReplies,
+    allowAttachments: input.allowAttachments,
+    pinned: false,
+    replyCount: 0,
+    createdAt: now,
+    updatedAt: now,
+    lastActivityAt: now,
+  };
+  const batch = db.batch();
+  batch.create(reference, topic);
+  batch.create(db.collection("auditEvents").doc(), {
+    entityType: "forumTopic",
+    entityId: reference.id,
+    institutionId: creator.institutionId,
+    action: "forum.topic.created",
+    actorId: creator.uid,
+    actorName: creator.name,
+    actorRole: creator.role,
+    after: { title, targetGroup, status, allowReplies: input.allowReplies, allowAttachments: input.allowAttachments },
+    createdAt: now,
+  });
+  await batch.commit();
+  await writeNotifications(
+    audience.map((participant) => participant.uid),
+    `forum-topic-${reference.id}`,
+    {
+      category: "forum",
+      title: status === "scheduled" ? `Nuevo tema programado: ${title}` : `Nuevo tema: ${title}`,
+      detail: `${forumName} · ${targetGroup}`,
+      topicId: reference.id,
+      url: `/forum/${encodeURIComponent(String(topic.forumId))}/${reference.id}`,
+      eventType: "forum_topic_created",
+    },
+  );
+  logger.info("Forum topic created", {
+    topicId: reference.id,
+    institutionId: creator.institutionId,
+    targetGroup,
+    recipients: audience.length,
+  });
+  return { topicId: reference.id };
+});
+
+export const updateForumTopic = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const topicId = forumId(input.topicId, "El tema");
+  const values = (input.values ?? {}) as Record<string, unknown>;
+  const reference = db.doc(`forumTopics/${topicId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const previous = snapshot.data();
+    if (!snapshot.exists || previous?.institutionId !== actor.institutionId || previous.deletedAt) {
+      throw new HttpsError("not-found", "El tema ya no está disponible.");
+    }
+    if (!canManageForumTopic(actor, previous)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Sólo puedes administrar los temas creados por ti. Dirección puede administrar todos.",
+      );
+    }
+    const status = forumTopicStatus(values.status);
+    const { opensAt, closesAt } = forumDates(status, values.opensAt, values.closesAt);
+    if (typeof values.allowReplies !== "boolean" || typeof values.allowAttachments !== "boolean") {
+      throw new HttpsError("invalid-argument", "Revisa las reglas de participación.");
+    }
+    const next = {
+      title: forumText(values.title, "El título", 3, 140),
+      prompt: forumText(values.prompt, "La consigna", 8, 2_000),
+      status,
+      opensAt,
+      closesAt,
+      allowReplies: values.allowReplies,
+      allowAttachments: values.allowAttachments,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: actor.uid,
+    };
+    transaction.update(reference, next);
+    transaction.create(db.collection("auditEvents").doc(), {
+      entityType: "forumTopic",
+      entityId: topicId,
+      institutionId: actor.institutionId,
+      action: status === "closed" ? "forum.topic.closed" : "forum.topic.updated",
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      before: {
+        title: previous.title,
+        status: previous.status,
+        allowReplies: previous.allowReplies,
+        allowAttachments: previous.allowAttachments,
+      },
+      after: next,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { ok: true as const };
+});
+
+export const deleteForumTopic = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const topicId = forumId(input.topicId, "El tema");
+  const reference = db.doc(`forumTopics/${topicId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const previous = snapshot.data();
+    if (!snapshot.exists || previous?.institutionId !== actor.institutionId || previous.deletedAt) {
+      throw new HttpsError("not-found", "El tema ya no está disponible.");
+    }
+    if (!canManageForumTopic(actor, previous)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Sólo puedes eliminar tus propios temas. Dirección puede eliminar cualquiera.",
+      );
+    }
+    transaction.update(reference, {
+      status: "archived",
+      deletedAt: FieldValue.serverTimestamp(),
+      deletedBy: actor.uid,
+      deletedByName: actor.name,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.create(db.collection("auditEvents").doc(), {
+      entityType: "forumTopic",
+      entityId: topicId,
+      institutionId: actor.institutionId,
+      action: "forum.topic.deleted",
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      before: { title: previous.title, status: previous.status },
+      after: { status: "archived", deleted: true },
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return { ok: true as const };
+});
+
+function forumAttachment(
+  value: unknown,
+  actor: ForumUser,
+  topicId: string,
+  postId: string,
+) {
+  if (!value || typeof value !== "object") return null;
+  const attachment = value as Record<string, unknown>;
+  const storagePath = String(attachment.storagePath ?? "");
+  const contentType = String(attachment.contentType ?? "");
+  const size = Number(attachment.size ?? 0);
+  const prefix = `institutions/${actor.institutionId}/forum/${topicId}/${postId}/`;
+  if (
+    !storagePath.startsWith(prefix) ||
+    storagePath.length > 600 ||
+    !(contentType.startsWith("image/") || contentType === "application/pdf") ||
+    !Number.isFinite(size) ||
+    size <= 0 ||
+    size > 5_000_000
+  ) {
+    throw new HttpsError("invalid-argument", "El archivo adjunto no es válido.");
+  }
+  return {
+    id: forumId(attachment.id ?? postId, "El adjunto"),
+    name: forumText(attachment.name, "El nombre del archivo", 1, 160),
+    storagePath,
+    contentType,
+    size,
+  };
+}
+
+async function validForumMentions(
+  values: unknown,
+  body: string,
+  institutionId: string,
+) {
+  if (!Array.isArray(values)) return [];
+  const ids = [...new Set(values.map((value) => forumId(value, "La mención")))].slice(0, 12);
+  if (!ids.length) return [];
+  const snapshots = await db.getAll(...ids.map((id) => db.doc(`users/${id}`)));
+  const normalizedBody = body.toLocaleLowerCase("es-MX");
+  return snapshots
+    .filter((snapshot) => {
+      const profile = snapshot.data();
+      const name = String(profile?.name ?? "").toLocaleLowerCase("es-MX");
+      return (
+        snapshot.exists &&
+        profile?.active === true &&
+        profile.institutionId === institutionId &&
+        Boolean(name) &&
+        normalizedBody.includes(`@${name}`)
+      );
+    })
+    .map((snapshot) => snapshot.id);
+}
+
+export const createForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const topicId = forumId(input.topicId, "El tema");
+  const body = forumText(input.body, "La aportación", 1, 600);
+  const parentId = input.parentId ? forumId(input.parentId, "La respuesta") : "";
+  const attachment = forumAttachment(input.attachment, actor, topicId, postId);
+  let mentionedUserIds = await validForumMentions(
+    input.mentionedUserIds,
+    body,
+    actor.institutionId,
+  );
+  const topicReference = db.doc(`forumTopics/${topicId}`);
+  const postReference = db.doc(`forumPosts/${postId}`);
+  let parentAuthorId = "";
+  let topicTitle = "Tema del foro";
+  let forumName = "Foro CEHF";
+  await db.runTransaction(async (transaction) => {
+    const topicSnapshot = await transaction.get(topicReference);
+    const topic = topicSnapshot.data();
+    if (!topicSnapshot.exists || topic?.institutionId !== actor.institutionId || topic.deletedAt) {
+      throw new HttpsError("not-found", "El tema ya no está disponible.");
+    }
+    if (!canParticipateInForumEntity(actor, topic)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Este tema pertenece a otro grupo.",
+      );
+    }
+    const participantIds = Array.isArray(topic.participantIds)
+      ? topic.participantIds.map(String)
+      : [];
+    mentionedUserIds = mentionedUserIds.filter((userId) =>
+      participantIds.includes(userId),
+    );
+    if (topic.status !== "open" || topic.allowReplies !== true) {
+      throw new HttpsError("failed-precondition", "Este tema no acepta respuestas.");
+    }
+    if (topic.closesAt instanceof Timestamp && topic.closesAt.toMillis() <= Date.now()) {
+      throw new HttpsError("failed-precondition", "El periodo de participación terminó.");
+    }
+    if (attachment && topic.allowAttachments !== true) {
+      throw new HttpsError("failed-precondition", "Este tema no permite archivos adjuntos.");
+    }
+    if (parentId) {
+      const parentSnapshot = await transaction.get(db.doc(`forumPosts/${parentId}`));
+      const parent = parentSnapshot.data();
+      if (
+        !parentSnapshot.exists ||
+        parent?.institutionId !== actor.institutionId ||
+        parent.topicId !== topicId ||
+        parent.status !== "visible"
+      ) {
+        throw new HttpsError("not-found", "El comentario al que respondes ya no está disponible.");
+      }
+      parentAuthorId = String(parent.authorId ?? "");
+    }
+    const existing = await transaction.get(postReference);
+    if (existing.exists) {
+      throw new HttpsError("already-exists", "La aportación ya fue publicada.");
+    }
+    const now = Timestamp.now();
+    transaction.create(postReference, {
+      institutionId: actor.institutionId,
+      topicId,
+      participantIds,
+      authorId: actor.uid,
+      authorName: actor.name,
+      authorInitials: actor.initials,
+      authorRole: actor.role,
+      body,
+      parentId: parentId || null,
+      mentionedUserIds,
+      attachment,
+      status: "visible",
+      markedAnswer: false,
+      reactionUsers: { helpful: [], interesting: [], celebrate: [] },
+      reportedByIds: [],
+      reportCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+    transaction.update(topicReference, {
+      replyCount: FieldValue.increment(1),
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+    topicTitle = String(topic.title ?? topicTitle);
+    forumName = String(topic.forumName ?? forumName);
+  });
+  if (parentAuthorId && parentAuthorId !== actor.uid) {
+    await writeNotifications([parentAuthorId], `forum-reply-${postId}`, {
+      category: "forum",
+      title: `${actor.name} respondió a tu comentario`,
+      detail: `${topicTitle} · ${body.slice(0, 120)}`,
+      topicId,
+      postId,
+      url: `/forum/topic/${topicId}`,
+      eventType: "forum_reply",
+    });
+  }
+  const mentionRecipients = mentionedUserIds.filter(
+    (userId) => userId !== actor.uid && userId !== parentAuthorId,
+  );
+  if (mentionRecipients.length) {
+    await writeNotifications(mentionRecipients, `forum-mention-${postId}`, {
+      category: "forum",
+      title: `${actor.name} te mencionó en el foro`,
+      detail: `${forumName} · ${body.slice(0, 120)}`,
+      topicId,
+      postId,
+      url: `/forum/topic/${topicId}`,
+      eventType: "forum_mention",
+    });
+  }
+  return { postId };
+});
+
+export const reactToForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const reaction = String(input.reaction ?? "");
+  if (!FORUM_REACTIONS.includes(reaction as typeof FORUM_REACTIONS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona una reacción válida.");
+  }
+  const reference = db.doc(`forumPosts/${postId}`);
+  const active = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const post = snapshot.data();
+    if (
+      !snapshot.exists ||
+      post?.institutionId !== actor.institutionId ||
+      post.status !== "visible" ||
+      !canParticipateInForumEntity(actor, post)
+    ) {
+      throw new HttpsError("not-found", "La publicación ya no está disponible.");
+    }
+    const reactionUsers = (post.reactionUsers ?? {}) as Record<string, unknown>;
+    const users = Array.isArray(reactionUsers[reaction])
+      ? reactionUsers[reaction].map(String)
+      : [];
+    const nextActive = !users.includes(actor.uid);
+    transaction.update(reference, {
+      [`reactionUsers.${reaction}`]: nextActive
+        ? FieldValue.arrayUnion(actor.uid)
+        : FieldValue.arrayRemove(actor.uid),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return nextActive;
+  });
+  return { active };
+});
+
+export const reportForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const reason = forumText(input.reason, "El motivo", 5, 240);
+  const postReference = db.doc(`forumPosts/${postId}`);
+  const caseReference = db.doc(`forumModeration/post-${postId}`);
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(postReference);
+    const post = snapshot.data();
+    if (
+      !snapshot.exists ||
+      post?.institutionId !== actor.institutionId ||
+      post.status !== "visible" ||
+      !canParticipateInForumEntity(actor, post)
+    ) {
+      throw new HttpsError("not-found", "La publicación ya no está disponible.");
+    }
+    if (post.authorId === actor.uid) {
+      throw new HttpsError("failed-precondition", "No puedes reportar tu propia aportación.");
+    }
+    const reporters = Array.isArray(post.reportedByIds)
+      ? post.reportedByIds.map(String)
+      : [];
+    if (reporters.includes(actor.uid)) return;
+    const caseSnapshot = await transaction.get(caseReference);
+    const moderationCase = caseSnapshot.data();
+    transaction.update(postReference, {
+      reportedByIds: FieldValue.arrayUnion(actor.uid),
+      reportCount: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    transaction.set(
+      caseReference,
+      {
+        institutionId: actor.institutionId,
+        topicId: String(post.topicId ?? ""),
+        postId,
+        authorId: String(post.authorId ?? ""),
+        authorName: String(post.authorName ?? "Integrante CEHF"),
+        excerpt: String(post.body ?? "").slice(0, 180),
+        reason: moderationCase?.reason ?? reason,
+        status: moderationCase?.status === "hidden" ? "hidden" : "open",
+        reporterIds: FieldValue.arrayUnion(actor.uid),
+        reportCount: FieldValue.increment(1),
+        createdAt: moderationCase?.createdAt ?? FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+  return { ok: true as const };
+});
+
+export const moderateForumPost = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  const action = String(input.action ?? "");
+  if (!["hidden", "dismissed", "restored"].includes(action)) {
+    throw new HttpsError("invalid-argument", "Selecciona una acción de moderación válida.");
+  }
+  const postReference = db.doc(`forumPosts/${postId}`);
+  const caseReference = db.doc(`forumModeration/post-${postId}`);
+  await db.runTransaction(async (transaction) => {
+    const [postSnapshot, caseSnapshot] = await Promise.all([
+      transaction.get(postReference),
+      transaction.get(caseReference),
+    ]);
+    const post = postSnapshot.data();
+    const moderationCase = caseSnapshot.data();
+    if (!postSnapshot.exists || post?.institutionId !== actor.institutionId) {
+      throw new HttpsError("not-found", "La publicación ya no está disponible.");
+    }
+    if (action === "restored" && !moderationCase?.originalBody) {
+      throw new HttpsError("failed-precondition", "No existe evidencia para restaurar.");
+    }
+    const now = FieldValue.serverTimestamp();
+    if (action === "hidden") {
+      transaction.update(postReference, {
+        body: "",
+        attachment: null,
+        status: "hidden",
+        hiddenAt: now,
+        hiddenBy: actor.uid,
+        updatedAt: now,
+      });
+    } else if (action === "restored") {
+      transaction.update(postReference, {
+        body: String(moderationCase?.originalBody ?? ""),
+        attachment: moderationCase?.originalAttachment ?? null,
+        status: "visible",
+        restoredAt: now,
+        restoredBy: actor.uid,
+        updatedAt: now,
+      });
+    }
+    transaction.set(
+      caseReference,
+      {
+        institutionId: actor.institutionId,
+        topicId: String(post.topicId ?? ""),
+        postId,
+        authorId: String(post.authorId ?? ""),
+        authorName: String(post.authorName ?? "Integrante CEHF"),
+        excerpt: String(moderationCase?.excerpt ?? post.body ?? "").slice(0, 180),
+        reason: String(moderationCase?.reason ?? "Acción directa de moderación"),
+        status: action,
+        originalBody: String(moderationCase?.originalBody ?? post.body ?? ""),
+        originalAttachment: moderationCase?.originalAttachment ?? post.attachment ?? null,
+        reportCount: Number(moderationCase?.reportCount ?? post.reportCount ?? 0),
+        createdAt: moderationCase?.createdAt ?? now,
+        resolvedById: actor.uid,
+        resolvedByName: actor.name,
+        resolvedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    transaction.create(db.collection("auditEvents").doc(), {
+      entityType: "forumPost",
+      entityId: postId,
+      institutionId: actor.institutionId,
+      action: `forum.post.${action}`,
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      before: { status: post.status },
+      after: { status: action },
+      createdAt: now,
+    });
+  });
+  return { ok: true as const };
+});
+
+export const setForumPostMarked = onCall(async (request) => {
+  const actor = await requireForumUser(request.auth);
+  requireForumStaff(actor);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const postId = forumId(input.postId, "La publicación");
+  if (typeof input.marked !== "boolean") {
+    throw new HttpsError("invalid-argument", "La marca solicitada no es válida.");
+  }
+  const reference = db.doc(`forumPosts/${postId}`);
+  const snapshot = await reference.get();
+  const post = snapshot.data();
+  if (!snapshot.exists || post?.institutionId !== actor.institutionId || post.status !== "visible") {
+    throw new HttpsError("not-found", "La publicación ya no está disponible.");
+  }
+  await reference.update({
+    markedAnswer: input.marked,
+    markedBy: actor.uid,
+    markedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { ok: true as const };
+});
+
+export const setForumUserBan = onCall(async (request) => {
+  const director = await requireForumUser(request.auth, true);
+  if (director.role !== "director") {
+    throw new HttpsError("permission-denied", "Sólo Dirección puede suspender participantes.");
+  }
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const userId = forumId(input.userId, "El participante");
+  if (typeof input.active !== "boolean") {
+    throw new HttpsError("invalid-argument", "El estado solicitado no es válido.");
+  }
+  const targetSnapshot = await db.doc(`users/${userId}`).get();
+  const target = targetSnapshot.data();
+  if (
+    !targetSnapshot.exists ||
+    target?.institutionId !== director.institutionId ||
+    target.role === "director"
+  ) {
+    throw new HttpsError("not-found", "El participante no está disponible.");
+  }
+  const reason = input.active
+    ? forumText(input.reason, "El motivo", 5, 240)
+    : forumOptionalText(input.reason, 240);
+  const reference = db.doc(`forumBans/${director.institutionId}/users/${userId}`);
+  const previous = await reference.get();
+  const now = FieldValue.serverTimestamp();
+  await reference.set(
+    {
+      institutionId: director.institutionId,
+      userId,
+      userName: String(target.name ?? "Integrante CEHF"),
+      active: input.active,
+      reason: input.active ? reason : String(previous.data()?.reason ?? reason),
+      ...(input.active
+        ? {
+            bannedById: director.uid,
+            bannedByName: director.name,
+            bannedAt: now,
+            restoredById: null,
+            restoredByName: null,
+            restoredAt: null,
+          }
+        : {
+            restoredById: director.uid,
+            restoredByName: director.name,
+            restoredAt: now,
+          }),
+      updatedAt: now,
+    },
+    { merge: true },
+  );
+  await writeForumAudit(
+    input.active ? "forum.user.banned" : "forum.user.restored",
+    "forumBan",
+    userId,
+    director,
+    { active: previous.data()?.active === true },
+    { active: input.active, reason },
+  );
+  return { ok: true as const };
+});
+
+export const syncScheduledForumTopics = onSchedule(
+  {
+    schedule: "every 1 minutes",
+    timeZone: ACADEMIC_TIMEZONE,
+    retryCount: 3,
+  },
+  async () => {
+    const now = Timestamp.now();
+    const [opening, closing] = await Promise.all([
+      db
+        .collection("forumTopics")
+        .where("status", "==", "scheduled")
+        .where("opensAt", "<=", now)
+        .limit(200)
+        .get(),
+      db
+        .collection("forumTopics")
+        .where("status", "==", "open")
+        .where("closesAt", "<=", now)
+        .limit(200)
+        .get(),
+    ]);
+    const batch = db.batch();
+    opening.docs
+      .filter((snapshot) => !snapshot.data().deletedAt)
+      .forEach((snapshot) => {
+        batch.update(snapshot.ref, {
+          status: "open",
+          openedAt: now,
+          updatedAt: now,
+          lastActivityAt: now,
+        });
+      });
+    closing.docs
+      .filter((snapshot) => !snapshot.data().deletedAt)
+      .forEach((snapshot) => {
+        batch.update(snapshot.ref, {
+          status: "closed",
+          closedAt: now,
+          updatedAt: now,
+        });
+      });
+    if (opening.size || closing.size) await batch.commit();
+    logger.info("Scheduled forum topics synchronized", {
+      opened: opening.size,
+      closed: closing.size,
+    });
   },
 );

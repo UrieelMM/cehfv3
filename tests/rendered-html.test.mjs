@@ -48,6 +48,9 @@ test("supports the documented application routes", async () => {
     "/wall-newspaper",
     "/forum",
     "/forum/science-5a/topic-cambios",
+    "/workshops",
+    "/workshops/tics",
+    "/workshops/club-lectura",
   ]) {
     const response = await render(pathname);
     assert.equal(response.status, 200, `${pathname} should render`);
@@ -69,6 +72,11 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     taskUiSource,
     functionsSource,
     taskCss,
+    workshopSource,
+    workshopFirebaseSource,
+    workshopCss,
+    workshopTaskUiSource,
+    workshopFileViewerSource,
   ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
@@ -84,6 +92,11 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("components/tasks-workflow.tsx", projectRoot), "utf8"),
       readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
       readFile(new URL("app/tasks.css", projectRoot), "utf8"),
+      readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
+      readFile(new URL("lib/workshops-firebase.ts", projectRoot), "utf8"),
+      readFile(new URL("app/workshops.css", projectRoot), "utf8"),
+      readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/workshop-file-viewer.tsx", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -168,6 +181,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firebaseSource, /refreshPortalAccess/);
   assert.match(firebaseSource, /await user\.getIdToken\(true\)/);
   assert.match(firebaseSource, /sharedStateRef\(profile\.institutionId\)/);
+  assert.match(appSource, /const canEdit = role === "director"/);
+  assert.doesNotMatch(appSource, /Establecido por/);
+  assert.match(firestoreRules, /hasAny\(\["weeklyVerse"\]\)/);
   assert.match(appSource, /account-registration-modal/);
   assert.match(appSource, /Nivel escolar/);
   assert.match(appSource, /Alumno · \$\{schoolLevelLabels\[schoolLevel\]\}/);
@@ -212,6 +228,50 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /claimsChanged: changed/);
   assert.match(functionsSource, /Cada semana sólo puede pertenecer a un trimestre/);
   assert.match(taskCss, /task-modern-grid/);
+  assert.match(appSource, /workshops: "\/workshops"/);
+  assert.match(workshopSource, /Club de lectura/);
+  assert.match(workshopSource, /Administrar acceso/);
+  assert.match(workshopSource, /Subir recurso/);
+  assert.match(workshopSource, /workshop-immersive-shell/);
+  assert.match(workshopSource, /Biblioteca creativa/);
+  assert.match(workshopSource, /Laboratorio digital/);
+  assert.match(workshopFirebaseSource, /ensureDefaultWorkshops/);
+  assert.match(workshopFirebaseSource, /uploadWorkshopResource/);
+  assert.match(workshopFirebaseSource, /watchWorkshopResources/);
+  assert.match(workshopFirebaseSource, /teacherStudentIds/);
+  assert.match(workshopFirebaseSource, /createWorkshopTask/);
+  assert.match(workshopFirebaseSource, /submitWorkshopTask/);
+  assert.match(workshopFirebaseSource, /saveWorkshopFeedback/);
+  assert.doesNotMatch(workshopFirebaseSource, /demoWorkshops|demoWorkshopTasks/);
+  assert.doesNotMatch(workshopSource, /cehf-demo-workshops/);
+  assert.doesNotMatch(workshopTaskUiSource, /demoSubmissions/);
+  assert.match(workshopTaskUiSource, /Trabajos y entregas/);
+  assert.match(workshopTaskUiSource, /Enviar nueva versión/);
+  assert.match(workshopTaskUiSource, /Finalizar revisión/);
+  assert.match(workshopTaskUiSource, /WorkshopFileViewer/);
+  assert.match(workshopTaskUiSource, /createPortal/);
+  assert.match(workshopTaskUiSource, /workshop-task-detail-backdrop/);
+  assert.match(workshopSource, /WorkshopFileViewer/);
+  assert.match(workshopFileViewerSource, /Haz clic fuera del recurso/);
+  assert.match(workshopFileViewerSource, /createPortal/);
+  assert.match(firestoreRules, /match \/workshops\/\{workshopId\}/);
+  assert.match(firestoreRules, /match \/tasks\/\{taskId\}/);
+  assert.match(firestoreRules, /validWorkshopTaskAudience/);
+  assert.match(firestoreRules, /match \/submissions\/\{studentId\}/);
+  assert.match(firestoreRules, /function canManageWorkshop/);
+  assert.match(storageRules, /workshopSafeUpload/);
+  assert.match(storageRules, /workshops\/\{workshopId\}\/resources/);
+  assert.match(functionsSource, /onWorkshopAccessChanged/);
+  assert.match(functionsSource, /onWorkshopResourceCreated/);
+  assert.match(functionsSource, /onWorkshopTaskChanged/);
+  assert.match(functionsSource, /onWorkshopSubmissionChanged/);
+  assert.match(workshopCss, /workshop-cover-card\.is-tics/);
+  assert.match(workshopCss, /workshop-cover-card\.is-reading/);
+  assert.match(workshopCss, /position: fixed;[\s\S]*workshop-immersive-header/);
+  assert.match(workshopCss, /immersive-library-window/);
+  assert.match(workshopCss, /immersive-tech-horizon/);
+  assert.match(workshopCss, /workshop-attachment-viewer-backdrop/);
+  assert.match(workshopCss, /workshop-task-detail-backdrop/);
   await access(new URL("public/og-campus.png", projectRoot));
   await access(new URL("public/login-campus.jpg", projectRoot));
   await access(new URL("public/sw.js", projectRoot));

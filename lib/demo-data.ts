@@ -2,7 +2,7 @@ import type { ManagedAccount, PortalState, Role, UserProfile } from "./types";
 
 export const demoProfiles: Record<Role, UserProfile> = {
   student: {
-    uid: "demo-student",
+    uid: "demo-student-sofia",
     institutionId: "cehf-primaria",
     name: "Sofía Martínez",
     email: "sofia@cehf.edu.mx",
@@ -13,7 +13,7 @@ export const demoProfiles: Record<Role, UserProfile> = {
     initials: "SM",
   },
   teacher: {
-    uid: "demo-teacher",
+    uid: "demo-teacher-mariana",
     institutionId: "cehf-primaria",
     name: "Mariana López",
     email: "mariana.lopez@cehf.edu.mx",
@@ -613,6 +613,7 @@ export const createDemoState = (): PortalState => ({
       status: "open",
     },
   ],
+  forumBans: [],
   notifications: [
     {
       id: "notif-task",

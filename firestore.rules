@@ -189,14 +189,260 @@ service cloud.firestore {
 
       match /portal/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if isStaff()
+        allow create: if isDirector()
           && profile().institutionId == institutionId;
+        allow update: if profile().institutionId == institutionId
+          && (
+            isDirector()
+            || (
+              roleIs("teacher")
+              && !request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(["weeklyVerse"])
+            )
+          );
         allow delete: if false;
+      }
+
+      match /workshops/{workshopId} {
+        function validWorkshopAccess(data) {
+          return data.studentIds is list
+            && data.teacherIds is list
+            && data.managerIds is list
+            && data.teacherStudentIds is map
+            && data.memberIds is list
+            && data.managerIds.hasOnly(data.teacherIds)
+            && data.memberIds.toSet()
+              == data.studentIds.toSet().union(data.teacherIds.toSet());
+        }
+
+        function canReadWorkshop(data) {
+          return isActive()
+            && profile().institutionId == institutionId
+            && data.institutionId == institutionId
+            && (
+              isDirector()
+              || (
+                data.memberIds is list
+                && request.auth.uid in data.memberIds
+              )
+            );
+        }
+
+        function workshopData() {
+          return get(
+            /databases/$(database)/documents/institutions/$(institutionId)/workshops/$(workshopId)
+          ).data;
+        }
+
+        function canManageWorkshop() {
+          let workshop = workshopData();
+          return isActive()
+            && profile().institutionId == institutionId
+            && workshop.institutionId == institutionId
+            && (
+              isDirector()
+              || (
+                roleIs("teacher")
+                && workshop.managerIds is list
+                && request.auth.uid in workshop.managerIds
+              )
+            );
+        }
+
+        allow read: if canReadWorkshop(resource.data);
+        allow create: if isDirector()
+          && profile().institutionId == institutionId
+          && workshopId in ["tics", "club-lectura"]
+          && request.resource.data.institutionId == institutionId
+          && request.resource.data.kind in ["tics", "reading"]
+          && validWorkshopAccess(request.resource.data);
+        allow update: if isDirector()
+          && profile().institutionId == institutionId
+          && resource.data.institutionId == institutionId
+          && request.resource.data.institutionId == institutionId
+          && request.resource.data.kind == resource.data.kind
+          && validWorkshopAccess(request.resource.data);
+        allow delete: if false;
+
+        match /resources/{resourceId} {
+          allow read: if canReadWorkshop(workshopData());
+          allow create: if canManageWorkshop()
+            && request.resource.data.institutionId == institutionId
+            && request.resource.data.workshopId == workshopId
+            && request.resource.data.uploadedBy == request.auth.uid
+            && request.resource.data.title is string
+            && request.resource.data.storagePath is string
+            && request.resource.data.size is number
+            && request.resource.data.size > 0
+            && request.resource.data.size < 20 * 1024 * 1024;
+          allow update: if false;
+          allow delete: if canManageWorkshop();
+        }
+
+        match /tasks/{taskId} {
+          function taskData() {
+            return get(
+              /databases/$(database)/documents/institutions/$(institutionId)/workshops/$(workshopId)/tasks/$(taskId)
+            ).data;
+          }
+
+          function canReadWorkshopTask(data) {
+            return canReadWorkshop(workshopData())
+              && (
+                isDirector()
+                || (
+                  roleIs("teacher")
+                  && data.createdBy == request.auth.uid
+                )
+                || (
+                  roleIs("student")
+                  && data.audienceStudentIds is list
+                  && request.auth.uid in data.audienceStudentIds
+                  && data.status in ["published", "closed"]
+                )
+              );
+          }
+
+          function canManageWorkshopTask(data) {
+            return isDirector()
+              || (
+                roleIs("teacher")
+                && data.createdBy == request.auth.uid
+                && canManageWorkshop()
+              );
+          }
+
+          function validWorkshopTaskAudience(data) {
+            let workshop = workshopData();
+            return data.audienceStudentIds is list
+              && data.audienceStudentIds.size() > 0
+              && (
+                (
+                  isDirector()
+                  && data.audienceStudentIds.hasOnly(workshop.studentIds)
+                )
+                || (
+                  roleIs("teacher")
+                  && workshop.teacherStudentIds is map
+                  && workshop.teacherStudentIds[request.auth.uid] is list
+                  && data.audienceStudentIds.hasOnly(
+                    workshop.teacherStudentIds[request.auth.uid]
+                  )
+                )
+              );
+          }
+
+          allow read: if canReadWorkshopTask(resource.data);
+          allow create: if canManageWorkshop()
+            && request.resource.data.institutionId == institutionId
+            && request.resource.data.workshopId == workshopId
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.title is string
+            && request.resource.data.description is string
+            && request.resource.data.dueAt is timestamp
+            && request.resource.data.status in ["draft", "published"]
+            && request.resource.data.attachments is list
+            && validWorkshopTaskAudience(request.resource.data);
+          allow update: if canManageWorkshopTask(resource.data)
+            && request.resource.data.institutionId == resource.data.institutionId
+            && request.resource.data.workshopId == resource.data.workshopId
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.audienceStudentIds == resource.data.audienceStudentIds
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["status", "updatedAt"])
+            && request.resource.data.status in ["draft", "published", "closed"];
+          allow delete: if false;
+
+          match /submissions/{studentId} {
+            function parentTask() {
+              return taskData();
+            }
+
+            function studentCanSubmit() {
+              let task = parentTask();
+              return roleIs("student")
+                && request.auth.uid == studentId
+                && task.status == "published"
+                && task.audienceStudentIds is list
+                && studentId in task.audienceStudentIds;
+            }
+
+            function canReadWorkshopSubmission(data) {
+              let task = parentTask();
+              return canReadWorkshop(workshopData())
+                && (
+                  isDirector()
+                  || (
+                    roleIs("teacher")
+                    && task.createdBy == request.auth.uid
+                  )
+                  || (
+                    roleIs("student")
+                    && request.auth.uid == studentId
+                    && data.studentId == studentId
+                  )
+                );
+            }
+
+            allow read: if canReadWorkshopSubmission(resource.data);
+            allow create: if studentCanSubmit()
+              && request.resource.data.studentId == studentId
+              && request.resource.data.taskId == taskId
+              && request.resource.data.workshopId == workshopId
+              && request.resource.data.institutionId == institutionId
+              && request.resource.data.status == "submitted"
+              && request.resource.data.version == 1;
+            allow update: if (
+              studentCanSubmit()
+              && resource.data.studentId == studentId
+              && request.resource.data.studentId == studentId
+              && request.resource.data.institutionId == resource.data.institutionId
+              && request.resource.data.workshopId == resource.data.workshopId
+              && request.resource.data.taskId == resource.data.taskId
+              && request.resource.data.version == resource.data.version + 1
+              && request.resource.data.status == "submitted"
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly([
+                  "content", "attachments", "version", "status",
+                  "teacherFeedback", "submittedAt", "feedbackAt",
+                  "reviewedAt", "updatedAt"
+                ])
+            ) || (
+              canManageWorkshopTask(parentTask())
+              && request.resource.data.studentId == resource.data.studentId
+              && request.resource.data.version == resource.data.version
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly([
+                  "teacherFeedback", "status", "feedbackAt",
+                  "reviewedAt", "updatedAt"
+                ])
+              && request.resource.data.status in ["feedback", "reviewed"]
+            );
+            allow delete: if false;
+
+            match /history/{versionId} {
+              allow read: if canReadWorkshop(workshopData())
+                && (
+                  isDirector()
+                  || (
+                    roleIs("teacher")
+                    && parentTask().createdBy == request.auth.uid
+                  )
+                  || (roleIs("student") && request.auth.uid == studentId)
+                );
+              allow create: if studentCanSubmit()
+                && request.resource.data.studentId == studentId
+                && request.resource.data.taskId == taskId
+                && request.resource.data.status == "submitted";
+              allow update, delete: if false;
+            }
+          }
+        }
       }
 
       match /configuracion/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if documentId != "academica"
+        allow create, update: if !(documentId in ["academica", "whatsapp"])
           && isDirector()
           && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;
@@ -398,9 +644,91 @@ service cloud.firestore {
         }
       }
 
+      match /materials/{materialId} {
+        function canReadMaterial(data) {
+          return isActive()
+            && data.institutionId == institutionId
+            && profile().institutionId == institutionId
+            && (
+              isDirector()
+              || (
+                roleIs("teacher")
+                && data.managerIds is list
+                && request.auth.uid in data.managerIds
+              )
+              || (
+                roleIs("student")
+                && data.audienceStudentIds is list
+                && request.auth.uid in data.audienceStudentIds
+              )
+            );
+        }
+
+        function parentMaterial() {
+          return get(
+            /databases/$(database)/documents/institutions/$(institutionId)/materials/$(materialId)
+          ).data;
+        }
+
+        allow read: if canReadMaterial(resource.data);
+        allow create, update, delete: if false;
+
+        match /views/{studentId} {
+          function canReadMaterialView() {
+            let material = parentMaterial();
+            return canReadMaterial(material) && (
+              isDirector()
+              || (
+                roleIs("teacher")
+                && request.auth.uid in material.managerIds
+              )
+              || request.auth.uid == studentId
+            );
+          }
+
+          function studentCanOpenMaterial() {
+            let material = parentMaterial();
+            return roleIs("student")
+              && request.auth.uid == studentId
+              && material.institutionId == institutionId
+              && profile().institutionId == institutionId
+              && material.audienceStudentIds is list
+              && studentId in material.audienceStudentIds;
+          }
+
+          allow read: if canReadMaterialView();
+          allow create: if studentCanOpenMaterial()
+            && request.resource.data.keys().hasOnly([
+              "institutionId", "materialId", "studentId", "studentName",
+              "firstOpenedAt", "lastOpenedAt", "viewCount"
+            ])
+            && request.resource.data.institutionId == institutionId
+            && request.resource.data.materialId == materialId
+            && request.resource.data.studentId == studentId
+            && request.resource.data.studentName == profile().name
+            && request.resource.data.firstOpenedAt == request.time
+            && request.resource.data.lastOpenedAt == request.time
+            && request.resource.data.viewCount == 1;
+          allow update: if studentCanOpenMaterial()
+            && request.resource.data.institutionId == resource.data.institutionId
+            && request.resource.data.materialId == resource.data.materialId
+            && request.resource.data.studentId == resource.data.studentId
+            && request.resource.data.studentName == resource.data.studentName
+            && request.resource.data.firstOpenedAt == resource.data.firstOpenedAt
+            && request.resource.data.lastOpenedAt == request.time
+            && request.resource.data.viewCount == resource.data.viewCount + 1
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["lastOpenedAt", "viewCount"]);
+          allow delete: if false;
+        }
+      }
+
       match /{collectionName}/{documentId} {
-        allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if isDirector()
+        allow read: if collectionName != "materials"
+          && isActive()
+          && profile().institutionId == institutionId;
+        allow create, update: if collectionName != "materials"
+          && isDirector()
           && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;
         allow delete: if false;
@@ -585,6 +913,35 @@ service cloud.firestore {
       }
     }
 
+    // El foro usa documentos independientes para evitar que una respuesta
+    // reescriba el estado completo del portal. Todas las mutaciones pasan por
+    // Cloud Functions, donde también se generan notificaciones y auditoría.
+    match /forumTopics/{topicId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || request.auth.uid in resource.data.participantIds
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /forumPosts/{postId} {
+      allow read: if sameInstitution(resource.data) && (
+        isStaff() || request.auth.uid in resource.data.participantIds
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /forumModeration/{caseId} {
+      allow read: if isStaff() && sameInstitution(resource.data);
+      allow create, update, delete: if false;
+    }
+
+    match /forumBans/{institutionId}/users/{userId} {
+      allow read: if isActive()
+        && profile().institutionId == institutionId
+        && (isDirector() || request.auth.uid == userId);
+      allow create, update, delete: if false;
+    }
+
     match /notifications/{userId}/items/{notificationId} {
       allow read: if isActive() && request.auth.uid == userId;
       allow update: if isActive()
@@ -595,16 +952,17 @@ service cloud.firestore {
     }
 
     match /guardianContacts/{contactId} {
-      allow read, write: if isDirector();
+      allow read: if isDirector() && sameInstitution(resource.data);
+      allow create, update, delete: if false;
     }
 
     match /messageOutbox/{messageId} {
-      allow read: if isDirector();
+      allow read: if isDirector() && sameInstitution(resource.data);
       allow write: if false;
     }
 
     match /auditEvents/{eventId} {
-      allow read: if isDirector();
+      allow read: if isDirector() && sameInstitution(resource.data);
       allow write: if false;
     }
 

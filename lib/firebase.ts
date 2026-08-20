@@ -219,13 +219,20 @@ function accountDate(value: unknown) {
 
 export async function listManagedAccounts(
   institutionId: string,
+  callerRole: Role = "director",
 ): Promise<ManagedAccount[]> {
   if (!db) return [];
   const snapshot = await getDocs(
-    query(
-      collection(db, "users"),
-      where("institutionId", "==", institutionId),
-    ),
+    callerRole === "teacher"
+      ? query(
+          collection(db, "users"),
+          where("institutionId", "==", institutionId),
+          where("role", "==", "student"),
+        )
+      : query(
+          collection(db, "users"),
+          where("institutionId", "==", institutionId),
+        ),
   );
   const accounts: ManagedAccount[] = [];
   for (const entry of snapshot.docs) {
@@ -570,7 +577,7 @@ export async function loadPortalState(
       } as PortalState)
     : initial;
 
-  if (profile.role === "student") {
+  if (profile.role !== "director") {
     const privateRef = privateStateRef(profile.uid);
     if (privateRef) {
       const privateSnapshot = await getDoc(privateRef);
@@ -579,7 +586,7 @@ export async function loadPortalState(
           ...sharedState,
           ...privateSnapshot.data(),
           // El versículo es institucional: siempre prevalece la versión del
-          // estado compartido sobre cualquier copia privada del estudiante.
+          // estado compartido sobre cualquier copia privada del usuario.
           weeklyVerse: sharedState.weeklyVerse,
         } as PortalState;
       }
@@ -598,12 +605,13 @@ export async function savePortalState(
 ) {
   if (!db) return;
   const target =
-    profile.role === "student"
-      ? privateStateRef(profile.uid)
-      : sharedStateRef(profile.institutionId);
+    profile.role === "director"
+      ? sharedStateRef(profile.institutionId)
+      : privateStateRef(profile.uid);
   if (!target) return;
   await setDoc(target, {
     ...state,
+    institutionId: profile.institutionId,
     updatedAt: new Date().toISOString(),
     updatedBy: profile.uid,
   });
@@ -625,7 +633,7 @@ export function friendlyFirebaseError(error: unknown) {
     "auth/network-request-failed":
       "No pudimos conectar con Firebase. Revisa la red e intenta nuevamente.",
     "storage/unauthorized":
-      "Firebase Storage rechazó la fotografía. Publica las reglas incluidas en el proyecto.",
+      "Firebase Storage no autorizó el archivo. Actualiza tu sesión o verifica con Dirección que tengas acceso a este espacio.",
     "storage/object-not-found":
       "La fotografía ya no está disponible en Storage. Selecciónala nuevamente.",
     "functions/unauthenticated":
@@ -645,7 +653,7 @@ export function friendlyFirebaseError(error: unknown) {
     "invalid-argument":
       "Firebase recibió datos inválidos. Revisa los campos del formulario.",
     "permission-denied":
-      "Firebase rechazó la operación. Revisa que hayas publicado las reglas incluidas.",
+      "Firebase no autorizó esta operación. Actualiza tu sesión o verifica con Dirección que tu cuenta tenga el acceso necesario.",
   };
   if (error instanceof ManagedAccountCreationError) {
     if (error.userMessage) return error.userMessage;

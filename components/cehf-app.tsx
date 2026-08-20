@@ -52,6 +52,12 @@ import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
 import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
+import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
+import { WorkshopsPage } from "@/components/workshops-page";
+import {
+  MaterialCreateModal,
+  MaterialsPage,
+} from "@/components/materials-page";
 import {
   AcademicConfigurationCard,
   TaskCreateModal,
@@ -90,12 +96,24 @@ import {
   watchTaskNotifications,
 } from "@/lib/tasks-firebase";
 import {
+  createDemoLearningMaterial,
+  createLearningMaterial,
+  legacyMaterialsToLearningMaterials,
+  loadViewedLearningMaterialIds,
+  watchLearningMaterials,
+} from "@/lib/materials-firebase";
+import {
   createDemoState,
   demoManagedAccounts,
   demoProfiles,
   roleLabel,
   subjectColors,
 } from "@/lib/demo-data";
+import {
+  createForumTopic,
+  watchForumWorkspace,
+} from "@/lib/forum-firebase";
+import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
 import type {
   AcademicCalendar,
   AcademicCalendarInput,
@@ -103,6 +121,8 @@ import type {
   ForumTopicKind,
   ManagedAccount,
   AcademicConfig,
+  LearningMaterial,
+  LearningMaterialCreateInput,
   PortalState,
   ProgressLevel,
   Role,
@@ -159,6 +179,7 @@ const routes: Record<SectionKey, string> = {
   "weekly-materials": "/weekly-materials",
   "wall-newspaper": "/wall-newspaper",
   forum: "/forum",
+  workshops: "/workshops",
   users: "/users",
   settings: "/settings",
   profile: "/profile",
@@ -232,6 +253,7 @@ const navigation: Array<{
   { key: "weekly-materials", label: "Materiales", icon: Library },
   { key: "wall-newspaper", label: "Periódico mural", icon: Newspaper },
   { key: "forum", label: "Foro", icon: MessageCircle },
+  { key: "workshops", label: "Talleres", icon: Sparkles },
   {
     key: "users",
     label: "Comunidad",
@@ -259,6 +281,7 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
     title: "Periódico mural",
   },
   forum: { eyebrow: "Conversaciones guiadas", title: "Foro" },
+  workshops: { eyebrow: "Explorar, crear y compartir", title: "Talleres" },
   users: { eyebrow: "Personas y asignaciones", title: "Comunidad escolar" },
   settings: { eyebrow: "Preferencias del portal", title: "Configuración" },
   profile: { eyebrow: "Tu espacio", title: "Perfil" },
@@ -302,6 +325,10 @@ export function CEHFApp() {
   const [state, setState] = useState<PortalState>(createDemoState);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationWrapRef = useOutsidePointerDismiss<HTMLDivElement>(
+    notificationsOpen,
+    setNotificationsOpen,
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState<string | null>(() =>
     typeof window === "undefined" ? null : taskIdFromPath(window.location.pathname),
@@ -320,6 +347,23 @@ export function CEHFApp() {
     ),
   );
   const [taskRecordsLoading, setTaskRecordsLoading] = useState(false);
+  const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>(() =>
+    legacyMaterialsToLearningMaterials(
+      createDemoState().materials,
+      demoProfiles.student,
+      defaultAcademicConfig,
+      demoManagedAccounts,
+    ),
+  );
+  const [materialRecordsLoading, setMaterialRecordsLoading] = useState(false);
+  const [viewedMaterialIds, setViewedMaterialIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        createDemoState().materials
+          .filter((material) => material.reviewed)
+          .map((material) => material.id),
+      ),
+  );
   const [mobileMore, setMobileMore] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>(
@@ -385,6 +429,7 @@ export function CEHFApp() {
               wallPosts: migratedWallPosts,
               forumModeration:
                 restored.forumModeration ?? defaults.forumModeration,
+              forumBans: restored.forumBans ?? defaults.forumBans,
             }
           : {
               ...defaults,
@@ -393,6 +438,7 @@ export function CEHFApp() {
               wallPosts: migratedWallPosts,
               forumTopics: defaults.forumTopics,
               forumModeration: defaults.forumModeration,
+              forumBans: defaults.forumBans,
             };
         window.localStorage.setItem(
           "cehf-demo-state",
@@ -465,11 +511,85 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
+    queueMicrotask(() => {
+      setMaterialRecords([]);
+      setMaterialRecordsLoading(true);
+    });
+    return watchLearningMaterials(
+      profile,
+      (materials) => {
+        setMaterialRecords(materials);
+        setMaterialRecordsLoading(false);
+      },
+      (error) => {
+        setMaterialRecordsLoading(false);
+        reportFirebaseError("cargar materiales", error);
+      },
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
+    if (firebaseUser) return;
+    queueMicrotask(() => {
+      setMaterialRecords(
+        legacyMaterialsToLearningMaterials(
+          state.materials,
+          currentProfile,
+          academicConfig,
+          managedAccounts,
+        ),
+      );
+      setMaterialRecordsLoading(false);
+      setViewedMaterialIds(
+        new Set(
+          state.materials
+            .filter((material) => material.reviewed)
+            .map((material) => material.id),
+        ),
+      );
+    });
+  }, [academicConfig, currentProfile, firebaseUser, managedAccounts, state.materials]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile || profile.role !== "student") {
+      if (profile?.role !== "student") queueMicrotask(() => setViewedMaterialIds(new Set()));
+      return;
+    }
+    let active = true;
+    void loadViewedLearningMaterialIds(materialRecords, profile)
+      .then((ids) => {
+        if (active) setViewedMaterialIds(ids);
+      })
+      .catch((error) => {
+        if (active) reportFirebaseError("cargar lecturas de materiales", error);
+      });
+    return () => {
+      active = false;
+    };
+  }, [firebaseUser, materialRecords, profile]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
     return watchTaskNotifications(
       profile.uid,
       (notifications) =>
         setState((previous) => ({ ...previous, notifications })),
       (error) => reportFirebaseError("cargar notificaciones", error),
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    return watchForumWorkspace(
+      profile,
+      (workspace) =>
+        setState((previous) => ({
+          ...previous,
+          forumTopics: workspace.topics,
+          forumModeration: workspace.moderation,
+          forumBans: workspace.bans,
+        })),
+      (error) => reportFirebaseError("cargar el foro", error),
     );
   }, [firebaseUser, profile]);
 
@@ -520,7 +640,7 @@ export function CEHFApp() {
     if (!firebaseUser || !profile || role === "student") return;
     let active = true;
     queueMicrotask(() => setManagedAccountsLoading(true));
-    void listManagedAccounts(profile.institutionId)
+    void listManagedAccounts(profile.institutionId, profile.role)
       .then((accounts) => {
         if (active) setManagedAccounts(accounts);
       })
@@ -844,7 +964,7 @@ export function CEHFApp() {
                 </AnimatePresence>
               </motion.span>
             </button>
-            <div className="notification-wrap">
+            <div className="notification-wrap" ref={notificationWrapRef}>
               <button
                 className="icon-button"
                 onClick={() => setNotificationsOpen((open) => !open)}
@@ -935,13 +1055,18 @@ export function CEHFApp() {
                   <button
                     className="primary-button"
                     disabled={
-                      activeSection === "tasks" &&
-                      academicConfig.calendarStatus !== "active"
+                      (activeSection === "tasks" &&
+                        academicConfig.calendarStatus !== "active") ||
+                      (activeSection === "weekly-materials" &&
+                        academicCalendar.weeks.length === 0)
                     }
                     title={
                       activeSection === "tasks" &&
                       academicConfig.calendarStatus !== "active"
                         ? "Dirección debe configurar una semana activa"
+                        : activeSection === "weekly-materials" &&
+                            academicCalendar.weeks.length === 0
+                          ? "Dirección debe configurar las semanas académicas"
                         : undefined
                     }
                     onClick={() => setCreateOpen(true)}
@@ -969,6 +1094,12 @@ export function CEHFApp() {
               openDetail={openTaskDetail}
               taskRecords={taskRecords}
               taskRecordsLoading={taskRecordsLoading}
+              materialRecords={materialRecords}
+              materialRecordsLoading={materialRecordsLoading}
+              viewedMaterialIds={viewedMaterialIds}
+              onMaterialViewed={(materialId) =>
+                setViewedMaterialIds((current) => new Set(current).add(materialId))
+              }
               academicConfig={academicConfig}
               academicCalendar={academicCalendar}
               saveAcademicCalendarConfiguration={async (input) => {
@@ -1008,7 +1139,40 @@ export function CEHFApp() {
             onNavigate={navigate}
           />
         )}
-        {createOpen && activeSection === "tasks" ? (
+        {createOpen && activeSection === "weekly-materials" ? (
+          <MaterialCreateModal
+            profile={currentProfile}
+            config={academicConfig}
+            calendar={academicCalendar}
+            accounts={managedAccounts}
+            onClose={() => setCreateOpen(false)}
+            onCreate={async (input: LearningMaterialCreateInput) => {
+              if (firebaseUser && profile) {
+                const result = await createLearningMaterial(
+                  input,
+                  profile,
+                  academicConfig,
+                  academicCalendar,
+                );
+                toast.success("Material publicado", {
+                  description: `${result.recipientCount} ${result.recipientCount === 1 ? "alumno fue notificado" : "alumnos fueron notificados"}.`,
+                });
+              } else {
+                const material = createDemoLearningMaterial(
+                  input,
+                  currentProfile,
+                  academicConfig,
+                  academicCalendar,
+                  managedAccounts,
+                );
+                setMaterialRecords((previous) => [material, ...previous]);
+                toast.success("Material publicado en la demostración", {
+                  description: `${material.audienceStudentIds.length} destinatarios preparados.`,
+                });
+              }
+            }}
+          />
+        ) : createOpen && activeSection === "tasks" ? (
           <TaskCreateModal
             config={academicConfig}
             accounts={managedAccounts}
@@ -1042,8 +1206,38 @@ export function CEHFApp() {
         ) : createOpen ? (
           <CreateModal
             section={activeSection}
+            forumGroups={[
+              ...new Set(
+                managedAccounts
+                  .filter((account) => account.role === "student")
+                  .map((account) =>
+                    `${account.grade ?? ""} ${account.group ?? ""}`.trim(),
+                  )
+                  .filter(Boolean),
+              ),
+            ]}
+            forumSubjects={currentProfile.subjects ?? []}
             onClose={() => setCreateOpen(false)}
-            onCreate={(titleValue, subject, forumDraft) => {
+            onCreate={async (titleValue, subject, forumDraft) => {
+              if (
+                activeSection === "forum" &&
+                firebaseUser &&
+                profile &&
+                forumDraft
+              ) {
+                await createForumTopic({
+                  title: titleValue,
+                  subject,
+                  ...forumDraft,
+                });
+                toast.success(
+                  forumDraft.status === "scheduled"
+                    ? "Conversación programada y grupo notificado"
+                    : "Conversación publicada y grupo notificado",
+                );
+                setCreateOpen(false);
+                return;
+              }
               const id = `${activeSection}-${Date.now()}`;
               updateState((previous) => {
                 if (activeSection === "tasks") {
@@ -1475,6 +1669,10 @@ function SectionContent({
   openDetail,
   taskRecords,
   taskRecordsLoading,
+  materialRecords,
+  materialRecordsLoading,
+  viewedMaterialIds,
+  onMaterialViewed,
   academicConfig,
   academicCalendar,
   saveAcademicCalendarConfiguration,
@@ -1496,6 +1694,10 @@ function SectionContent({
   openDetail: (id: string) => void;
   taskRecords: TaskAssignment[];
   taskRecordsLoading: boolean;
+  materialRecords: LearningMaterial[];
+  materialRecordsLoading: boolean;
+  viewedMaterialIds: Set<string>;
+  onMaterialViewed: (materialId: string) => void;
   academicConfig: AcademicConfig;
   academicCalendar: AcademicCalendar;
   saveAcademicCalendarConfiguration: (
@@ -1563,7 +1765,15 @@ function SectionContent({
       );
     case "weekly-materials":
       return (
-        <MaterialsPage state={state} updateState={updateState} role={role} />
+        <MaterialsPage
+          materials={materialRecords}
+          loading={materialRecordsLoading}
+          profile={profile}
+          accounts={managedAccounts}
+          viewedIds={viewedMaterialIds}
+          onViewed={onMaterialViewed}
+          firebaseReady={firebaseReady}
+        />
       );
     case "wall-newspaper":
       return (
@@ -1581,6 +1791,17 @@ function SectionContent({
           updateState={updateState}
           profile={profile}
           role={role}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
+        />
+      );
+    case "workshops":
+      return (
+        <WorkshopsPage
+          profile={profile}
+          role={role}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
         />
       );
     case "users":
@@ -1604,6 +1825,9 @@ function SectionContent({
           academicConfig={academicConfig}
           academicCalendar={academicCalendar}
           saveAcademicCalendarConfiguration={saveAcademicCalendarConfiguration}
+          institutionId={profile.institutionId}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
         />
       );
     case "profile":
@@ -1940,7 +2164,7 @@ function WeeklyVerseCard({
   ) => void;
 }) {
   const [editorOpen, setEditorOpen] = useState(false);
-  const canEdit = role === "teacher" || role === "director";
+  const canEdit = role === "director";
 
   return (
     <>
@@ -1955,8 +2179,6 @@ function WeeklyVerseCard({
           </blockquote>
           <div className="weekly-verse-meta">
             <cite>{state.weeklyVerse.reference}</cite>
-            <span aria-hidden="true">·</span>
-            <span>Establecido por {state.weeklyVerse.updatedBy}</span>
           </div>
         </div>
         {canEdit && (
@@ -1977,6 +2199,7 @@ function WeeklyVerseCard({
             reference={state.weeklyVerse.reference}
             onClose={() => setEditorOpen(false)}
             onSave={(text, reference) => {
+              if (role !== "director") return;
               updateState(
                 (previous) => ({
                   ...previous,
@@ -2075,7 +2298,7 @@ function VerseEditorModal({
         </label>
         <div className="setup-note compact-note">
           <BookOpen size={19} />
-          <p>Al guardar, el versículo aparecerá en el Inicio de todos los roles.</p>
+          <p>Al guardar, el versículo aparecerá en el Inicio de todos los usuarios.</p>
         </div>
         <div className="modal-actions">
           <button className="secondary-button" type="button" onClick={onClose}>
@@ -2608,97 +2831,6 @@ function ReportsPage({
   );
 }
 
-function MaterialsPage({
-  state,
-  updateState,
-  role,
-}: {
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-  role: Role;
-}) {
-  return (
-    <div>
-      <div className="filter-row">
-        <div className="filter-pills">
-          <button className="active">Toda la semana</button>
-          <button>Lunes</button>
-          <button>Miércoles</button>
-          <button>Jueves</button>
-        </div>
-        <button className="filter-button">
-          Todas las materias <ChevronDown size={16} />
-        </button>
-      </div>
-      <section className="materials-grid">
-        {state.materials.map((material) => (
-          <article className="material-card" key={material.id}>
-            <div className={`material-type ${subjectColors[material.subject] ?? "violet"}`}>
-              {material.type === "Video" ? (
-                <Sparkles size={24} />
-              ) : material.type === "Audio" ? (
-                <MessageCircle size={24} />
-              ) : (
-                <FileText size={24} />
-              )}
-              <span>{material.type}</span>
-            </div>
-            <div className="material-copy">
-              <div className="list-card-meta">
-                <span>{material.day}</span>
-                <i>•</i>
-                <span>{material.subject}</span>
-              </div>
-              <h3>{material.title}</h3>
-              <p>{material.description}</p>
-              <div className="material-flags">
-                <span className={material.required ? "required" : ""}>
-                  {material.required ? "Obligatorio" : "Opcional"}
-                </span>
-                {material.type === "Audio" && <span>Con transcripción</span>}
-              </div>
-              <button
-                className={
-                  material.reviewed ? "secondary-button" : "primary-button"
-                }
-                onClick={() =>
-                  updateState(
-                    (previous) => ({
-                      ...previous,
-                      materials: previous.materials.map((item) =>
-                        item.id === material.id
-                          ? { ...item, reviewed: true }
-                          : item,
-                      ),
-                    }),
-                    role === "student"
-                      ? "Material marcado como revisado"
-                      : "Vista previa abierta",
-                  )
-                }
-              >
-                {role === "student"
-                  ? material.reviewed
-                    ? "Revisado"
-                    : "Abrir material"
-                  : "Previsualizar"}
-                {material.reviewed ? (
-                  <CheckCircle2 size={17} />
-                ) : (
-                  <ArrowRight size={17} />
-                )}
-              </button>
-            </div>
-          </article>
-        ))}
-      </section>
-    </div>
-  );
-}
-
 function SettingsPage({
   state,
   updateState,
@@ -2706,6 +2838,9 @@ function SettingsPage({
   academicConfig,
   academicCalendar,
   saveAcademicCalendarConfiguration,
+  institutionId,
+  managedAccounts,
+  firebaseReady,
 }: {
   state: PortalState;
   updateState: (
@@ -2718,6 +2853,9 @@ function SettingsPage({
   saveAcademicCalendarConfiguration: (
     input: AcademicCalendarInput,
   ) => Promise<void>;
+  institutionId: string;
+  managedAccounts: ManagedAccount[];
+  firebaseReady: boolean;
 }) {
   return (
     <div className="settings-layout">
@@ -2801,59 +2939,14 @@ function SettingsPage({
           </div>
           <Toggle checked label="Avisos internos" onChange={() => undefined} />
         </div>
-        {role === "director" && (
-          <>
-            <div className="setting-row">
-              <div>
-                <strong>WhatsApp para familias</strong>
-                <span>
-                  Solo avisos genéricos para contactos con consentimiento.
-                </span>
-              </div>
-              <Toggle
-                checked={state.settings.whatsappEnabled}
-                label="WhatsApp para familias"
-                onChange={(checked) =>
-                  updateState(
-                    (previous) => ({
-                      ...previous,
-                      settings: {
-                        ...previous.settings,
-                        whatsappEnabled: checked,
-                      },
-                    }),
-                    checked
-                      ? "WhatsApp habilitado"
-                      : "WhatsApp pausado; el portal sigue funcionando",
-                  )
-                }
-              />
-            </div>
-            <div className="setting-row">
-              <div>
-                <strong>Horario silencioso</strong>
-                <span>No se envían recordatorios no críticos.</span>
-              </div>
-              <select
-                value={state.settings.quietHours}
-                onChange={(event) =>
-                  updateState((previous) => ({
-                    ...previous,
-                    settings: {
-                      ...previous.settings,
-                      quietHours: event.target.value,
-                    },
-                  }))
-                }
-              >
-                <option>20:00–07:00</option>
-                <option>21:00–07:00</option>
-                <option>Sin horario</option>
-              </select>
-            </div>
-          </>
-        )}
       </section>
+      {role === "director" && (
+        <WhatsAppAdminPanel
+          institutionId={institutionId}
+          accounts={managedAccounts}
+          firebaseReady={firebaseReady}
+        />
+      )}
       {role === "director" && (
         <AcademicConfigurationCard
           key={`${academicConfig.schoolYearId}-${academicCalendar.weeks
@@ -3489,10 +3582,6 @@ function AccountRegistrationModal({
               </div>
 
               <aside className="account-registration-aside">
-                <div className={`registration-connection ${firebaseReady ? "connected" : "demo"}`}>
-                  <span />
-                  <div><strong>{firebaseReady ? "Firebase conectado" : "Modo demostración"}</strong><small>{firebaseReady ? "La cuenta se guardará en Auth, Firestore y Storage" : "La interfaz ya está lista para tus variables .env"}</small></div>
-                </div>
                 <motion.article className="registration-summary-card" layout>
                   <motion.span
                     className="registration-summary-avatar"
@@ -3533,31 +3622,60 @@ function AccountRegistrationModal({
 
 function CreateModal({
   section,
+  forumGroups,
+  forumSubjects,
   onClose,
   onCreate,
 }: {
   section: SectionKey;
+  forumGroups?: string[];
+  forumSubjects?: string[];
   onClose: () => void;
   onCreate: (
     title: string,
     subject: string,
     forumDraft?: ForumDraftDetails,
-  ) => void;
+  ) => Promise<void> | void;
 }) {
   const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("Ciencias");
+  const [subject, setSubject] = useState(forumSubjects?.[0] ?? "Ciencias");
   const [prompt, setPrompt] = useState("");
-  const [group, setGroup] = useState("5.º A");
-  const [forumName, setForumName] = useState("Ciencias · 5.º A");
+  const [group, setGroup] = useState(forumGroups?.[0] ?? "5.º A");
+  const [forumName, setForumName] = useState(
+    `${forumSubjects?.[0] ?? "Ciencias"} · ${forumGroups?.[0] ?? "5.º A"}`,
+  );
   const [forumKind, setForumKind] =
     useState<ForumTopicKind>("weekly_question");
   const [forumStatus, setForumStatus] =
     useState<ForumTopic["status"]>("open");
-  const [opensAt, setOpensAt] = useState("Publicado ahora");
-  const [closesAt, setClosesAt] = useState("Cierra el viernes");
+  const [opensAt, setOpensAt] = useState("");
+  const [closesAt, setClosesAt] = useState(() => {
+    const date = new Date(Date.now() + 7 * 24 * 60 * 60_000);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 16);
+  });
   const [allowReplies, setAllowReplies] = useState(true);
   const [allowAttachments, setAllowAttachments] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [createError, setCreateError] = useState("");
   const isForum = section === "forum";
+  const subjectOptions = [
+    ...new Set([
+      ...(forumSubjects ?? []),
+      "Ciencias",
+      "Matemáticas",
+      "Español",
+      "Comunidad",
+    ]),
+  ];
+  const groupOptions = [
+    ...new Set([
+      ...(forumGroups?.length ? forumGroups : ["5.º A", "5.º B"]),
+      "4.º–6.º",
+      "Todo el campus",
+    ]),
+  ];
   return (
     <motion.div
       className="modal-backdrop"
@@ -3573,25 +3691,38 @@ function CreateModal({
         initial={{ opacity: 0, y: 18, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          onCreate(
-            title.trim(),
-            subject,
-            isForum
-              ? {
-                  prompt: prompt.trim(),
-                  group,
-                  forumName: forumName.trim(),
-                  kind: forumKind,
-                  status: forumStatus,
-                  opensAt: opensAt.trim(),
-                  closesAt: closesAt.trim(),
-                  allowReplies,
-                  allowAttachments,
-                }
-              : undefined,
-          );
+          setSubmitting(true);
+          setCreateError("");
+          try {
+            await onCreate(
+              title.trim(),
+              subject,
+              isForum
+                ? {
+                    prompt: prompt.trim(),
+                    group,
+                    forumName: forumName.trim(),
+                    kind: forumKind,
+                    status: forumStatus,
+                    opensAt:
+                      forumStatus === "scheduled" && opensAt
+                        ? new Date(opensAt).toISOString()
+                        : new Date().toISOString(),
+                    closesAt: closesAt
+                      ? new Date(closesAt).toISOString()
+                      : "",
+                    allowReplies,
+                    allowAttachments,
+                  }
+                : undefined,
+            );
+          } catch (error) {
+            setCreateError(friendlyFirebaseError(error));
+          } finally {
+            setSubmitting(false);
+          }
         }}
       >
         <div className="modal-heading">
@@ -3624,10 +3755,9 @@ function CreateModal({
               if (isForum) setForumName(`${event.target.value} · ${group}`);
             }}
           >
-            <option>Ciencias</option>
-            <option>Matemáticas</option>
-            <option>Español</option>
-            <option>Comunidad</option>
+            {subjectOptions.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
           </select>
         </label>
         {isForum ? (
@@ -3671,10 +3801,9 @@ function CreateModal({
                     setForumName(`${subject} · ${event.target.value}`);
                   }}
                 >
-                  <option>5.º A</option>
-                  <option>5.º B</option>
-                  <option>4.º–6.º</option>
-                  <option>Todo el campus</option>
+                  {groupOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
                 </select>
               </label>
               <label>
@@ -3693,11 +3822,16 @@ function CreateModal({
                   onChange={(event) => {
                     const nextStatus = event.target.value as ForumTopic["status"];
                     setForumStatus(nextStatus);
-                    setOpensAt(
-                      nextStatus === "scheduled"
-                        ? "Se abre el lunes · 07:00"
-                        : "Publicado ahora",
-                    );
+                    if (nextStatus === "scheduled" && !opensAt) {
+                      const date = new Date(Date.now() + 24 * 60 * 60_000);
+                      setOpensAt(
+                        new Date(
+                          date.getTime() - date.getTimezoneOffset() * 60_000,
+                        )
+                          .toISOString()
+                          .slice(0, 16),
+                      );
+                    }
                   }}
                 >
                   <option value="open">Publicar ahora</option>
@@ -3708,18 +3842,33 @@ function CreateModal({
               <label>
                 Apertura
                 <input
-                  value={opensAt}
+                  type={forumStatus === "scheduled" ? "datetime-local" : "text"}
+                  value={
+                    forumStatus === "scheduled"
+                      ? opensAt
+                      : forumStatus === "closed"
+                        ? "Publicado cerrado"
+                        : "Publicado ahora"
+                  }
                   onChange={(event) => setOpensAt(event.target.value)}
+                  readOnly={forumStatus !== "scheduled"}
+                  required={forumStatus === "scheduled"}
                 />
               </label>
               <label>
                 Cierre
                 <input
+                  type="datetime-local"
                   value={closesAt}
                   onChange={(event) => setClosesAt(event.target.value)}
                 />
               </label>
             </div>
+            {createError && (
+              <div className="forum-composer-error" role="alert">
+                <ShieldCheck size={15} /> {createError}
+              </div>
+            )}
             <div className="forum-create-options">
               <label>
                 <input
@@ -3761,12 +3910,22 @@ function CreateModal({
           </button>
           <button
             className="primary-button"
-            disabled={!title.trim() || (isForum && !prompt.trim())}
+            disabled={
+              submitting ||
+              !title.trim() ||
+              (isForum &&
+                (!prompt.trim() ||
+                  (forumStatus === "scheduled" && !opensAt)))
+            }
           >
             {isForum
               ? forumStatus === "scheduled"
-                ? "Programar tema"
-                : "Publicar tema"
+                ? submitting
+                  ? "Programando…"
+                  : "Programar tema"
+                : submitting
+                  ? "Publicando…"
+                  : "Publicar tema"
               : "Crear borrador"}{" "}
             <ArrowRight size={17} />
           </button>
