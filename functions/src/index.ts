@@ -1386,6 +1386,638 @@ export const listStudentMaterials = onCall(async (request) => {
   return { materials };
 });
 
+type ReviewStudent = {
+  uid: string;
+  institutionId: string;
+  name: string;
+};
+
+type ReviewPublicQuestion = {
+  id: string;
+  type: "multiple_choice" | "true_false" | "reflection";
+  prompt: string;
+  options: Array<{ id: string; label: string }>;
+  points: number;
+};
+
+async function requireReviewStudent(
+  auth: CallableRequest<unknown>["auth"],
+): Promise<ReviewStudent> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const snapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = snapshot.data();
+  const institutionId = String(profile?.institutionId ?? "");
+  if (
+    !snapshot.exists ||
+    profile?.active !== true ||
+    profile?.role !== "student" ||
+    !institutionId
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil de alumno no está activo para responder repasos.",
+    );
+  }
+  return {
+    uid: auth.uid,
+    institutionId,
+    name: String(profile?.name ?? "Alumno"),
+  };
+}
+
+function reviewAttachments(
+  value: unknown,
+  institutionId: string,
+  reviewId: string,
+) {
+  if (!Array.isArray(value) || value.length > 3) {
+    throw new HttpsError("invalid-argument", "Puedes agregar hasta 3 archivos.");
+  }
+  return value.map((item, index) => {
+    const input = (item ?? {}) as Record<string, unknown>;
+    const id = materialId(input.id);
+    const storagePath = String(input.storagePath ?? "");
+    const expectedPath = `institutions/${institutionId}/weeklyReviews/${reviewId}/${id}`;
+    const size = Number(input.size ?? 0);
+    if (
+      storagePath !== expectedPath ||
+      !Number.isFinite(size) ||
+      size <= 0 ||
+      size >= 20 * 1024 * 1024
+    ) {
+      throw new HttpsError(
+        "invalid-argument",
+        `El archivo ${index + 1} no coincide con la carga autorizada.`,
+      );
+    }
+    return {
+      id,
+      name: materialText(input.name, "El nombre del archivo", 1, 180),
+      storagePath,
+      contentType: materialText(input.contentType, "El tipo del archivo", 1, 120),
+      size,
+    };
+  });
+}
+
+function reviewQuestions(value: unknown) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 30) {
+    throw new HttpsError("invalid-argument", "Agrega entre 1 y 30 reactivos.");
+  }
+  const answerKey: Record<string, string> = {};
+  const publicQuestions = value.map((item, index): ReviewPublicQuestion => {
+    const input = (item ?? {}) as Record<string, unknown>;
+    const id = materialId(input.id);
+    const type = String(input.type ?? "");
+    if (!["multiple_choice", "true_false", "reflection"].includes(type)) {
+      throw new HttpsError(
+        "invalid-argument",
+        `El tipo del reactivo ${index + 1} no es válido.`,
+      );
+    }
+    const prompt = materialText(
+      input.prompt,
+      `La pregunta ${index + 1}`,
+      5,
+      500,
+    );
+    if (type === "reflection") {
+      answerKey[id] = "";
+      return { id, type, prompt, options: [], points: 0 };
+    }
+    const rawOptions =
+      type === "true_false"
+        ? [
+            { id: "true", label: "Verdadero" },
+            { id: "false", label: "Falso" },
+          ]
+        : input.options;
+    if (
+      !Array.isArray(rawOptions) ||
+      rawOptions.length < 2 ||
+      rawOptions.length > 6
+    ) {
+      throw new HttpsError(
+        "invalid-argument",
+        `El reactivo ${index + 1} debe tener entre 2 y 6 opciones.`,
+      );
+    }
+    const options = rawOptions.map((option, optionIndex) => {
+      const optionInput = (option ?? {}) as Record<string, unknown>;
+      return {
+        id:
+          type === "true_false"
+            ? String(optionInput.id)
+            : materialId(optionInput.id),
+        label: materialText(
+          optionInput.label,
+          `La opción ${optionIndex + 1} del reactivo ${index + 1}`,
+          1,
+          180,
+        ),
+      };
+    });
+    const correctAnswer = String(input.correctAnswer ?? "");
+    if (!options.some((option) => option.id === correctAnswer)) {
+      throw new HttpsError(
+        "invalid-argument",
+        `Selecciona la respuesta correcta del reactivo ${index + 1}.`,
+      );
+    }
+    const points = Number(input.points ?? 1);
+    if (!Number.isInteger(points) || points < 1 || points > 10) {
+      throw new HttpsError(
+        "invalid-argument",
+        `El puntaje del reactivo ${index + 1} debe estar entre 1 y 10.`,
+      );
+    }
+    answerKey[id] = correctAnswer;
+    return {
+      id,
+      type: type as ReviewPublicQuestion["type"],
+      prompt,
+      options,
+      points,
+    };
+  });
+  if (new Set(publicQuestions.map((question) => question.id)).size !== publicQuestions.length) {
+    throw new HttpsError("invalid-argument", "Cada reactivo debe tener un identificador único.");
+  }
+  return { publicQuestions, answerKey };
+}
+
+function validatedReviewAnswers(
+  value: unknown,
+  questions: ReviewPublicQuestion[],
+) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "Las respuestas no tienen un formato válido.");
+  }
+  const raw = value as Record<string, unknown>;
+  const questionIds = new Set(questions.map((question) => question.id));
+  if (Object.keys(raw).some((id) => !questionIds.has(id))) {
+    throw new HttpsError("invalid-argument", "Las respuestas incluyen un reactivo desconocido.");
+  }
+  return Object.fromEntries(
+    questions.flatMap((question) => {
+      if (!(question.id in raw)) return [];
+      const answer = String(raw[question.id] ?? "").trim();
+      if (answer.length > 800) {
+        throw new HttpsError("invalid-argument", "Una respuesta supera 800 caracteres.");
+      }
+      if (
+        question.type !== "reflection" &&
+        answer &&
+        !question.options.some((option) => option.id === answer)
+      ) {
+        throw new HttpsError("invalid-argument", "Una respuesta no corresponde a sus opciones.");
+      }
+      return [[question.id, answer]];
+    }),
+  ) as Record<string, string>;
+}
+
+function assertStudentCanAnswerReview(
+  data: DocumentData | undefined,
+  student: ReviewStudent,
+) {
+  if (
+    !data ||
+    data.institutionId !== student.institutionId ||
+    data.status !== "published" ||
+    !Array.isArray(data.audienceStudentIds) ||
+    !data.audienceStudentIds.includes(student.uid)
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Este repaso no está disponible para tu cuenta.",
+    );
+  }
+}
+
+export const createWeeklyReview = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  if (String(input.institutionId ?? "") !== actor.institutionId) {
+    throw new HttpsError("permission-denied", "La institución no coincide con tu perfil.");
+  }
+  const selectedReviewId = materialId(input.reviewId);
+  const title = materialText(input.title, "El título", 3, 120);
+  const description = optionalMaterialText(input.description, "La descripción", 800);
+  const subject = materialText(input.subject, "La materia", 2, 80);
+  const subjectId = calendarId(input.subjectId, "La materia");
+  if (actor.role === "teacher" && !actor.subjects.includes(subject)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo puedes crear repasos de las materias que impartes.",
+    );
+  }
+  const status = String(input.status ?? "");
+  if (!["draft", "published"].includes(status)) {
+    throw new HttpsError("invalid-argument", "Selecciona un estado de publicación válido.");
+  }
+  const duration = Number(input.duration ?? 10);
+  const maxAttempts = Number(input.maxAttempts ?? 1);
+  if (!Number.isInteger(duration) || duration < 3 || duration > 60) {
+    throw new HttpsError("invalid-argument", "La duración debe ser de 3 a 60 minutos.");
+  }
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) {
+    throw new HttpsError("invalid-argument", "Permite entre 1 y 3 intentos.");
+  }
+  const targetGroups = materialGroups(input.targetGroups);
+  const attachments = reviewAttachments(
+    input.attachments,
+    actor.institutionId,
+    selectedReviewId,
+  );
+  const { publicQuestions, answerKey } = reviewQuestions(input.questions);
+  const schoolYearId = calendarId(input.schoolYearId, "El ciclo escolar");
+  const termId = calendarId(input.termId, "El trimestre");
+  const weekId = calendarId(input.weekId, "La semana");
+  const weekReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/semanas/${weekId}`,
+  );
+  const termReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/trimestres/${termId}`,
+  );
+  const configReference = db.doc(
+    `institutions/${actor.institutionId}/configuracion/academica`,
+  );
+  const [weekSnapshot, termSnapshot, configSnapshot] = await db.getAll(
+    weekReference,
+    termReference,
+    configReference,
+  );
+  const week = weekSnapshot.data();
+  const term = termSnapshot.data();
+  const config = configSnapshot.data();
+  if (
+    !weekSnapshot.exists ||
+    !termSnapshot.exists ||
+    week?.active !== true ||
+    term?.active !== true ||
+    !Array.isArray(term?.weekIds) ||
+    !term.weekIds.includes(weekId)
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La semana seleccionada no pertenece al calendario académico activo.",
+    );
+  }
+
+  const peopleSnapshot = await db
+    .collection("users")
+    .where("institutionId", "==", actor.institutionId)
+    .get();
+  const people = peopleSnapshot.docs.map((snapshot) => ({
+    uid: snapshot.id,
+    ...snapshot.data(),
+  })) as Array<DocumentData & { uid: string }>;
+  const recipients = people.filter((person) => {
+    if (person.active !== true || person.role !== "student") return false;
+    const subjects = notificationRecipients(person.subjects);
+    const teacherIds = notificationRecipients(person.teacherIds);
+    const group = `${String(person.grade ?? "")} ${String(person.group ?? "")}`.trim();
+    return (
+      subjects.includes(subject) &&
+      (actor.role === "director" || teacherIds.includes(actor.uid)) &&
+      (!targetGroups.length || targetGroups.includes(group))
+    );
+  });
+  if (!recipients.length) {
+    throw new HttpsError(
+      "failed-precondition",
+      actor.role === "teacher"
+        ? "No tienes alumnos asignados en esa materia y grupos."
+        : "No hay alumnos activos para esa materia y grupos.",
+    );
+  }
+  const resolvedGroups = [
+    ...new Set(
+      recipients
+        .map((person) =>
+          `${String(person.grade ?? "")} ${String(person.group ?? "")}`.trim(),
+        )
+        .filter(Boolean),
+    ),
+  ];
+  const managerIds = actor.role === "teacher"
+    ? [actor.uid]
+    : people
+        .filter((person) => {
+          if (person.active !== true || person.role !== "teacher") return false;
+          if (!notificationRecipients(person.subjects).includes(subject)) return false;
+          return recipients.some((student) =>
+            notificationRecipients(student.teacherIds).includes(person.uid),
+          );
+        })
+        .map((person) => person.uid);
+
+  const reference = db.doc(`weeklyReviews/${selectedReviewId}`);
+  if ((await reference.get()).exists) {
+    throw new HttpsError("already-exists", "Ese repaso ya existe.");
+  }
+  const now = Timestamp.now();
+  const review = {
+    institutionId: actor.institutionId,
+    schoolYearId,
+    schoolYearLabel: String(config?.schoolYearLabel ?? input.schoolYearLabel ?? schoolYearId),
+    termId,
+    termLabel: String(term?.label ?? input.termLabel ?? "Trimestre"),
+    weekId,
+    weekLabel: String(week?.label ?? input.weekLabel ?? "Semana"),
+    subjectId,
+    subject,
+    title,
+    description,
+    duration,
+    maxAttempts,
+    status,
+    questions: publicQuestions,
+    attachments,
+    audienceStudentIds: recipients.map((person) => person.uid),
+    targetGroups: resolvedGroups,
+    managerIds,
+    audienceCount: recipients.length,
+    startedCount: 0,
+    completedCount: 0,
+    createdBy: actor.uid,
+    createdByName: actor.name,
+    createdByRole: actor.role,
+    createdAt: now,
+    updatedAt: now,
+    ...(status === "published" ? { publishedAt: now } : {}),
+  };
+  const batch = db.batch();
+  batch.create(reference, review);
+  batch.create(reference.collection("answerKeys").doc("main"), {
+    answerKey,
+    createdAt: now,
+    updatedAt: now,
+  });
+  batch.create(db.collection("auditEvents").doc(), {
+    entityType: "weekly_review",
+    entityId: selectedReviewId,
+    institutionId: actor.institutionId,
+    action: status === "published" ? "review.published" : "review.draft_created",
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    after: {
+      subject,
+      weekId,
+      questionCount: publicQuestions.length,
+      recipientCount: recipients.length,
+    },
+    createdAt: now,
+  });
+  await batch.commit();
+
+  if (status === "published") {
+    await writeNotifications(
+      recipients.map((person) => person.uid),
+      `review-${selectedReviewId}`,
+      {
+        category: "review",
+        title: `Nuevo repaso: ${title}`,
+        detail: `${subject} · ${String(week?.label ?? "Semana")} · ${duration} min`,
+        reviewId: selectedReviewId,
+        url: "/weekly-review",
+        eventType: "review_published",
+      },
+    );
+  }
+  logger.info("Weekly review created", {
+    reviewId: selectedReviewId,
+    institutionId: actor.institutionId,
+    actorId: actor.uid,
+    recipientCount: recipients.length,
+    status,
+  });
+  return { reviewId: selectedReviewId, recipientCount: recipients.length };
+});
+
+export const updateWeeklyReviewStatus = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const reviewId = materialId(input.reviewId);
+  const status = String(input.status ?? "");
+  if (!["draft", "published", "closed"].includes(status)) {
+    throw new HttpsError("invalid-argument", "El estado del repaso no es válido.");
+  }
+  const reference = db.doc(`weeklyReviews/${reviewId}`);
+  const snapshot = await reference.get();
+  const review = snapshot.data();
+  if (
+    !snapshot.exists ||
+    review?.institutionId !== actor.institutionId ||
+    (actor.role === "teacher" &&
+      (!Array.isArray(review?.managerIds) || !review.managerIds.includes(actor.uid)))
+  ) {
+    throw new HttpsError("permission-denied", "No puedes administrar este repaso.");
+  }
+  const previousStatus = String(review?.status ?? "draft");
+  if (previousStatus === status) return { status };
+  const now = Timestamp.now();
+  await reference.update({
+    status,
+    updatedAt: now,
+    ...(status === "published"
+      ? { publishedAt: now, closedAt: FieldValue.delete() }
+      : status === "closed"
+        ? { closedAt: now }
+        : { publishedAt: FieldValue.delete(), closedAt: FieldValue.delete() }),
+  });
+  await db.collection("auditEvents").add({
+    entityType: "weekly_review",
+    entityId: reviewId,
+    institutionId: actor.institutionId,
+    action: `review.${status}`,
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    before: { status: previousStatus },
+    after: { status },
+    createdAt: now,
+  });
+  if (status === "published") {
+    await writeNotifications(
+      notificationRecipients(review?.audienceStudentIds),
+      `review-${reviewId}-${previousStatus === "closed" ? "reopened" : "published"}`,
+      {
+        category: "review",
+        title: previousStatus === "closed" ? `Repaso reabierto: ${String(review?.title ?? "Repaso")}` : `Nuevo repaso: ${String(review?.title ?? "Repaso")}`,
+        detail: `${String(review?.subject ?? "Materia")} · ${String(review?.weekLabel ?? "Semana")}`,
+        reviewId,
+        url: "/weekly-review",
+        eventType: previousStatus === "closed" ? "review_reopened" : "review_published",
+      },
+    );
+  }
+  return { status };
+});
+
+export const saveWeeklyReviewProgress = onCall(async (request) => {
+  const student = await requireReviewStudent(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const reviewId = materialId(input.reviewId);
+  const reviewReference = db.doc(`weeklyReviews/${reviewId}`);
+  const attemptReference = reviewReference.collection("attempts").doc(student.uid);
+  const result = await db.runTransaction(async (transaction) => {
+    const [reviewSnapshot, attemptSnapshot] = await Promise.all([
+      transaction.get(reviewReference),
+      transaction.get(attemptReference),
+    ]);
+    const review = reviewSnapshot.data();
+    assertStudentCanAnswerReview(review, student);
+    const questions = (Array.isArray(review?.questions) ? review.questions : []) as ReviewPublicQuestion[];
+    const answers = validatedReviewAnswers(input.answers, questions);
+    const answeredCount = questions.filter((question) => answers[question.id]?.trim()).length;
+    const previous = attemptSnapshot.data();
+    if (previous?.status === "completed") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Este intento ya terminó. Inicia un nuevo intento para continuar.",
+      );
+    }
+    const now = Timestamp.now();
+    const attempt = {
+      institutionId: student.institutionId,
+      reviewId,
+      studentId: student.uid,
+      studentName: student.name,
+      answers,
+      answeredCount,
+      progress: questions.length ? Math.round((answeredCount / questions.length) * 100) : 0,
+      status: "in_progress",
+      attemptNumber: Math.max(1, Number(previous?.attemptNumber ?? 1)),
+      startedAt: previous?.startedAt ?? now,
+      updatedAt: now,
+    };
+    transaction.set(attemptReference, attempt, { merge: false });
+    if (!attemptSnapshot.exists) {
+      transaction.update(reviewReference, {
+        startedCount: FieldValue.increment(1),
+        updatedAt: now,
+      });
+    }
+    return attempt;
+  });
+  return { attempt: result };
+});
+
+export const submitWeeklyReview = onCall(async (request) => {
+  const student = await requireReviewStudent(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const reviewId = materialId(input.reviewId);
+  const reviewReference = db.doc(`weeklyReviews/${reviewId}`);
+  const keyReference = reviewReference.collection("answerKeys").doc("main");
+  const attemptReference = reviewReference.collection("attempts").doc(student.uid);
+  return db.runTransaction(async (transaction) => {
+    const [reviewSnapshot, keySnapshot, attemptSnapshot] = await Promise.all([
+      transaction.get(reviewReference),
+      transaction.get(keyReference),
+      transaction.get(attemptReference),
+    ]);
+    const review = reviewSnapshot.data();
+    assertStudentCanAnswerReview(review, student);
+    if (!keySnapshot.exists) {
+      throw new HttpsError("failed-precondition", "La clave de este repaso no está disponible.");
+    }
+    const questions = (Array.isArray(review?.questions) ? review.questions : []) as ReviewPublicQuestion[];
+    const answers = validatedReviewAnswers(input.answers, questions);
+    if (questions.some((question) => !answers[question.id]?.trim())) {
+      throw new HttpsError("failed-precondition", "Responde todos los reactivos antes de finalizar.");
+    }
+    const previous = attemptSnapshot.data();
+    if (previous?.status === "completed") {
+      return {
+        score: Number(previous.score ?? 0),
+        maxScore: Number(previous.maxScore ?? 0),
+        scorePercent: Number(previous.scorePercent ?? 0),
+      };
+    }
+    const answerKey = (keySnapshot.data()?.answerKey ?? {}) as Record<string, string>;
+    let score = 0;
+    let maxScore = 0;
+    questions.forEach((question) => {
+      if (question.type === "reflection") return;
+      const points = Math.max(1, Number(question.points ?? 1));
+      maxScore += points;
+      if (answers[question.id] === answerKey[question.id]) score += points;
+    });
+    const scorePercent = maxScore ? Math.round((score / maxScore) * 100) : 100;
+    const now = Timestamp.now();
+    transaction.set(attemptReference, {
+      institutionId: student.institutionId,
+      reviewId,
+      studentId: student.uid,
+      studentName: student.name,
+      answers,
+      answeredCount: questions.length,
+      progress: 100,
+      status: "completed",
+      score,
+      maxScore,
+      scorePercent,
+      attemptNumber: Math.max(1, Number(previous?.attemptNumber ?? 1)),
+      startedAt: previous?.startedAt ?? now,
+      completedAt: now,
+      updatedAt: now,
+    }, { merge: false });
+    transaction.update(reviewReference, {
+      ...(!attemptSnapshot.exists ? { startedCount: FieldValue.increment(1) } : {}),
+      completedCount: FieldValue.increment(1),
+      updatedAt: now,
+    });
+    return { score, maxScore, scorePercent };
+  });
+});
+
+export const restartWeeklyReview = onCall(async (request) => {
+  const student = await requireReviewStudent(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const reviewId = materialId(input.reviewId);
+  const reviewReference = db.doc(`weeklyReviews/${reviewId}`);
+  const attemptReference = reviewReference.collection("attempts").doc(student.uid);
+  return db.runTransaction(async (transaction) => {
+    const [reviewSnapshot, attemptSnapshot] = await Promise.all([
+      transaction.get(reviewReference),
+      transaction.get(attemptReference),
+    ]);
+    const review = reviewSnapshot.data();
+    assertStudentCanAnswerReview(review, student);
+    const attempt = attemptSnapshot.data();
+    if (!attemptSnapshot.exists || attempt?.status !== "completed") {
+      throw new HttpsError("failed-precondition", "Primero debes completar el intento actual.");
+    }
+    const attemptNumber = Math.max(1, Number(attempt.attemptNumber ?? 1));
+    const maxAttempts = Math.max(1, Number(review?.maxAttempts ?? 1));
+    if (attemptNumber >= maxAttempts) {
+      throw new HttpsError("failed-precondition", "Ya utilizaste todos los intentos disponibles.");
+    }
+    const now = Timestamp.now();
+    transaction.update(attemptReference, {
+      answers: {},
+      answeredCount: 0,
+      progress: 0,
+      status: "in_progress",
+      attemptNumber: attemptNumber + 1,
+      startedAt: now,
+      updatedAt: now,
+      score: FieldValue.delete(),
+      maxScore: FieldValue.delete(),
+      scorePercent: FieldValue.delete(),
+      completedAt: FieldValue.delete(),
+    });
+    transaction.update(reviewReference, {
+      completedCount: Math.max(0, Number(review?.completedCount ?? 0) - 1),
+      updatedAt: now,
+    });
+    return { attemptNumber: attemptNumber + 1 };
+  });
+});
+
 export const onWorkshopAccessChanged = onDocumentWritten(
   { document: WORKSHOP_PATH },
   async (event) => {

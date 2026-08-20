@@ -749,36 +749,52 @@ service cloud.firestore {
     }
 
     match /weeklyReviews/{reviewId} {
-      allow read: if sameInstitution(resource.data) && (
-        isStaff() || resource.data.status in ["published", "closed"]
-      );
-      allow create: if isStaff()
-        && sameInstitution(request.resource.data)
-        && validCalendarScope(request.resource.data);
-      allow update: if isStaff()
-        && sameInstitution(resource.data)
-        && sameInstitution(request.resource.data)
-        && sameCalendarScope(resource.data, request.resource.data);
-      allow delete: if false;
-
-      match /attempts/{attemptId} {
-        function parentReviewIsVisible() {
-          return sameInstitution(
-            get(/databases/$(database)/documents/weeklyReviews/$(reviewId)).data
-          );
-        }
-
-        allow read: if parentReviewIsVisible() && (
-          isStaff() || resource.data.studentId == request.auth.uid
+      function canReadReview(data) {
+        return sameInstitution(data) && (
+          isDirector()
+          || (
+            roleIs("teacher")
+            && data.managerIds is list
+            && request.auth.uid in data.managerIds
+          )
+          || (
+            roleIs("student")
+            && data.audienceStudentIds is list
+            && request.auth.uid in data.audienceStudentIds
+            && data.status in ["published", "closed"]
+          )
         );
-        allow create: if roleIs("student")
-          && parentReviewIsVisible()
-          && request.resource.data.studentId == request.auth.uid;
-        allow update: if roleIs("student")
-          && parentReviewIsVisible()
-          && resource.data.studentId == request.auth.uid
-          && request.resource.data.studentId == request.auth.uid;
-        allow delete: if false;
+      }
+
+      function parentReview() {
+        return get(
+          /databases/$(database)/documents/weeklyReviews/$(reviewId)
+        ).data;
+      }
+
+      allow read: if canReadReview(resource.data);
+      // Creación, publicación, guardado de avance y calificación pasan por
+      // Cloud Functions para que la clave nunca sea confiada al cliente.
+      allow create, update, delete: if false;
+
+      match /attempts/{studentId} {
+        allow read: if canReadReview(parentReview()) && (
+          isDirector()
+          || (
+            roleIs("teacher")
+            && request.auth.uid in parentReview().managerIds
+          )
+          || (
+            roleIs("student")
+            && request.auth.uid == studentId
+            && resource.data.studentId == studentId
+          )
+        );
+        allow create, update, delete: if false;
+      }
+
+      match /answerKeys/{keyId} {
+        allow read, write: if false;
       }
     }
 

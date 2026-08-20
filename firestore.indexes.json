@@ -62,6 +62,14 @@
       ]
     },
     {
+      "collectionGroup": "weeklyReviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "audienceStudentIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "weeklyProgress",
       "queryScope": "COLLECTION",
       "fields": [

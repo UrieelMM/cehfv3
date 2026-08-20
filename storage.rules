@@ -73,6 +73,13 @@ service firebase.storage {
         );
     }
 
+    function reviewSafeUpload() {
+      return request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches(
+          "(application/pdf|application/octet-stream|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-(excel|powerpoint)|image/.*|audio/.*|text/plain)"
+        );
+    }
+
     function learningMaterial(institutionId, materialId) {
       return firestore.get(
         /databases/(default)/documents/institutions/$(institutionId)/materials/$(materialId)
@@ -94,6 +101,32 @@ service firebase.storage {
             profile().role == "student"
             && material.audienceStudentIds is list
             && request.auth.uid in material.audienceStudentIds
+          )
+        );
+    }
+
+    function weeklyReview(reviewId) {
+      return firestore.get(
+        /databases/(default)/documents/weeklyReviews/$(reviewId)
+      ).data;
+    }
+
+    function canReadWeeklyReview(institutionId, reviewId) {
+      let review = weeklyReview(reviewId);
+      return sameInstitution(institutionId)
+        && review.institutionId == institutionId
+        && (
+          isDirector()
+          || (
+            profile().role == "teacher"
+            && review.managerIds is list
+            && request.auth.uid in review.managerIds
+          )
+          || (
+            profile().role == "student"
+            && review.audienceStudentIds is list
+            && request.auth.uid in review.audienceStudentIds
+            && review.status in ["published", "closed"]
           )
         );
     }
@@ -264,6 +297,17 @@ service firebase.storage {
       allow create: if isStaff()
         && sameInstitution(institutionId)
         && materialSafeUpload();
+      allow update: if false;
+      allow delete: if isDirector() && sameInstitution(institutionId);
+    }
+
+    match /institutions/{institutionId}/weeklyReviews/{reviewId}/{assetId} {
+      allow read: if canReadWeeklyReview(institutionId, reviewId);
+      // El archivo se carga antes de crear el documento; Cloud Functions
+      // valida después la ruta exacta y el rol académico del creador.
+      allow create: if isStaff()
+        && sameInstitution(institutionId)
+        && reviewSafeUpload();
       allow update: if false;
       allow delete: if isDirector() && sameInstitution(institutionId);
     }

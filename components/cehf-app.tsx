@@ -55,6 +55,10 @@ import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { WorkshopsPage } from "@/components/workshops-page";
 import {
+  ReviewCreateModal,
+  ReviewsPage,
+} from "@/components/reviews-page";
+import {
   MaterialCreateModal,
   MaterialsPage,
 } from "@/components/materials-page";
@@ -105,11 +109,16 @@ import {
   watchLearningMaterials,
 } from "@/lib/materials-firebase";
 import {
+  createDemoWeeklyReview,
+  createWeeklyReview,
+  legacyReviewsToWeeklyReviews,
+  watchWeeklyReviews,
+} from "@/lib/reviews-firebase";
+import {
   createDemoState,
   demoManagedAccounts,
   demoProfiles,
   roleLabel,
-  subjectColors,
 } from "@/lib/demo-data";
 import {
   createForumTopic,
@@ -134,6 +143,8 @@ import type {
   UserProfile,
   TaskAssignment,
   TaskCreateInput,
+  WeeklyReview,
+  WeeklyReviewCreateInput,
 } from "@/lib/types";
 
 type IconType = typeof Home;
@@ -350,6 +361,15 @@ export function CEHFApp() {
     ),
   );
   const [taskRecordsLoading, setTaskRecordsLoading] = useState(false);
+  const [reviewRecords, setReviewRecords] = useState<WeeklyReview[]>(() =>
+    legacyReviewsToWeeklyReviews(
+      createDemoState().reviews,
+      demoProfiles.student,
+      defaultAcademicConfig,
+      demoManagedAccounts,
+    ),
+  );
+  const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
   const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>(() =>
     legacyMaterialsToLearningMaterials(
       createDemoState().materials,
@@ -511,6 +531,40 @@ export function CEHFApp() {
       setTaskRecordsLoading(false);
     });
   }, [demoRole, firebaseUser]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
+    queueMicrotask(() => {
+      setReviewRecords([]);
+      setReviewRecordsLoading(true);
+    });
+    return watchWeeklyReviews(
+      profile,
+      (reviews) => {
+        setReviewRecords(reviews);
+        setReviewRecordsLoading(false);
+      },
+      (error) => {
+        setReviewRecordsLoading(false);
+        reportFirebaseError("cargar repasos", error);
+      },
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
+    if (firebaseUser) return;
+    queueMicrotask(() => {
+      setReviewRecords(
+        legacyReviewsToWeeklyReviews(
+          state.reviews,
+          currentProfile,
+          academicConfig,
+          managedAccounts,
+        ),
+      );
+      setReviewRecordsLoading(false);
+    });
+  }, [academicConfig, currentProfile, demoRole, firebaseUser, managedAccounts, state.reviews]);
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
@@ -1084,6 +1138,8 @@ export function CEHFApp() {
                       (activeSection === "tasks" &&
                         academicConfig.calendarStatus !== "active") ||
                       (activeSection === "weekly-materials" &&
+                        academicCalendar.weeks.length === 0) ||
+                      (activeSection === "weekly-review" &&
                         academicCalendar.weeks.length === 0)
                     }
                     title={
@@ -1091,6 +1147,9 @@ export function CEHFApp() {
                       academicConfig.calendarStatus !== "active"
                         ? "Dirección debe configurar una semana activa"
                         : activeSection === "weekly-materials" &&
+                            academicCalendar.weeks.length === 0
+                          ? "Dirección debe configurar las semanas académicas"
+                        : activeSection === "weekly-review" &&
                             academicCalendar.weeks.length === 0
                           ? "Dirección debe configurar las semanas académicas"
                         : undefined
@@ -1121,6 +1180,15 @@ export function CEHFApp() {
               openDetail={openTaskDetail}
               taskRecords={taskRecords}
               taskRecordsLoading={taskRecordsLoading}
+              reviewRecords={reviewRecords}
+              reviewRecordsLoading={reviewRecordsLoading}
+              onDemoReviewChange={(updatedReview) =>
+                setReviewRecords((previous) =>
+                  previous.map((review) =>
+                    review.id === updatedReview.id ? updatedReview : review,
+                  ),
+                )
+              }
               materialRecords={materialRecords}
               materialRecordsLoading={materialRecordsLoading}
               viewedMaterialIds={viewedMaterialIds}
@@ -1166,7 +1234,53 @@ export function CEHFApp() {
             onNavigate={navigate}
           />
         )}
-        {createOpen && activeSection === "weekly-materials" ? (
+        {createOpen && activeSection === "weekly-review" ? (
+          <ReviewCreateModal
+            profile={currentProfile}
+            config={academicConfig}
+            calendar={academicCalendar}
+            accounts={managedAccounts}
+            onClose={() => setCreateOpen(false)}
+            onCreate={async (input: WeeklyReviewCreateInput) => {
+              if (firebaseUser && profile) {
+                const result = await createWeeklyReview(
+                  input,
+                  profile,
+                  academicConfig,
+                  academicCalendar,
+                );
+                toast.success(
+                  input.status === "published"
+                    ? "Repaso publicado"
+                    : "Borrador guardado",
+                  {
+                    description:
+                      input.status === "published"
+                        ? `${result.recipientCount} ${result.recipientCount === 1 ? "alumno fue notificado" : "alumnos fueron notificados"}.`
+                        : "Puedes publicarlo cuando esté listo.",
+                  },
+                );
+              } else {
+                const review = createDemoWeeklyReview(
+                  input,
+                  currentProfile,
+                  academicConfig,
+                  academicCalendar,
+                  managedAccounts,
+                );
+                setReviewRecords((previous) => [review, ...previous]);
+                toast.success(
+                  input.status === "published"
+                    ? "Repaso publicado en la demostración"
+                    : "Borrador guardado en la demostración",
+                  {
+                    description: `${review.audienceCount} destinatarios preparados.`,
+                  },
+                );
+              }
+            }}
+          />
+        ) : createOpen && activeSection === "weekly-materials" ? (
           <MaterialCreateModal
             profile={currentProfile}
             config={academicConfig}
@@ -1697,6 +1811,9 @@ function SectionContent({
   openDetail,
   taskRecords,
   taskRecordsLoading,
+  reviewRecords,
+  reviewRecordsLoading,
+  onDemoReviewChange,
   materialRecords,
   materialRecordsLoading,
   viewedMaterialIds,
@@ -1726,6 +1843,9 @@ function SectionContent({
   openDetail: (id: string) => void;
   taskRecords: TaskAssignment[];
   taskRecordsLoading: boolean;
+  reviewRecords: WeeklyReview[];
+  reviewRecordsLoading: boolean;
+  onDemoReviewChange: (review: WeeklyReview) => void;
   materialRecords: LearningMaterial[];
   materialRecordsLoading: boolean;
   viewedMaterialIds: Set<string>;
@@ -1765,9 +1885,13 @@ function SectionContent({
     case "weekly-review":
       return (
         <ReviewsPage
-          role={role}
-          state={state}
-          updateState={updateState}
+          reviews={reviewRecords}
+          loading={reviewRecordsLoading}
+          profile={profile}
+          calendar={academicCalendar}
+          accounts={managedAccounts}
+          firebaseReady={firebaseReady}
+          onDemoReviewChange={onDemoReviewChange}
         />
       );
     case "tasks":
@@ -2520,134 +2644,6 @@ function WeekPage({
           </span>
         </article>
       </aside>
-    </div>
-  );
-}
-
-function ReviewsPage({
-  role,
-  state,
-  updateState,
-}: {
-  role: Role;
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-}) {
-  const completed = state.reviews.filter((item) => item.progress === 100).length;
-  return (
-    <div>
-      <section className="summary-strip">
-        <div>
-          <span className="summary-icon violet">
-            <BookOpen size={21} />
-          </span>
-          <div>
-            <strong>
-              {role === "student"
-                ? `${completed} de ${state.reviews.length} completados`
-                : "84% del grupo participó"}
-            </strong>
-            <span>
-              {role === "student"
-                ? "Cada práctica te acerca a tus objetivos."
-                : "4 respuestas cortas esperan revisión."}
-            </span>
-          </div>
-        </div>
-        <ProgressRing
-          value={
-            role === "student"
-              ? Math.round((completed / state.reviews.length) * 100)
-              : 84
-          }
-          small
-        />
-      </section>
-      <div className="filter-row">
-        <div className="filter-pills">
-          <button className="active">Todos</button>
-          <button>Pendientes</button>
-          <button>Completados</button>
-        </div>
-        <button className="filter-button">
-          <CalendarDays size={17} /> Esta semana
-        </button>
-      </div>
-      <section className="card-list">
-        {state.reviews.map((review) => (
-          <article className="review-card" key={review.id}>
-            <div className={`large-subject-icon ${subjectColors[review.subject] ?? "violet"}`}>
-              <BookOpen size={24} />
-            </div>
-            <div className="list-card-copy">
-              <div className="list-card-meta">
-                <span>{review.subject}</span>
-                <i>•</i>
-                <span>{review.purpose}</span>
-              </div>
-              <h3>{review.title}</h3>
-              <p>
-                {review.questions} actividades · {review.duration} minutos ·{" "}
-                {review.attempts} intento{review.attempts > 1 ? "s" : ""}
-              </p>
-              <div className="linear-progress">
-                <span style={{ width: `${review.progress}%` }} />
-              </div>
-            </div>
-            <div className="list-card-action">
-              <span
-                className={`status-tag ${
-                  review.progress === 100 ? "status-achieved" : "status-progress"
-                }`}
-              >
-                {review.progress === 100
-                  ? "Completado"
-                  : review.progress
-                    ? `${review.progress}%`
-                    : "Pendiente"}
-              </span>
-              <button
-                className="secondary-button"
-                onClick={() =>
-                  updateState(
-                    (previous) => ({
-                      ...previous,
-                      reviews: previous.reviews.map((item) =>
-                        item.id === review.id
-                          ? {
-                              ...item,
-                              progress:
-                                role === "student"
-                                  ? Math.min(100, item.progress + 50)
-                                  : item.progress,
-                              status:
-                                role === "student" && item.progress + 50 >= 100
-                                  ? "completed"
-                                  : item.status,
-                            }
-                          : item,
-                      ),
-                    }),
-                    role === "student"
-                      ? "Respuesta guardada automáticamente"
-                      : "Vista previa abierta",
-                  )
-                }
-              >
-                {role === "student"
-                  ? review.progress
-                    ? "Continuar"
-                    : "Comenzar"
-                  : "Vista previa"}
-                <ArrowRight size={16} />
-              </button>
-            </div>
-          </article>
-        ))}
-      </section>
     </div>
   );
 }

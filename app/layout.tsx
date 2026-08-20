@@ -5,6 +5,7 @@ import "./globals.css";
 import "./tasks.css";
 import "./workshops.css";
 import "./materials.css";
+import "./reviews.css";
 
 const themeBootstrapScript = `
   (() => {

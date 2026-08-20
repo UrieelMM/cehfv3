@@ -63,6 +63,112 @@ export type Review = {
   status: "draft" | "published" | "completed" | "needs_review";
 };
 
+export type WeeklyReviewStatus = "draft" | "published" | "closed";
+
+export type WeeklyReviewQuestionType =
+  | "multiple_choice"
+  | "true_false"
+  | "reflection";
+
+export type WeeklyReviewOption = {
+  id: string;
+  label: string;
+};
+
+export type WeeklyReviewQuestion = {
+  id: string;
+  type: WeeklyReviewQuestionType;
+  prompt: string;
+  options: WeeklyReviewOption[];
+  points: number;
+};
+
+export type WeeklyReviewAttachment = {
+  id: string;
+  name: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+  downloadUrl?: string;
+};
+
+export type WeeklyReviewAttemptStatus = "in_progress" | "completed";
+
+export type WeeklyReviewAttempt = {
+  id: string;
+  reviewId: string;
+  studentId: string;
+  studentName: string;
+  answers: Record<string, string>;
+  answeredCount: number;
+  progress: number;
+  status: WeeklyReviewAttemptStatus;
+  score?: number;
+  maxScore?: number;
+  scorePercent?: number;
+  attemptNumber: number;
+  startedAt: string;
+  completedAt?: string;
+  updatedAt: string;
+};
+
+export type WeeklyReview = {
+  id: string;
+  firestorePath: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  subjectId: string;
+  subject: string;
+  title: string;
+  description: string;
+  duration: number;
+  maxAttempts: number;
+  status: WeeklyReviewStatus;
+  questions: WeeklyReviewQuestion[];
+  attachments: WeeklyReviewAttachment[];
+  audienceStudentIds: string[];
+  targetGroups: string[];
+  managerIds: string[];
+  audienceCount: number;
+  startedCount: number;
+  completedCount: number;
+  createdBy: string;
+  createdByName: string;
+  createdByRole: "director" | "teacher";
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  closedAt?: string;
+  myAttempt?: WeeklyReviewAttempt;
+};
+
+export type WeeklyReviewQuestionInput = {
+  id: string;
+  type: WeeklyReviewQuestionType;
+  prompt: string;
+  options: WeeklyReviewOption[];
+  correctAnswer: string;
+  points: number;
+};
+
+export type WeeklyReviewCreateInput = {
+  title: string;
+  description: string;
+  subject: string;
+  weekId: string;
+  duration: number;
+  maxAttempts: number;
+  targetGroups: string[];
+  status: "draft" | "published";
+  questions: WeeklyReviewQuestionInput[];
+  files: File[];
+};
+
 export type Task = {
   id: string;
   title: string;
