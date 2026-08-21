@@ -1111,7 +1111,7 @@ export function WeeklyGradesPanel({
               ? "Panorama académico"
               : profile.role === "teacher"
                 ? "Calificaciones semanales"
-                : "Así va tu semana"}
+                : "Tus calificaciones de la semana"}
           </h2>
           <p>
             {selectedWeek
@@ -1157,6 +1157,29 @@ export function WeeklyGradesPanel({
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -8 }}
           >
+            {profile.role === "student" && (
+              <section className="student-primary-results">
+                <header>
+                  <div>
+                    <span className="eyebrow">Resultados publicados</span>
+                    <h3>Tus calificaciones por materia</h3>
+                    <p>Primero encontrarás tu promedio y el detalle de cada rubro evaluado.</p>
+                  </div>
+                  <span className="student-results-count">
+                    <strong>{visibleRecords.length}</strong>
+                    <small>{visibleRecords.length === 1 ? "materia" : "materias"}</small>
+                  </span>
+                </header>
+                <StudentGrades records={visibleRecords} selectedWeek={selectedWeek} />
+              </section>
+            )}
+            {profile.role === "student" && (
+              <div className="student-analysis-heading">
+                <span className="eyebrow">Tu avance en contexto</span>
+                <h3>Resumen y estadísticas</h3>
+                <p>Consulta tendencias, promedios y cómo se compone tu resultado semanal.</p>
+              </div>
+            )}
             <GradeSummaryDashboard
               profile={profile}
               records={visibleRecords}
@@ -1165,9 +1188,6 @@ export function WeeklyGradesPanel({
               accounts={accounts}
               selectedWeekId={activeWeekId}
             />
-            {profile.role === "student" && (
-              <StudentGrades records={visibleRecords} selectedWeek={selectedWeek} />
-            )}
           </motion.div>
         </AnimatePresence>
       ) : (

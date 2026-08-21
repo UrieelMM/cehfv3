@@ -664,6 +664,75 @@
   align-items: start;
 }
 
+.student-primary-results {
+  padding: 21px;
+  border: 1px solid var(--border);
+  border-radius: 21px;
+  background:
+    radial-gradient(circle at 95% 0, color-mix(in srgb, var(--blue) 10%, transparent), transparent 34%),
+    var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.student-primary-results > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding-bottom: 17px;
+  border-bottom: 1px solid var(--border);
+}
+
+.student-primary-results h3,
+.student-analysis-heading h3 {
+  margin: 2px 0 5px;
+  font-family: var(--font-display);
+  font-size: 1.42rem;
+  letter-spacing: -0.025em;
+}
+
+.student-primary-results header p,
+.student-analysis-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.student-results-count {
+  display: flex;
+  min-width: 88px;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-raised);
+}
+
+.student-results-count strong {
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.student-results-count small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.63rem;
+  font-weight: 750;
+}
+
+.student-primary-results .student-grades-layout {
+  padding: 0;
+}
+
+.student-analysis-heading {
+  margin: 25px 2px 13px;
+}
+
 .student-grade-summary {
   position: sticky;
   top: 88px;
@@ -1346,10 +1415,6 @@
 .grade-score-pill.is-developing { border-color: color-mix(in srgb, var(--gold) 28%, transparent); background: var(--gold-soft); color: var(--gold); }
 .grade-score-pill.is-support { border-color: color-mix(in srgb, var(--coral) 28%, transparent); background: var(--coral-soft); color: var(--coral); }
 
-.grade-summary-content > .student-grades-layout {
-  padding: 20px 0 0;
-}
-
 @media (max-width: 1180px) {
   .grade-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1468,6 +1533,16 @@
     grid-template-columns: 1fr;
   }
 
+  .student-primary-results > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .student-results-count {
+    width: fit-content;
+    align-items: flex-start;
+  }
+
   .student-grade-summary {
     position: relative;
     top: auto;
@@ -1515,6 +1590,10 @@
   .teacher-capture-setup,
   .teacher-capture-roster-section {
     padding: 15px;
+  }
+
+  .student-primary-results {
+    padding: 16px;
   }
 
   .teacher-capture-heading {
