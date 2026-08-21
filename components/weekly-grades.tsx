@@ -1270,6 +1270,7 @@ function GradeExportDialog({
         weekRange: formatWeekRange(selectedWeek),
         termLabel,
         schoolYearLabel,
+        directorName: profile.role === "director" ? profile.name : undefined,
         filters: [
           `Grupo: ${group === "all" ? "Todos" : group}`,
           `Materia: ${subject === "all" ? "Todas" : subject}`,
@@ -1352,7 +1353,7 @@ function GradeExportDialog({
         <div className="grade-export-preview">
           <span><strong>{filteredRecords.length}</strong><small>calificaciones</small></span>
           <div>
-            <strong>Documento institucional</strong>
+            <strong>Nombres actuales de Firebase</strong>
             <p>Incluye encabezado CEHF, fecha, filtros, resultados, pie de página y espacios para las tres firmas.</p>
           </div>
         </div>
@@ -1449,6 +1450,16 @@ export function WeeklyGradesPanel({
     (profile.role !== "student" || record.studentId === profile.uid)
   ));
   const visibleRecords = cycleRecords.filter((record) => record.weekId === activeWeekId);
+  const firebaseAccountNames = new Map(accounts.map((account) => [account.uid, account.name]));
+  const pdfVisibleRecords = visibleRecords.map((record) => ({
+    ...record,
+    studentName: record.studentId === profile.uid
+      ? profile.name
+      : firebaseAccountNames.get(record.studentId) ?? record.studentName,
+    teacherName: record.teacherId === profile.uid
+      ? profile.name
+      : firebaseAccountNames.get(record.teacherId) ?? record.teacherName,
+  }));
   const eligibleStudents = accounts.filter((account) => (
     account.role === "student" &&
     account.active &&
@@ -1474,7 +1485,7 @@ export function WeeklyGradesPanel({
     : 0;
 
   const exportStudentPdf = async () => {
-    if (!selectedWeek || !visibleRecords.length) {
+    if (!selectedWeek || !pdfVisibleRecords.length) {
       toast.error("Aún no hay calificaciones de esta semana para exportar.");
       return;
     }
@@ -1484,14 +1495,14 @@ export function WeeklyGradesPanel({
       downloadGradeReportPdf({
         role: "student",
         generatedBy: profile.name,
-        records: visibleRecords,
+        records: pdfVisibleRecords,
         weekLabel: selectedWeek.label,
         weekRange: formatWeekRange(selectedWeek),
         termLabel: selectedTerm?.label,
         schoolYearLabel: academicConfig.schoolYearLabel,
         filters: [
           `Alumno: ${profile.name}`,
-          `Grupo: ${visibleRecords[0] ? recordGroup(visibleRecords[0]) : "Sin grupo"}`,
+          `Grupo: ${pdfVisibleRecords[0] ? recordGroup(pdfVisibleRecords[0]) : "Sin grupo"}`,
         ],
       });
       toast.success("Tu boleta semanal se descargó en PDF.");
@@ -1656,7 +1667,7 @@ export function WeeklyGradesPanel({
             )}
             <GradeSummaryDashboard
               profile={profile}
-              records={visibleRecords}
+              records={pdfVisibleRecords}
               allRecords={cycleRecords}
               calendar={calendar}
               accounts={accounts}

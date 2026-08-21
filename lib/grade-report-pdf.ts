@@ -19,6 +19,8 @@ export type GradeReportInput = {
   schoolYearLabel: string;
   filters?: string[];
   institutionName?: string;
+  directorName?: string;
+  guardianName?: string;
 };
 
 function score(value: number) {
@@ -97,9 +99,19 @@ function addFooter(doc: jsPDF, input: GradeReportInput, pageWidth: number, pageH
 }
 
 function addReportContext(doc: jsPDF, input: GradeReportInput, pageWidth: number) {
+  const studentNames = Array.from(new Set(input.records.map((record) => record.studentName)));
+  const teacherNames = Array.from(new Set(input.records.map((record) => record.teacherName)));
+  const identity = input.role === "student" && studentNames.length === 1
+    ? `Alumno: ${studentNames[0]}`
+    : input.role === "teacher" && teacherNames.length === 1
+      ? `Maestro: ${teacherNames[0]}`
+      : input.role === "director" && input.directorName
+        ? `Dirección: ${input.directorName}`
+        : undefined;
   const items = [
     input.termLabel,
     `Ciclo ${input.schoolYearLabel}`,
+    identity,
     ...(input.filters ?? []),
   ].filter(Boolean) as string[];
   doc.setTextColor(...INK);
@@ -148,22 +160,38 @@ function addMetrics(doc: jsPDF, input: GradeReportInput, pageWidth: number) {
   });
 }
 
-function addSignatures(doc: jsPDF, pageWidth: number, startY: number) {
-  const labels = ["Padre, madre o tutor", "Docente responsable", "Vo. Bo. Dirección"];
+function addSignatures(doc: jsPDF, input: GradeReportInput, pageWidth: number, startY: number) {
+  const teacherNames = Array.from(new Set(input.records.map((record) => record.teacherName)));
+  const directorName = input.directorName ?? (input.role === "director" ? input.generatedBy : undefined);
+  const signatures = [
+    { label: "Padre, madre o tutor", name: input.guardianName },
+    {
+      label: teacherNames.length === 1 ? "Docente responsable" : "Docentes responsables",
+      name: teacherNames.length === 1
+        ? teacherNames[0]
+        : teacherNames.length
+          ? `${teacherNames.length} docentes incluidos`
+          : undefined,
+    },
+    { label: "Vo. Bo. Dirección", name: directorName },
+  ];
   const gap = 11;
   const width = (pageWidth - 28 - gap * 2) / 3;
-  labels.forEach((label, index) => {
+  signatures.forEach((signature, index) => {
     const x = 14 + index * (width + gap);
     doc.setDrawColor(146, 157, 176);
     doc.line(x, startY, x + width, startY);
     doc.setTextColor(...INK);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7);
-    doc.text(label, x + width / 2, startY + 5, { align: "center" });
+    doc.text(signature.label, x + width / 2, startY + 5, { align: "center" });
     doc.setFont("helvetica", "normal");
     doc.setTextColor(...MUTED);
     doc.setFontSize(6.3);
-    doc.text("Nombre y firma", x + width / 2, startY + 9, { align: "center" });
+    doc.text(signature.name ?? "Nombre y firma", x + width / 2, startY + 9, {
+      align: "center",
+      maxWidth: width,
+    });
   });
 }
 
@@ -262,7 +290,7 @@ export function buildGradeReportPdf(input: GradeReportInput) {
     doc.addPage();
     signatureY = 72;
   }
-  addSignatures(doc, pageWidth, signatureY);
+  addSignatures(doc, input, pageWidth, signatureY);
   for (let page = 1; page <= doc.getNumberOfPages(); page += 1) {
     doc.setPage(page);
     addHeader(doc, input, pageWidth);

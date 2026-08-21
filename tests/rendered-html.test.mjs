@@ -293,6 +293,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesUiSource, /Todas las materias/);
   assert.match(gradesUiSource, /Todos los alumnos/);
   assert.match(gradesUiSource, /downloadGradeReportPdf/);
+  assert.match(gradesUiSource, /firebaseAccountNames/);
+  assert.match(gradesUiSource, /firebaseAccountNames\.get\(record\.studentId\)/);
+  assert.match(gradesUiSource, /firebaseAccountNames\.get\(record\.teacherId\)/);
   assert.match(gradesUiSource, /GradeSummaryDashboard/);
   assert.match(gradesUiSource, /Panorama académico/);
   assert.match(gradesUiSource, /Promedio por materia/);
@@ -313,6 +316,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradeReportPdfSource, /Padre, madre o tutor/);
   assert.match(gradeReportPdfSource, /Docente responsable/);
   assert.match(gradeReportPdfSource, /Vo\. Bo\. Dirección/);
+  assert.match(gradeReportPdfSource, /directorName/);
+  assert.match(gradeReportPdfSource, /teacherNames\[0\]/);
   assert.match(gradeReportPdfSource, /Página \$\{page\} de/);
   assert.match(workshopSource, /Biblioteca creativa/);
   assert.match(workshopSource, /Laboratorio digital/);
