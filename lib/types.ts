@@ -10,6 +10,7 @@ export type UserProfile = {
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
+  guardianName?: string;
   subjects?: string[];
   teacherIds?: string[];
   initials: string;
@@ -27,6 +28,7 @@ export type ManagedAccount = {
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
+  guardianName?: string;
   guardianWhatsApp?: string;
   subjects: string[];
   teacherIds: string[];

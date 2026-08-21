@@ -34,6 +34,7 @@ import {
   gradingWeightTotal,
   saveTeacherGradingConfig,
   saveWeeklyGrade,
+  watchGradeReportDirectors,
   watchTeacherGradingConfig,
   watchWeeklyGrades,
 } from "@/lib/grades-firebase";
@@ -1211,6 +1212,8 @@ function GradeExportDialog({
   selectedWeek,
   termLabel,
   schoolYearLabel,
+  accounts,
+  directorNames,
   onClose,
 }: {
   profile: UserProfile;
@@ -1218,6 +1221,8 @@ function GradeExportDialog({
   selectedWeek?: AcademicWeek;
   termLabel?: string;
   schoolYearLabel: string;
+  accounts: ManagedAccount[];
+  directorNames: string[];
   onClose: () => void;
 }) {
   const [teacherId, setTeacherId] = useState("all");
@@ -1241,6 +1246,12 @@ function GradeExportDialog({
     (subject === "all" || record.subject === subject) &&
     (studentId === "all" || record.studentId === studentId)
   ));
+  const filteredStudentIds = Array.from(new Set(
+    filteredRecords.map((record) => record.studentId),
+  ));
+  const guardianName = filteredStudentIds.length === 1
+    ? accounts.find((account) => account.uid === filteredStudentIds[0])?.guardianName
+    : undefined;
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -1270,7 +1281,8 @@ function GradeExportDialog({
         weekRange: formatWeekRange(selectedWeek),
         termLabel,
         schoolYearLabel,
-        directorName: profile.role === "director" ? profile.name : undefined,
+        directorNames,
+        guardianName,
         filters: [
           `Grupo: ${group === "all" ? "Todos" : group}`,
           `Materia: ${subject === "all" ? "Todas" : subject}`,
@@ -1398,6 +1410,9 @@ export function WeeklyGradesPanel({
   const [studentSearch, setStudentSearch] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const [studentExporting, setStudentExporting] = useState(false);
+  const [reportDirectorNames, setReportDirectorNames] = useState<string[]>(
+    profile.role === "director" ? [profile.name] : [],
+  );
   const subjects = useMemo(() => profile.subjects ?? [], [profile.subjects]);
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "");
   const activeWeekId = calendar.weeks.some((week) => week.id === selectedWeekId)
@@ -1435,9 +1450,15 @@ export function WeeklyGradesPanel({
           () => toast.error("No pudimos cargar tu ponderación."),
         )
       : () => undefined;
+    const stopDirectors = watchGradeReportDirectors(
+      profile,
+      (directors) => setReportDirectorNames(directors.map((director) => director.name)),
+      () => toast.error("No pudimos cargar los perfiles de Dirección para el PDF."),
+    );
     return () => {
       stopGrades();
       stopConfig();
+      stopDirectors();
     };
   }, [accounts, academicConfig, calendar, firebaseReady, profile]);
 
@@ -1500,8 +1521,9 @@ export function WeeklyGradesPanel({
         weekRange: formatWeekRange(selectedWeek),
         termLabel: selectedTerm?.label,
         schoolYearLabel: academicConfig.schoolYearLabel,
+        directorNames: reportDirectorNames,
+        guardianName: profile.guardianName,
         filters: [
-          `Alumno: ${profile.name}`,
           `Grupo: ${pdfVisibleRecords[0] ? recordGroup(pdfVisibleRecords[0]) : "Sin grupo"}`,
         ],
       });
@@ -1811,10 +1833,12 @@ export function WeeklyGradesPanel({
           {exportOpen && profile.role !== "student" && (
             <GradeExportDialog
               profile={profile}
-              records={visibleRecords}
+              records={pdfVisibleRecords}
               selectedWeek={selectedWeek}
               termLabel={selectedTerm?.label}
               schoolYearLabel={academicConfig.schoolYearLabel}
+              accounts={accounts}
+              directorNames={reportDirectorNames}
               onClose={() => setExportOpen(false)}
             />
           )}

@@ -245,6 +245,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /claimsChanged: changed/);
   assert.match(functionsSource, /Cada semana sólo puede pertenecer a un trimestre/);
   assert.match(appSource, /WhatsApp del padre o tutor/);
+  assert.match(appSource, /Nombre del padre o tutor/);
+  assert.match(appSource, /guardianName/);
   assert.match(appSource, /aria-label="Secciones de configuración"/);
   assert.match(appSource, /role="tablist"/);
   assert.match(appSource, /settings-tab-whatsapp/);
@@ -254,7 +256,11 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firebaseSource, /normalizeGuardianWhatsApp/);
   assert.match(firebaseSource, /savePortalSettings/);
   assert.match(usersSource, /guardianWhatsApp/);
+  assert.match(usersSource, /guardianName/);
   assert.match(functionsSource, /guardianWhatsApp/);
+  assert.match(functionsSource, /guardianName/);
+  assert.match(gradesSource, /watchGradeReportDirectors/);
+  assert.match(firestoreRules, /roleIs\("student"\)[\s\S]*resource\.data\.role == "director"/);
   assert.match(functionsSource, /export const listStudentMaterials/);
   assert.match(functionsSource, /export const listStaffMaterials/);
   assert.match(functionsSource, /export const listStaffWeeklyReviews/);
@@ -296,6 +302,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesUiSource, /firebaseAccountNames/);
   assert.match(gradesUiSource, /firebaseAccountNames\.get\(record\.studentId\)/);
   assert.match(gradesUiSource, /firebaseAccountNames\.get\(record\.teacherId\)/);
+  assert.match(gradesUiSource, /profile\.guardianName/);
+  assert.match(gradesUiSource, /reportDirectorNames/);
   assert.match(gradesUiSource, /GradeSummaryDashboard/);
   assert.match(gradesUiSource, /Panorama académico/);
   assert.match(gradesUiSource, /Promedio por materia/);
@@ -316,7 +324,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradeReportPdfSource, /Padre, madre o tutor/);
   assert.match(gradeReportPdfSource, /Docente responsable/);
   assert.match(gradeReportPdfSource, /Vo\. Bo\. Dirección/);
-  assert.match(gradeReportPdfSource, /directorName/);
+  assert.match(gradeReportPdfSource, /directorNames/);
   assert.match(gradeReportPdfSource, /teacherNames\[0\]/);
   assert.match(gradeReportPdfSource, /Página \$\{page\} de/);
   assert.match(workshopSource, /Biblioteca creativa/);

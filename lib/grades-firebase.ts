@@ -43,6 +43,11 @@ export const DEFAULT_WEEKLY_GRADE_SCORES: WeeklyGradeScores = {
   exam: 100,
 };
 
+export type GradeReportDirector = {
+  id: string;
+  name: string;
+};
+
 export const GRADING_CRITERIA: Array<{
   key: GradingCriterion;
   label: string;
@@ -193,6 +198,34 @@ function weeklyGradeFromData(
     createdAt: asIso(data.createdAt),
     updatedAt: asIso(data.updatedAt),
   };
+}
+
+export function watchGradeReportDirectors(
+  profile: UserProfile,
+  callback: (directors: GradeReportDirector[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db) {
+    callback(profile.role === "director" ? [{ id: profile.uid, name: profile.name }] : []);
+    return () => undefined;
+  }
+  return onSnapshot(
+    query(
+      collection(firebase.db, "users"),
+      where("institutionId", "==", profile.institutionId),
+      where("role", "==", "director"),
+      where("active", "==", true),
+    ),
+    (snapshot) => callback(
+      snapshot.docs
+        .map((entry) => ({
+          id: entry.id,
+          name: String(entry.data().name ?? "Dirección CEHF"),
+        }))
+        .sort((first, second) => first.name.localeCompare(second.name, "es")),
+    ),
+    (error) => onError?.(error),
+  );
 }
 
 export function watchTeacherGradingConfig(

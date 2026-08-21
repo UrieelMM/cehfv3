@@ -5352,6 +5352,11 @@ code {
   margin-top: 11px;
 }
 
+.registration-guardian-grid,
+.account-editor-guardian-grid {
+  margin-top: 11px;
+}
+
 .registration-field-help {
   display: inline-flex;
   align-items: center;

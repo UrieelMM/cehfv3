@@ -19,7 +19,7 @@ export type GradeReportInput = {
   schoolYearLabel: string;
   filters?: string[];
   institutionName?: string;
-  directorName?: string;
+  directorNames?: string[];
   guardianName?: string;
 };
 
@@ -105,8 +105,8 @@ function addReportContext(doc: jsPDF, input: GradeReportInput, pageWidth: number
     ? `Alumno: ${studentNames[0]}`
     : input.role === "teacher" && teacherNames.length === 1
       ? `Maestro: ${teacherNames[0]}`
-      : input.role === "director" && input.directorName
-        ? `Dirección: ${input.directorName}`
+      : input.role === "director" && input.directorNames?.length
+        ? `Dirección: ${input.directorNames.join(" / ")}`
         : undefined;
   const items = [
     input.termLabel,
@@ -162,7 +162,11 @@ function addMetrics(doc: jsPDF, input: GradeReportInput, pageWidth: number) {
 
 function addSignatures(doc: jsPDF, input: GradeReportInput, pageWidth: number, startY: number) {
   const teacherNames = Array.from(new Set(input.records.map((record) => record.teacherName)));
-  const directorName = input.directorName ?? (input.role === "director" ? input.generatedBy : undefined);
+  const directorNames = input.directorNames?.length
+    ? input.directorNames
+    : input.role === "director"
+      ? [input.generatedBy]
+      : [];
   const signatures = [
     { label: "Padre, madre o tutor", name: input.guardianName },
     {
@@ -173,7 +177,10 @@ function addSignatures(doc: jsPDF, input: GradeReportInput, pageWidth: number, s
           ? `${teacherNames.length} docentes incluidos`
           : undefined,
     },
-    { label: "Vo. Bo. Dirección", name: directorName },
+    {
+      label: "Vo. Bo. Dirección",
+      name: directorNames.length ? directorNames.join(" / ") : undefined,
+    },
   ];
   const gap = 11;
   const width = (pageWidth - 28 - gap * 2) / 3;

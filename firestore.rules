@@ -140,7 +140,15 @@ service cloud.firestore {
         (roleIs("teacher") && resource.data.role == "student")
       );
       allow list: if resource.data.institutionId == profile().institutionId
-        && (isDirector() || roleIs("teacher"));
+        && (
+          isDirector() ||
+          roleIs("teacher") ||
+          (
+            roleIs("student") &&
+            resource.data.role == "director" &&
+            resource.data.active == true
+          )
+        );
       allow create: if isDirector()
         && request.resource.data.role in ["student", "teacher"]
         && request.resource.data.active == true

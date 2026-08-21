@@ -99,6 +99,7 @@ export type ManagedAccountInput = {
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
+  guardianName?: string;
   guardianWhatsApp?: string;
   subjects: string[];
   teacherIds: string[];
@@ -114,6 +115,7 @@ export type ManagedAccountUpdateInput = {
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
+  guardianName?: string;
   guardianWhatsApp?: string;
   subjects: string[];
   teacherIds: string[];
@@ -268,6 +270,10 @@ export async function listManagedAccounts(
       schoolLevel: role === "student" ? readSchoolLevel(data.schoolLevel) : undefined,
       grade: data.grade ? String(data.grade) : undefined,
       group: data.group ? String(data.group) : undefined,
+      guardianName:
+        role === "student" && data.guardianName
+          ? String(data.guardianName)
+          : undefined,
       guardianWhatsApp:
         role === "student" && data.guardianWhatsApp
           ? String(data.guardianWhatsApp)
@@ -312,6 +318,9 @@ export async function createManagedAccount(
       : undefined;
   const grade = input.grade?.trim();
   const group = input.group?.trim();
+  const guardianName = input.role === "student"
+    ? input.guardianName?.trim()
+    : undefined;
   const guardianWhatsApp =
     input.role === "student"
       ? normalizeGuardianWhatsApp(input.guardianWhatsApp ?? "")
@@ -326,6 +335,9 @@ export async function createManagedAccount(
   }
   if (input.role === "student" && (!group || !["A", "B", "C"].includes(group))) {
     throw accountValidationError("Selecciona el grupo del alumno.");
+  }
+  if (input.role === "student" && (!guardianName || guardianName.length < 2)) {
+    throw accountValidationError("Escribe el nombre del padre o tutor.");
   }
   if (input.role === "student" && !guardianWhatsApp) {
     throw accountValidationError(
@@ -385,6 +397,7 @@ export async function createManagedAccount(
       schoolLevel,
       grade: input.role === "student" ? grade : undefined,
       group: input.role === "student" ? group : undefined,
+      guardianName,
       guardianWhatsApp,
       subjects: input.subjects,
       teacherIds: input.role === "student" ? input.teacherIds : [],
@@ -409,7 +422,7 @@ export async function createManagedAccount(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       ...(input.role === "student"
-        ? { schoolLevel, grade, group, guardianWhatsApp }
+        ? { schoolLevel, grade, group, guardianName, guardianWhatsApp }
         : {}),
     });
     return { account, password };
@@ -479,6 +492,7 @@ export async function updateManagedAccount(
             schoolLevel: input.schoolLevel,
             grade: input.grade,
             group: input.group,
+            guardianName: input.guardianName,
             guardianWhatsApp: input.guardianWhatsApp,
           }
         : {}),
@@ -565,6 +579,10 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
         : undefined,
     grade: data.grade ? String(data.grade) : undefined,
     group: data.group ? String(data.group) : undefined,
+    guardianName:
+      data.role === "student" && data.guardianName
+        ? String(data.guardianName)
+        : undefined,
     subjects: Array.isArray(data.subjects)
       ? data.subjects.map(String)
       : undefined,

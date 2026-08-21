@@ -334,6 +334,9 @@ function serializeManagedAccount(uid: string, data: DocumentData) {
           schoolLevel: data.schoolLevel === "secondary" ? "secondary" : "primary",
           grade: String(data.grade ?? ""),
           group: String(data.group ?? ""),
+          ...(data.guardianName
+            ? { guardianName: String(data.guardianName) }
+            : {}),
           ...(data.guardianWhatsApp
             ? { guardianWhatsApp: String(data.guardianWhatsApp) }
             : {}),
@@ -380,6 +383,10 @@ export const updateManagedAccount = onCall(async (request) => {
       );
     }
     let guardianWhatsApp: string;
+    const guardianName = accountText(
+      input.guardianName,
+      "El nombre del padre o tutor",
+    );
     try {
       guardianWhatsApp = normalizeMexicanPhone(input.guardianWhatsApp);
     } catch (error) {
@@ -408,7 +415,13 @@ export const updateManagedAccount = onCall(async (request) => {
         "Uno de los maestros asignados ya no está activo.",
       );
     }
-    studentAssignment = { schoolLevel, grade, group, guardianWhatsApp };
+    studentAssignment = {
+      schoolLevel,
+      grade,
+      group,
+      guardianName,
+      guardianWhatsApp,
+    };
   }
   const photoURL = input.photoURL ? String(input.photoURL).trim() : "";
   if (

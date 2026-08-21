@@ -3122,6 +3122,7 @@ function AccountRegistrationModal({
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [guardianName, setGuardianName] = useState("");
   const [guardianWhatsApp, setGuardianWhatsApp] = useState("");
   const [schoolLevel, setSchoolLevel] = useState<SchoolLevel>("primary");
   const [grade, setGrade] = useState("5.º");
@@ -3144,6 +3145,7 @@ function AccountRegistrationModal({
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const validGuardianWhatsApp =
     accountRole === "teacher" || Boolean(normalizeGuardianWhatsApp(guardianWhatsApp));
+  const validGuardianName = accountRole === "teacher" || guardianName.trim().length >= 2;
   const validStudentAssignment =
     accountRole === "teacher" ||
     (gradesBySchoolLevel[schoolLevel].includes(grade) && Boolean(group));
@@ -3151,6 +3153,7 @@ function AccountRegistrationModal({
     firstName.trim() &&
       lastName.trim() &&
       validEmail &&
+      validGuardianName &&
       validGuardianWhatsApp &&
       photo,
   );
@@ -3246,6 +3249,7 @@ function AccountRegistrationModal({
     setFirstName("");
     setLastName("");
     setEmail("");
+    setGuardianName("");
     setGuardianWhatsApp("");
     setSchoolLevel("primary");
     setGrade("5.º");
@@ -3263,7 +3267,7 @@ function AccountRegistrationModal({
       toast.error("Completa el registro", {
         description:
           accountRole === "student"
-            ? "Agrega identidad, WhatsApp del tutor, fotografía, materias y al menos un maestro."
+            ? "Agrega identidad, nombre y WhatsApp del tutor, fotografía, materias y al menos un maestro."
             : "Agrega identidad, fotografía y al menos una materia.",
       });
       return;
@@ -3280,6 +3284,8 @@ function AccountRegistrationModal({
               schoolLevel: accountRole === "student" ? schoolLevel : undefined,
               grade: accountRole === "student" ? grade : undefined,
               group: accountRole === "student" ? group : undefined,
+              guardianName:
+                accountRole === "student" ? guardianName : undefined,
               guardianWhatsApp:
                 accountRole === "student" ? guardianWhatsApp : undefined,
               subjects,
@@ -3308,6 +3314,8 @@ function AccountRegistrationModal({
                       accountRole === "student" ? schoolLevel : undefined,
                     grade: accountRole === "student" ? grade : undefined,
                     group: accountRole === "student" ? group : undefined,
+                    guardianName:
+                      accountRole === "student" ? guardianName.trim() : undefined,
                     guardianWhatsApp:
                       accountRole === "student"
                         ? normalizeGuardianWhatsApp(guardianWhatsApp)
@@ -3534,22 +3542,35 @@ function AccountRegistrationModal({
                   </div>
                   <label className="registration-field">Correo institucional<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={accountRole === "student" ? "alumno@cehf.edu.mx" : "maestro@cehf.edu.mx"} autoComplete="off" required /></label>
                   {accountRole === "student" && (
-                    <label className="registration-field">
-                      WhatsApp del padre o tutor
-                      <input
-                        type="tel"
-                        inputMode="tel"
-                        value={guardianWhatsApp}
-                        onChange={(event) => setGuardianWhatsApp(event.target.value)}
-                        placeholder="55 1234 5678"
-                        autoComplete="tel"
-                        aria-describedby="guardian-whatsapp-help"
-                        required
-                      />
-                      <small id="guardian-whatsapp-help" className="registration-field-help">
-                        <MessageCircle size={13} /> 10 dígitos de México. Se guardará como contacto del padre o tutor.
-                      </small>
-                    </label>
+                    <div className="registration-name-grid registration-guardian-grid">
+                      <label>
+                        Nombre del padre o tutor
+                        <input
+                          value={guardianName}
+                          onChange={(event) => setGuardianName(event.target.value)}
+                          placeholder="Ej. Patricia Hernández"
+                          autoComplete="name"
+                          maxLength={120}
+                          required
+                        />
+                      </label>
+                      <label>
+                        WhatsApp del padre o tutor
+                        <input
+                          type="tel"
+                          inputMode="tel"
+                          value={guardianWhatsApp}
+                          onChange={(event) => setGuardianWhatsApp(event.target.value)}
+                          placeholder="55 1234 5678"
+                          autoComplete="tel"
+                          aria-describedby="guardian-whatsapp-help"
+                          required
+                        />
+                        <small id="guardian-whatsapp-help" className="registration-field-help">
+                          <MessageCircle size={13} /> 10 dígitos de México.
+                        </small>
+                      </label>
+                    </div>
                   )}
                   <div className={`registration-photo ${photo ? "has-photo" : ""}`}>
                     <motion.span

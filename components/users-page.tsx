@@ -306,6 +306,7 @@ function AccountEditor({
   const [firstName, setFirstName] = useState(account.firstName);
   const [lastName, setLastName] = useState(account.lastName);
   const [email, setEmail] = useState(account.email);
+  const [guardianName, setGuardianName] = useState(account.guardianName ?? "");
   const [guardianWhatsApp, setGuardianWhatsApp] = useState(
     account.guardianWhatsApp ?? "",
   );
@@ -326,6 +327,7 @@ function AccountEditor({
     firstName.trim() &&
     lastName.trim() &&
     validEmail &&
+    (account.role === "teacher" || guardianName.trim().length >= 2) &&
     (account.role === "teacher" || normalizeGuardianWhatsApp(guardianWhatsApp)) &&
     subjects.length &&
     (account.role === "teacher" || teacherIds.length),
@@ -378,6 +380,7 @@ function AccountEditor({
             schoolLevel: account.role === "student" ? schoolLevel : undefined,
             grade: account.role === "student" ? grade : undefined,
             group: account.role === "student" ? group : undefined,
+            guardianName: account.role === "student" ? guardianName : undefined,
             guardianWhatsApp:
               account.role === "student" ? guardianWhatsApp : undefined,
             subjects,
@@ -399,6 +402,7 @@ function AccountEditor({
                   schoolLevel,
                   grade,
                   group,
+                  guardianName: guardianName.trim(),
                   guardianWhatsApp: normalizeGuardianWhatsApp(guardianWhatsApp),
                 }
               : {}),
@@ -435,21 +439,34 @@ function AccountEditor({
             </div>
             <label className="registration-field">Correo institucional<input type="email" value={email} maxLength={254} onChange={(event) => setEmail(event.target.value)} /></label>
             {account.role === "student" && (
-              <label className="registration-field">
-                WhatsApp del padre o tutor
-                <input
-                  type="tel"
-                  inputMode="tel"
-                  value={guardianWhatsApp}
-                  onChange={(event) => setGuardianWhatsApp(event.target.value)}
-                  placeholder="55 1234 5678"
-                  autoComplete="tel"
-                  required
-                />
-                <small className="registration-field-help">
-                  <MessageCircle size={12} /> Número familiar de 10 dígitos de México.
-                </small>
-              </label>
+              <div className="registration-name-grid account-editor-guardian-grid">
+                <label>
+                  Nombre del padre o tutor
+                  <input
+                    value={guardianName}
+                    onChange={(event) => setGuardianName(event.target.value)}
+                    placeholder="Ej. Patricia Hernández"
+                    autoComplete="name"
+                    maxLength={120}
+                    required
+                  />
+                </label>
+                <label>
+                  WhatsApp del padre o tutor
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={guardianWhatsApp}
+                    onChange={(event) => setGuardianWhatsApp(event.target.value)}
+                    placeholder="55 1234 5678"
+                    autoComplete="tel"
+                    required
+                  />
+                  <small className="registration-field-help">
+                    <MessageCircle size={12} /> Número familiar de 10 dígitos de México.
+                  </small>
+                </label>
+              </div>
             )}
           </section>
           <section className="account-editor-section">
