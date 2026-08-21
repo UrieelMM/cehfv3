@@ -1,89 +1,13 @@
 .qualifications-page {
-  --surface: #fffdf8;
-  --surface-soft: #eeeae0;
-  --surface-raised: #fffdf8;
-  --foreground: #171326;
-  --muted: #706b7a;
-  --muted-strong: #514b5d;
-  --border: #ddd7ca;
-  --border-strong: #c9c1b2;
-  --violet: #6c4dff;
-  --violet-dark: #4b31c8;
-  --violet-soft: #e9e3ff;
-  --mint: #78a400;
-  --mint-soft: #edf8cd;
-  --blue: #3ebfc3;
-  --blue-soft: #dff6f3;
-  --gold: #b77c12;
-  --gold-soft: #fff1cf;
-  --coral: #d9554a;
-  --coral-soft: #ffe5df;
   padding: clamp(10px, 1.6vw, 22px);
-  border: 1px solid #e2dccf;
+  border: 1px solid var(--border);
   border-radius: 30px;
   background:
-    radial-gradient(circle at 92% 2%, rgb(108 77 255 / 0.13), transparent 25%),
-    radial-gradient(circle at 3% 96%, rgb(201 239 102 / 0.2), transparent 25%),
-    #f4f1e9;
+    radial-gradient(circle at 92% 2%, color-mix(in srgb, var(--violet) 11%, transparent), transparent 27%),
+    radial-gradient(circle at 3% 96%, color-mix(in srgb, var(--blue) 9%, transparent), transparent 27%),
+    var(--background);
   color: var(--foreground);
-  box-shadow: 0 18px 55px rgb(42 31 25 / 0.08);
-}
-
-:root[data-theme="dark"] .qualifications-page {
-  --surface: #1c1826;
-  --surface-soft: #282231;
-  --surface-raised: #211c2c;
-  --foreground: #f6f1e8;
-  --muted: #aaa3b5;
-  --muted-strong: #cbc4d5;
-  --border: #393243;
-  --border-strong: #4a4056;
-  --violet: #a993ff;
-  --violet-dark: #cfc4ff;
-  --violet-soft: #342856;
-  --mint: #c9ef66;
-  --mint-soft: #33411d;
-  --blue: #75d9d9;
-  --blue-soft: #203f43;
-  --gold: #f2c05c;
-  --gold-soft: #4a3823;
-  --coral: #ff8d80;
-  --coral-soft: #4d292d;
-  border-color: #393243;
-  background:
-    radial-gradient(circle at 92% 2%, rgb(169 147 255 / 0.15), transparent 25%),
-    radial-gradient(circle at 3% 96%, rgb(201 239 102 / 0.08), transparent 25%),
-    #110e19;
-  box-shadow: 0 18px 55px rgb(0 0 0 / 0.2);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root[data-theme="system"] .qualifications-page {
-    --surface: #1c1826;
-    --surface-soft: #282231;
-    --surface-raised: #211c2c;
-    --foreground: #f6f1e8;
-    --muted: #aaa3b5;
-    --muted-strong: #cbc4d5;
-    --border: #393243;
-    --border-strong: #4a4056;
-    --violet: #a993ff;
-    --violet-dark: #cfc4ff;
-    --violet-soft: #342856;
-    --mint: #c9ef66;
-    --mint-soft: #33411d;
-    --blue: #75d9d9;
-    --blue-soft: #203f43;
-    --gold: #f2c05c;
-    --gold-soft: #4a3823;
-    --coral: #ff8d80;
-    --coral-soft: #4d292d;
-    border-color: #393243;
-    background:
-      radial-gradient(circle at 92% 2%, rgb(169 147 255 / 0.15), transparent 25%),
-      radial-gradient(circle at 3% 96%, rgb(201 239 102 / 0.08), transparent 25%),
-      #110e19;
-  }
+  box-shadow: var(--shadow-md);
 }
 
 .weekly-grades-panel {
@@ -91,7 +15,7 @@
   overflow: hidden;
   padding: 0;
   border-radius: 24px;
-  box-shadow: 0 16px 45px rgb(35 29 25 / 0.07);
+  box-shadow: 0 16px 45px rgb(12 42 70 / 0.08);
 }
 
 .weekly-grades-heading,
@@ -819,13 +743,13 @@
   border: 1px solid var(--border);
   border-radius: 20px;
   background: var(--surface);
-  box-shadow: 0 9px 28px rgb(35 29 25 / 0.045);
+  box-shadow: 0 9px 28px rgb(12 42 70 / 0.055);
   transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
 .grade-metric-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 18px 38px rgb(42 31 25 / 0.1);
+  box-shadow: 0 18px 38px rgb(12 42 70 / 0.12);
 }
 
 .grade-metric-card::after {
@@ -883,7 +807,7 @@
 }
 
 .grade-metric-card.is-excellent,
-.grade-metric-card.is-lime { color: #78a400; }
+.grade-metric-card.is-lime { color: var(--mint); }
 .grade-metric-card.is-good,
 .grade-metric-card.is-violet { color: var(--violet); }
 .grade-metric-card.is-developing { color: var(--gold); }
@@ -902,7 +826,7 @@
   border: 1px solid var(--border);
   border-radius: 21px;
   background: var(--surface);
-  box-shadow: 0 9px 30px rgb(33 26 21 / 0.045);
+  box-shadow: 0 9px 30px rgb(12 42 70 / 0.055);
 }
 
 .grade-chart-card.is-wide {
@@ -982,7 +906,7 @@
   background: var(--violet);
 }
 
-.grade-distribution-chart i.is-excellent { background: #b3da4c; }
+.grade-distribution-chart i.is-excellent { background: var(--mint); }
 .grade-distribution-chart i.is-good { background: var(--violet); }
 .grade-distribution-chart i.is-developing { background: var(--gold); }
 .grade-distribution-chart i.is-support { background: var(--coral); }
@@ -1039,7 +963,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--violet), #967eff);
+  background: linear-gradient(90deg, var(--violet), var(--blue));
 }
 
 .grade-subject-chart strong,
@@ -1052,7 +976,7 @@
 
 .grade-rubric-chart [data-criterion="homework"] i { background: var(--blue); }
 .grade-rubric-chart [data-criterion="participation"] i { background: var(--gold); }
-.grade-rubric-chart [data-criterion="attendance"] i { background: #b3da4c; }
+.grade-rubric-chart [data-criterion="attendance"] i { background: var(--mint); }
 .grade-rubric-chart [data-criterion="exam"] i { background: var(--coral); }
 
 .grade-chart-empty {
@@ -1146,7 +1070,7 @@
   font-weight: 880;
 }
 
-.grade-score-pill.is-excellent { border-color: rgb(120 164 0 / 0.28); background: var(--mint-soft); color: var(--mint); }
+.grade-score-pill.is-excellent { border-color: color-mix(in srgb, var(--mint) 28%, transparent); background: var(--mint-soft); color: var(--mint); }
 .grade-score-pill.is-good { border-color: color-mix(in srgb, var(--violet) 24%, transparent); background: var(--violet-soft); color: var(--violet); }
 .grade-score-pill.is-developing { border-color: color-mix(in srgb, var(--gold) 28%, transparent); background: var(--gold-soft); color: var(--gold); }
 .grade-score-pill.is-support { border-color: color-mix(in srgb, var(--coral) 28%, transparent); background: var(--coral-soft); color: var(--coral); }
