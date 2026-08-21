@@ -1386,6 +1386,24 @@ export const listStudentMaterials = onCall(async (request) => {
   return { materials };
 });
 
+export const listStaffMaterials = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const snapshot = await db
+    .collection(`institutions/${actor.institutionId}/materials`)
+    .get();
+  const materials = snapshot.docs
+    .filter((document) => {
+      const data = document.data();
+      return data.institutionId === actor.institutionId && (
+        actor.role === "director"
+        || notificationRecipients(data.managerIds).includes(actor.uid)
+      );
+    })
+    .map(serializeLearningMaterial)
+    .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  return { materials };
+});
+
 type ReviewStudent = {
   uid: string;
   institutionId: string;
@@ -1399,6 +1417,82 @@ type ReviewPublicQuestion = {
   options: Array<{ id: string; label: string }>;
   points: number;
 };
+
+function serializeWeeklyReview(
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+) {
+  const data = snapshot.data();
+  const questions = Array.isArray(data.questions)
+    ? data.questions.map((value: unknown) => {
+        const question = (value ?? {}) as Record<string, unknown>;
+        return {
+          id: String(question.id ?? ""),
+          type: String(question.type ?? "multiple_choice"),
+          prompt: String(question.prompt ?? ""),
+          options: Array.isArray(question.options)
+            ? question.options.map((optionValue: unknown) => {
+                const option = (optionValue ?? {}) as Record<string, unknown>;
+                return {
+                  id: String(option.id ?? ""),
+                  label: String(option.label ?? ""),
+                };
+              })
+            : [],
+          points: Math.max(1, Number(question.points ?? 1)),
+        };
+      })
+    : [];
+  return {
+    id: snapshot.id,
+    firestorePath: snapshot.ref.path,
+    institutionId: String(data.institutionId ?? ""),
+    schoolYearId: String(data.schoolYearId ?? ""),
+    schoolYearLabel: String(data.schoolYearLabel ?? ""),
+    termId: String(data.termId ?? ""),
+    termLabel: String(data.termLabel ?? ""),
+    weekId: String(data.weekId ?? ""),
+    weekLabel: String(data.weekLabel ?? "Semana"),
+    subjectId: String(data.subjectId ?? "general"),
+    subject: String(data.subject ?? "General"),
+    title: String(data.title ?? "Repaso sin nombre"),
+    description: String(data.description ?? ""),
+    duration: Math.max(1, Number(data.duration ?? 10)),
+    maxAttempts: Math.max(0, Number(data.maxAttempts ?? 1)),
+    status: String(data.status ?? "draft"),
+    questions,
+    attachments: Array.isArray(data.attachments) ? data.attachments : [],
+    audienceStudentIds: notificationRecipients(data.audienceStudentIds),
+    targetGroups: notificationRecipients(data.targetGroups),
+    managerIds: notificationRecipients(data.managerIds),
+    audienceCount: Math.max(0, Number(data.audienceCount ?? 0)),
+    startedCount: Math.max(0, Number(data.startedCount ?? 0)),
+    completedCount: Math.max(0, Number(data.completedCount ?? 0)),
+    createdBy: String(data.createdBy ?? ""),
+    createdByName: String(data.createdByName ?? "Campus CEHF"),
+    createdByRole: data.createdByRole === "director" ? "director" : "teacher",
+    createdAt: accountTimestamp(data.createdAt),
+    updatedAt: accountTimestamp(data.updatedAt),
+    ...(data.publishedAt ? { publishedAt: accountTimestamp(data.publishedAt) } : {}),
+    ...(data.closedAt ? { closedAt: accountTimestamp(data.closedAt) } : {}),
+  };
+}
+
+export const listStaffWeeklyReviews = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const snapshot = await db
+    .collection("weeklyReviews")
+    .where("institutionId", "==", actor.institutionId)
+    .get();
+  const reviews = snapshot.docs
+    .filter((document) => {
+      const data = document.data();
+      return actor.role === "director"
+        || notificationRecipients(data.managerIds).includes(actor.uid);
+    })
+    .map(serializeWeeklyReview)
+    .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  return { reviews };
+});
 
 async function requireReviewStudent(
   auth: CallableRequest<unknown>["auth"],

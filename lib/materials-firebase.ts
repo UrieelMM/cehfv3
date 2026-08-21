@@ -6,12 +6,10 @@ import {
   getDoc,
   increment,
   onSnapshot,
-  query,
   serverTimestamp,
   setDoc,
   Timestamp,
   updateDoc,
-  where,
   type DocumentData,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -166,7 +164,7 @@ export function watchLearningMaterials(
     callback([]);
     return () => undefined;
   }
-  if (profile.role === "student") {
+  if (profile.role !== "director") {
     if (!firebase.functions) {
       onError?.(new Error("Firebase Functions no está configurado para Materiales."));
       return () => undefined;
@@ -175,7 +173,10 @@ export function watchLearningMaterials(
     const callable = httpsCallable<
       Record<string, never>,
       { materials: Array<Record<string, unknown>> }
-    >(firebase.functions, "listStudentMaterials");
+    >(
+      firebase.functions,
+      profile.role === "student" ? "listStudentMaterials" : "listStaffMaterials",
+    );
     void callable({})
       .then(({ data }) => {
         if (!active) return;
@@ -194,7 +195,7 @@ export function watchLearningMaterials(
         onError?.(
           error instanceof Error
             ? error
-            : new Error("No pudimos cargar los materiales del alumno."),
+            : new Error("No pudimos cargar los materiales."),
         );
       });
     return () => {
@@ -207,15 +208,8 @@ export function watchLearningMaterials(
     profile.institutionId,
     "materials",
   );
-  const materialQuery =
-    profile.role === "director"
-      ? query(base)
-      : query(
-          base,
-          where("managerIds", "array-contains", profile.uid),
-        );
   return onSnapshot(
-    materialQuery,
+    base,
     (snapshot) => {
       callback(
         snapshot.docs

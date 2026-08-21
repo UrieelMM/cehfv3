@@ -370,6 +370,7 @@ export function CEHFApp() {
     ),
   );
   const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
+  const [reviewRecordsRevision, setReviewRecordsRevision] = useState(0);
   const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>(() =>
     legacyMaterialsToLearningMaterials(
       createDemoState().materials,
@@ -379,6 +380,7 @@ export function CEHFApp() {
     ),
   );
   const [materialRecordsLoading, setMaterialRecordsLoading] = useState(false);
+  const [materialRecordsRevision, setMaterialRecordsRevision] = useState(0);
   const [viewedMaterialIds, setViewedMaterialIds] = useState<Set<string>>(
     () =>
       new Set(
@@ -549,7 +551,7 @@ export function CEHFApp() {
         reportFirebaseError("cargar repasos", error);
       },
     );
-  }, [firebaseUser, profile]);
+  }, [firebaseUser, profile, reviewRecordsRevision]);
 
   useEffect(() => {
     if (firebaseUser) return;
@@ -590,7 +592,7 @@ export function CEHFApp() {
         reportFirebaseError("cargar materiales", error);
       },
     );
-  }, [activeSection, firebaseUser, profile]);
+  }, [activeSection, firebaseUser, materialRecordsRevision, profile]);
 
   useEffect(() => {
     if (firebaseUser) return;
@@ -1249,6 +1251,7 @@ export function CEHFApp() {
                   academicConfig,
                   academicCalendar,
                 );
+                setReviewRecordsRevision((current) => current + 1);
                 toast.success(
                   input.status === "published"
                     ? "Repaso publicado"
@@ -1295,6 +1298,7 @@ export function CEHFApp() {
                   academicConfig,
                   academicCalendar,
                 );
+                setMaterialRecordsRevision((current) => current + 1);
                 toast.success("Material publicado", {
                   description: `${result.recipientCount} ${result.recipientCount === 1 ? "alumno fue notificado" : "alumnos fueron notificados"}.`,
                 });

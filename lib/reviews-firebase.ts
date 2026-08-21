@@ -206,12 +206,45 @@ export function watchWeeklyReviews(
     callback([]);
     return () => undefined;
   }
+  if (profile.role === "teacher") {
+    if (!firebase.functions) {
+      onError?.(new Error("Firebase Functions no está configurado para Repasos."));
+      return () => undefined;
+    }
+    let active = true;
+    const callable = httpsCallable<
+      Record<string, never>,
+      { reviews: Array<Record<string, unknown>> }
+    >(firebase.functions, "listStaffWeeklyReviews");
+    void callable({})
+      .then(({ data }) => {
+        if (!active) return;
+        callback(
+          data.reviews.map((review) =>
+            reviewFromData(
+              String(review.id ?? ""),
+              String(review.firestorePath ?? ""),
+              review,
+            ),
+          ),
+        );
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        onError?.(
+          error instanceof Error
+            ? error
+            : new Error("No pudimos cargar los repasos del maestro."),
+        );
+      });
+    return () => {
+      active = false;
+    };
+  }
   const constraints: QueryConstraint[] = [
     where("institutionId", "==", profile.institutionId),
   ];
-  if (profile.role === "teacher") {
-    constraints.push(where("managerIds", "array-contains", profile.uid));
-  } else if (profile.role === "student") {
+  if (profile.role === "student") {
     constraints.push(where("audienceStudentIds", "array-contains", profile.uid));
     constraints.push(where("status", "in", ["published", "closed"]));
   }

@@ -243,6 +243,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(usersSource, /guardianWhatsApp/);
   assert.match(functionsSource, /guardianWhatsApp/);
   assert.match(functionsSource, /export const listStudentMaterials/);
+  assert.match(functionsSource, /export const listStaffMaterials/);
+  assert.match(functionsSource, /export const listStaffWeeklyReviews/);
+  assert.match(functionsSource, /notificationRecipients\(data\.managerIds\)\.includes\(actor\.uid\)/);
   assert.match(firestoreRules, /function canReadMaterial\(data\)/);
   assert.match(firestoreRules, /request\.auth\.uid in data\.audienceStudentIds/);
   assert.match(taskCss, /task-modern-grid/);

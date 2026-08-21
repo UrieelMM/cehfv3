@@ -473,7 +473,6 @@ export function ReviewsPage({
           <StaffReviewModal
             review={selected}
             accounts={accounts}
-            firebaseReady={firebaseReady}
             onClose={() => setSelectedId(null)}
             onDemoChange={onDemoReviewChange}
           />
@@ -843,13 +842,11 @@ function StudentReviewModal({
 function StaffReviewModal({
   review,
   accounts,
-  firebaseReady,
   onClose,
   onDemoChange,
 }: {
   review: WeeklyReview;
   accounts: ManagedAccount[];
-  firebaseReady: boolean;
   onClose: () => void;
   onDemoChange: (review: WeeklyReview) => void;
 }) {
@@ -902,15 +899,13 @@ function StaffReviewModal({
     setError("");
     try {
       await updateWeeklyReviewStatus(review, status);
-      if (!firebaseReady) {
-        onDemoChange({
-          ...review,
-          status,
-          updatedAt: new Date().toISOString(),
-          publishedAt: status === "published" ? new Date().toISOString() : review.publishedAt,
-          closedAt: status === "closed" ? new Date().toISOString() : undefined,
-        });
-      }
+      onDemoChange({
+        ...review,
+        status,
+        updatedAt: new Date().toISOString(),
+        publishedAt: status === "published" ? new Date().toISOString() : review.publishedAt,
+        closedAt: status === "closed" ? new Date().toISOString() : undefined,
+      });
       toast.success(status === "published" ? "Repaso publicado" : status === "closed" ? "Repaso cerrado" : "Repaso guardado como borrador");
     } catch (statusError) {
       setError(friendlyFirebaseError(statusError));
