@@ -10,6 +10,7 @@ export const demoProfiles: Record<Role, UserProfile> = {
     schoolLevel: "primary",
     grade: "5.º",
     group: "A",
+    teacherIds: ["demo-teacher-mariana"],
     initials: "SM",
   },
   teacher: {

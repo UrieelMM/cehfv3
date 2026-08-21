@@ -6,6 +6,7 @@ import "./tasks.css";
 import "./workshops.css";
 import "./materials.css";
 import "./reviews.css";
+import "./grades.css";
 
 const themeBootstrapScript = `
   (() => {

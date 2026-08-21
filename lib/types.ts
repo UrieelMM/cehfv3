@@ -11,6 +11,7 @@ export type UserProfile = {
   grade?: string;
   group?: string;
   subjects?: string[];
+  teacherIds?: string[];
   initials: string;
 };
 
@@ -231,6 +232,50 @@ export type AcademicCalendarInput = {
   timezone: string;
   weeks: Array<Pick<AcademicWeek, "id" | "label" | "startDate" | "endDate">>;
   terms: Array<Pick<AcademicTerm, "id" | "label" | "weekIds">>;
+};
+
+export type GradingCriterion =
+  | "classWork"
+  | "homework"
+  | "participation"
+  | "attendance"
+  | "exam";
+
+export type GradingWeights = Record<GradingCriterion, number>;
+
+export type WeeklyGradeScores = Record<GradingCriterion, number>;
+
+export type TeacherGradingConfig = {
+  teacherId: string;
+  teacherName: string;
+  institutionId: string;
+  weights: GradingWeights;
+  subjects: string[];
+  updatedAt?: string;
+};
+
+export type WeeklyGradeRecord = {
+  id: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentGrade?: string;
+  studentGroup?: string;
+  scores: WeeklyGradeScores;
+  weights: GradingWeights;
+  weightedScore: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type TaskPublicationStatus =

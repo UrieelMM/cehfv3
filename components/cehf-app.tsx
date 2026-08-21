@@ -55,6 +55,10 @@ import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { WorkshopsPage } from "@/components/workshops-page";
 import {
+  GradingWeightsCard,
+  WeeklyGradesPanel,
+} from "@/components/weekly-grades";
+import {
   ReviewCreateModal,
   ReviewsPage,
 } from "@/components/reviews-page";
@@ -1880,8 +1884,12 @@ function SectionContent({
       return (
         <WeekPage
           role={role}
+          profile={profile}
           state={state}
           academicConfig={academicConfig}
+          academicCalendar={academicCalendar}
+          managedAccounts={managedAccounts}
+          firebaseReady={firebaseReady}
           navigate={navigate}
           updateState={updateState}
         />
@@ -1982,6 +1990,7 @@ function SectionContent({
           state={state}
           updateSettings={updateSettings}
           role={role}
+          profile={profile}
           academicConfig={academicConfig}
           academicCalendar={academicCalendar}
           saveAcademicCalendarConfiguration={saveAcademicCalendarConfiguration}
@@ -2475,14 +2484,22 @@ function VerseEditorModal({
 
 function WeekPage({
   role,
+  profile,
   state,
   academicConfig,
+  academicCalendar,
+  managedAccounts,
+  firebaseReady,
   navigate,
   updateState,
 }: {
   role: Role;
+  profile: UserProfile;
   state: PortalState;
   academicConfig: AcademicConfig;
+  academicCalendar: AcademicCalendar;
+  managedAccounts: ManagedAccount[];
+  firebaseReady: boolean;
   navigate: (section: SectionKey) => void;
   updateState: (
     updater: (previous: PortalState) => PortalState,
@@ -2648,6 +2665,13 @@ function WeekPage({
           </span>
         </article>
       </aside>
+      <WeeklyGradesPanel
+        profile={profile}
+        academicConfig={academicConfig}
+        calendar={academicCalendar}
+        accounts={managedAccounts}
+        firebaseReady={firebaseReady}
+      />
     </div>
   );
 }
@@ -2867,6 +2891,7 @@ function SettingsPage({
   state,
   updateSettings,
   role,
+  profile,
   academicConfig,
   academicCalendar,
   saveAcademicCalendarConfiguration,
@@ -2880,6 +2905,7 @@ function SettingsPage({
     message?: string,
   ) => void;
   role: Role;
+  profile: UserProfile;
   academicConfig: AcademicConfig;
   academicCalendar: AcademicCalendar;
   saveAcademicCalendarConfiguration: (
@@ -2892,6 +2918,7 @@ function SettingsPage({
   type SettingsTabId =
     | "appearance"
     | "notifications"
+    | "grading"
     | "whatsapp"
     | "academic";
 
@@ -2915,6 +2942,16 @@ function SettingsPage({
       description: "Avisos del portal",
       icon: <Bell size={18} />,
     },
+    ...(role === "teacher"
+      ? [
+          {
+            id: "grading" as const,
+            label: "Calificaciones",
+            description: "Porcentajes y ponderación",
+            icon: <GraduationCap size={18} />,
+          },
+        ]
+      : []),
     ...(role === "director"
       ? [
           {
@@ -3073,6 +3110,18 @@ function SettingsPage({
             </div>
           </section>
         </div>
+
+        {role === "teacher" && (
+          <div
+            aria-labelledby="settings-tab-grading"
+            className="settings-tab-panel"
+            hidden={activeSettingsTab !== "grading"}
+            id="settings-panel-grading"
+            role="tabpanel"
+          >
+            <GradingWeightsCard profile={profile} firebaseReady={firebaseReady} />
+          </div>
+        )}
 
         {role === "director" && (
           <>

@@ -568,6 +568,9 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
     subjects: Array.isArray(data.subjects)
       ? data.subjects.map(String)
       : undefined,
+    teacherIds: Array.isArray(data.teacherIds)
+      ? data.teacherIds.map(String)
+      : undefined,
     initials: String(data.initials ?? "CE"),
   };
 }

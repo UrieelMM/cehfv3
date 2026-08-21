@@ -449,6 +449,156 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      function validGradingWeights(weights) {
+        return weights is map
+          && weights.keys().hasOnly([
+            "classWork", "homework", "participation", "attendance", "exam"
+          ])
+          && weights.classWork is number
+          && weights.homework is number
+          && weights.participation is number
+          && weights.attendance is number
+          && weights.exam is number
+          && weights.classWork >= 0 && weights.classWork <= 100
+          && weights.homework >= 0 && weights.homework <= 100
+          && weights.participation >= 0 && weights.participation <= 100
+          && weights.attendance >= 0 && weights.attendance <= 100
+          && weights.exam >= 0 && weights.exam <= 100
+          && weights.classWork
+            + weights.homework
+            + weights.participation
+            + weights.attendance
+            + weights.exam == 100;
+      }
+
+      function validGradeScores(scores) {
+        return scores is map
+          && scores.keys().hasOnly([
+            "classWork", "homework", "participation", "attendance", "exam"
+          ])
+          && scores.classWork is number
+          && scores.homework is number
+          && scores.participation is number
+          && scores.attendance is number
+          && scores.exam is number
+          && scores.classWork >= 0 && scores.classWork <= 100
+          && scores.homework >= 0 && scores.homework <= 100
+          && scores.participation >= 0 && scores.participation <= 100
+          && scores.attendance >= 0 && scores.attendance <= 100
+          && scores.exam >= 0 && scores.exam <= 100;
+      }
+
+      function gradingStudent(studentId) {
+        return get(
+          /databases/$(database)/documents/users/$(studentId)
+        ).data;
+      }
+
+      function teacherCanGrade(data) {
+        let student = gradingStudent(data.studentId);
+        return roleIs("teacher")
+          && profile().institutionId == institutionId
+          && data.institutionId == institutionId
+          && data.teacherId == request.auth.uid
+          && data.teacherName == profile().name
+          && data.studentId is string
+          && exists(
+            /databases/$(database)/documents/users/$(data.studentId)
+          )
+          && student.active == true
+          && student.role == "student"
+          && student.institutionId == institutionId
+          && data.studentName == student.name
+          && student.teacherIds is list
+          && student.teacherIds.hasAny([request.auth.uid])
+          && student.subjects is list
+          && student.subjects.hasAny([data.subject])
+          && profile().subjects is list
+          && profile().subjects.hasAny([data.subject]);
+      }
+
+      function validWeeklyGrade(data) {
+        let calculatedScore = (
+          data.scores.classWork * data.weights.classWork
+          + data.scores.homework * data.weights.homework
+          + data.scores.participation * data.weights.participation
+          + data.scores.attendance * data.weights.attendance
+          + data.scores.exam * data.weights.exam
+        ) / 100;
+        return data.keys().hasOnly([
+            "institutionId", "schoolYearId", "schoolYearLabel",
+            "termId", "termLabel", "weekId", "weekLabel",
+            "subjectId", "subject", "teacherId", "teacherName",
+            "studentId", "studentName", "studentGrade", "studentGroup",
+            "scores", "weights", "weightedScore", "createdAt", "updatedAt"
+          ])
+          && data.subjectId is string
+          && data.subject is string
+          && data.studentName is string
+          && data.weekLabel is string
+          && data.termLabel is string
+          && validGradingWeights(data.weights)
+          && validGradeScores(data.scores)
+          && data.weightedScore is number
+          && data.weightedScore >= 0
+          && data.weightedScore <= 100
+          && data.weightedScore >= calculatedScore - 0.051
+          && data.weightedScore <= calculatedScore + 0.051
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp
+          && validCalendarScope(data);
+      }
+
+      function sameWeeklyGradeScope(before, after) {
+        return after.institutionId == before.institutionId
+          && after.schoolYearId == before.schoolYearId
+          && sameCalendarScope(before, after)
+          && after.subjectId == before.subjectId
+          && after.subject == before.subject
+          && after.teacherId == before.teacherId
+          && after.studentId == before.studentId;
+      }
+
+      match /gradingConfigs/{teacherId} {
+        allow read: if isActive()
+          && profile().institutionId == institutionId
+          && (isDirector() || request.auth.uid == teacherId);
+        allow create, update: if roleIs("teacher")
+          && profile().institutionId == institutionId
+          && request.auth.uid == teacherId
+          && request.resource.data.keys().hasOnly([
+            "institutionId", "teacherId", "teacherName", "subjects",
+            "weights", "updatedAt"
+          ])
+          && request.resource.data.institutionId == institutionId
+          && request.resource.data.teacherId == teacherId
+          && request.resource.data.teacherName is string
+          && request.resource.data.subjects is list
+          && profile().subjects is list
+          && request.resource.data.subjects.toSet() == profile().subjects.toSet()
+          && request.resource.data.updatedAt is timestamp
+          && validGradingWeights(request.resource.data.weights);
+        allow delete: if false;
+      }
+
+      match /weeklyGrades/{gradeId} {
+        allow read: if isActive()
+          && profile().institutionId == institutionId
+          && resource.data.institutionId == institutionId
+          && (
+            isDirector()
+            || (roleIs("teacher") && resource.data.teacherId == request.auth.uid)
+            || (roleIs("student") && resource.data.studentId == request.auth.uid)
+          );
+        allow create: if teacherCanGrade(request.resource.data)
+          && validWeeklyGrade(request.resource.data);
+        allow update: if teacherCanGrade(resource.data)
+          && teacherCanGrade(request.resource.data)
+          && validWeeklyGrade(request.resource.data)
+          && sameWeeklyGradeScope(resource.data, request.resource.data);
+        allow delete: if false;
+      }
+
       match /ciclosEscolares/{schoolYearId} {
         allow read: if isActive() && profile().institutionId == institutionId;
         allow write: if false;

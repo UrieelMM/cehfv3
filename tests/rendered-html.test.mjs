@@ -42,6 +42,7 @@ test("server-renders the Campus CEHF entry experience", async () => {
 test("supports the documented application routes", async () => {
   for (const pathname of [
     "/dashboard",
+    "/my-week",
     "/tasks",
     "/tasks/task-bitacora",
     "/weekly-progress",
@@ -77,6 +78,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     workshopCss,
     workshopTaskUiSource,
     workshopFileViewerSource,
+    gradesSource,
+    gradesUiSource,
+    gradesCss,
   ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
@@ -97,6 +101,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("app/workshops.css", projectRoot), "utf8"),
       readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
       readFile(new URL("components/workshop-file-viewer.tsx", projectRoot), "utf8"),
+      readFile(new URL("lib/grades-firebase.ts", projectRoot), "utf8"),
+      readFile(new URL("components/weekly-grades.tsx", projectRoot), "utf8"),
+      readFile(new URL("app/grades.css", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -112,6 +119,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
 
   assert.match(firestoreRules, /match \/weeklyProgress/);
   assert.match(firestoreRules, /match \/weeklyReports/);
+  assert.match(firestoreRules, /match \/gradingConfigs/);
+  assert.match(firestoreRules, /match \/weeklyGrades/);
+  assert.match(firestoreRules, /function teacherCanGrade\(data\)/);
   assert.match(firestoreRules, /match \/messageOutbox/);
   assert.match(firestoreRules, /function roleIs\(role\)/);
   assert.match(firestoreRules, /request\.auth\.token\.role == "director"/);
@@ -236,6 +246,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /aria-label="Secciones de configuración"/);
   assert.match(appSource, /role="tablist"/);
   assert.match(appSource, /settings-tab-whatsapp/);
+  assert.match(appSource, /settings-tab-grading/);
   assert.match(css, /\.settings-tabs\s*\{/);
   assert.match(css, /\.settings-tab-panel\[hidden\]\s*\{[^}]*display:\s*none;/s);
   assert.match(firebaseSource, /normalizeGuardianWhatsApp/);
@@ -254,6 +265,14 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(workshopSource, /Administrar acceso/);
   assert.match(workshopSource, /Subir recurso/);
   assert.match(workshopSource, /workshop-immersive-shell/);
+  assert.match(gradesSource, /DEFAULT_GRADING_WEIGHTS/);
+  assert.match(gradesSource, /saveTeacherGradingConfig/);
+  assert.match(gradesSource, /saveWeeklyGrade/);
+  assert.match(gradesUiSource, /Cambiar semana/);
+  assert.match(gradesUiSource, /Captura semanal/);
+  assert.match(gradesUiSource, /Así va tu semana/);
+  assert.match(gradesCss, /\.grade-week-selector/);
+  assert.match(gradesCss, /\.grade-roster-row/);
   assert.match(workshopSource, /Biblioteca creativa/);
   assert.match(workshopSource, /Laboratorio digital/);
   assert.match(workshopFirebaseSource, /ensureDefaultWorkshops/);
