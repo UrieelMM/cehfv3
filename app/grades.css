@@ -1450,7 +1450,681 @@
 .grade-score-pill.is-developing { border-color: color-mix(in srgb, var(--gold) 28%, transparent); background: var(--gold-soft); color: var(--gold); }
 .grade-score-pill.is-support { border-color: color-mix(in srgb, var(--coral) 28%, transparent); background: var(--coral-soft); color: var(--coral); }
 
+.weekly-grade-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.grade-export-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 1px solid color-mix(in srgb, var(--violet) 28%, var(--border));
+  border-radius: 13px;
+  background: var(--surface);
+  color: var(--violet);
+  font-size: 0.76rem;
+  font-weight: 850;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.grade-export-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  background: var(--violet-soft);
+  box-shadow: var(--shadow-md);
+}
+
+.grade-export-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.director-grade-overview {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.director-overview-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--violet) 18%, var(--border));
+  border-radius: 21px;
+  background:
+    radial-gradient(circle at 92% 5%, color-mix(in srgb, var(--blue) 16%, transparent), transparent 34%),
+    linear-gradient(135deg, var(--surface), color-mix(in srgb, var(--violet-soft) 45%, var(--surface)));
+  box-shadow: 0 10px 30px rgb(12 42 70 / 0.065);
+}
+
+.director-overview-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--violet);
+  color: white;
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--violet) 26%, transparent);
+}
+
+.director-overview-hero > div:nth-child(2) {
+  min-width: 220px;
+  flex: 1;
+}
+
+.director-overview-hero h3 {
+  margin: 3px 0 5px;
+  font-family: var(--font-display);
+  font-size: 1.42rem;
+  letter-spacing: -0.028em;
+}
+
+.director-overview-hero p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.director-overview-metrics {
+  display: grid;
+  min-width: 420px;
+  grid-template-columns: repeat(4, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+}
+
+.director-overview-metrics > span {
+  display: flex;
+  min-height: 70px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border-left: 1px solid var(--border);
+}
+
+.director-overview-metrics > span:first-child {
+  border-left: 0;
+}
+
+.director-overview-metrics small {
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 760;
+}
+
+.director-overview-metrics strong {
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-size: 1.34rem;
+  line-height: 1;
+}
+
+.director-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  gap: 14px;
+}
+
+.director-overview-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 9px 30px rgb(12 42 70 / 0.05);
+}
+
+.director-overview-card.is-students {
+  grid-column: 1 / -1;
+}
+
+.director-overview-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 17px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.director-overview-card h4 {
+  margin: 3px 0 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+}
+
+.director-overview-card > header > span {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-size: 0.64rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.director-summary-table,
+.director-student-list,
+.director-group-list {
+  max-height: 330px;
+  overflow: auto;
+}
+
+.director-summary-head,
+.director-summary-table > div:not(.director-summary-head) {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(150px, 1fr) 65px 84px;
+  gap: 12px;
+  align-items: center;
+}
+
+.director-summary-head {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  padding: 9px 15px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.director-summary-table > div:not(.director-summary-head) {
+  padding: 11px 15px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.director-summary-table > div:not(.director-summary-head) > span:first-child,
+.director-student-list > div > span:first-child {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+}
+
+.director-summary-table i,
+.director-student-list i {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-size: 0.61rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.director-summary-table b,
+.director-student-list b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.director-summary-table > div > strong,
+.director-student-list > div > strong {
+  width: fit-content;
+  padding: 5px 8px;
+  border-radius: 9px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.director-summary-table strong.is-excellent,
+.director-student-list strong.is-excellent { background: var(--mint-soft); color: var(--mint); }
+.director-summary-table strong.is-developing,
+.director-student-list strong.is-developing { background: var(--gold-soft); color: var(--gold); }
+.director-summary-table strong.is-support,
+.director-student-list strong.is-support { background: var(--coral-soft); color: var(--coral); }
+.director-summary-table strong.is-pending,
+.director-student-list strong.is-pending { background: var(--surface-soft); color: var(--muted); }
+
+.director-group-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.director-group-list > div {
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) repeat(3, minmax(58px, auto));
+  gap: 8px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-raised);
+}
+
+.director-group-list span:not(.director-group-name) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+}
+
+.director-group-list small,
+.director-student-list small {
+  color: var(--muted);
+  font-size: 0.57rem;
+  font-weight: 720;
+}
+
+.director-group-name {
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+.director-group-list b {
+  font-size: 0.72rem;
+}
+
+.director-group-list .has-attention b {
+  color: var(--coral);
+}
+
+.director-student-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 0;
+}
+
+.director-student-list > div {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) 66px 80px;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.director-student-list > div:nth-child(odd) {
+  border-right: 1px solid var(--border);
+}
+
+.director-student-list > div > span:first-child {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.director-student-list > div > span:first-child i {
+  grid-row: 1 / 3;
+}
+
+.director-student-list > div > span:first-child small {
+  grid-column: 2;
+}
+
+.director-student-list > div > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.director-overview-empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.student-show-all-button {
+  display: grid;
+  width: 100%;
+  min-height: 64px;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 14px;
+  border: 1px dashed color-mix(in srgb, var(--violet) 35%, var(--border));
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--violet-soft), color-mix(in srgb, var(--blue) 7%, var(--surface)));
+  color: var(--violet);
+  text-align: left;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.student-show-all-button:hover {
+  transform: translateY(-2px);
+  border-color: var(--violet);
+  box-shadow: var(--shadow-sm);
+}
+
+.student-show-all-button > span:first-child {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--surface);
+}
+
+.student-show-all-button > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.student-show-all-button strong {
+  font-size: 0.78rem;
+}
+
+.student-show-all-button small {
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.student-grades-modal-backdrop,
+.grade-export-modal-backdrop {
+  position: fixed;
+  z-index: 400;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(10 26 53 / 0.68);
+  backdrop-filter: blur(10px);
+}
+
+.student-grades-fullscreen-modal {
+  display: grid;
+  width: min(1480px, calc(100vw - 32px));
+  height: min(920px, calc(100dvh - 32px));
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, white 35%, transparent);
+  border-radius: 25px;
+  background: var(--background);
+  box-shadow: 0 32px 90px rgb(5 19 42 / 0.36);
+}
+
+.student-grades-fullscreen-modal > header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 23px;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 88% 0, color-mix(in srgb, var(--blue) 16%, transparent), transparent 36%),
+    var(--surface);
+}
+
+.student-grades-fullscreen-modal > header > div {
+  flex: 1;
+}
+
+.student-grades-fullscreen-modal h2 {
+  margin: 3px 0 4px;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+}
+
+.student-grades-fullscreen-modal header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.student-modal-average {
+  display: flex;
+  min-width: 125px;
+  flex-direction: column;
+  align-items: flex-end;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-raised);
+}
+
+.student-modal-average small {
+  color: var(--muted);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.student-modal-average strong {
+  margin-top: 2px;
+  color: var(--violet);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.student-grades-fullscreen-modal > header > button,
+.grade-export-modal > header > button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  transition: transform 180ms ease, color 180ms ease;
+}
+
+.student-grades-fullscreen-modal > header > button:hover,
+.grade-export-modal > header > button:hover:not(:disabled) {
+  transform: rotate(4deg);
+  color: var(--violet);
+}
+
+.student-grades-modal-content {
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.student-grades-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.grade-export-modal {
+  width: min(720px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, white 32%, transparent);
+  border-radius: 23px;
+  background: var(--surface);
+  box-shadow: 0 30px 90px rgb(5 19 42 / 0.34);
+}
+
+.grade-export-modal > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 21px;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(circle at 92% 0, color-mix(in srgb, var(--blue) 15%, transparent), transparent 40%),
+    var(--surface);
+}
+
+.grade-export-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--violet);
+  color: white;
+}
+
+.grade-export-modal > header > div {
+  flex: 1;
+}
+
+.grade-export-modal h2 {
+  margin: 3px 0 4px;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  letter-spacing: -0.028em;
+}
+
+.grade-export-modal header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.grade-export-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 20px 21px 12px;
+}
+
+.grade-export-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.grade-export-fields label > span {
+  color: var(--muted-strong);
+  font-size: 0.69rem;
+  font-weight: 800;
+}
+
+.grade-export-fields select {
+  width: 100%;
+  min-height: 43px;
+  padding: 0 35px 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-raised);
+  color: var(--foreground);
+  outline: 0;
+}
+
+.grade-export-fields select:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 12%, transparent);
+}
+
+.grade-export-preview {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 4px 21px 20px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--violet) 20%, var(--border));
+  border-radius: 14px;
+  background: var(--violet-soft);
+}
+
+.grade-export-preview > span {
+  display: flex;
+  min-width: 76px;
+  flex-direction: column;
+  align-items: center;
+  padding-right: 13px;
+  border-right: 1px solid color-mix(in srgb, var(--violet) 19%, transparent);
+  color: var(--violet);
+}
+
+.grade-export-preview > span strong {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+}
+
+.grade-export-preview > span small,
+.grade-export-preview p {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.grade-export-preview p {
+  margin: 3px 0 0;
+  line-height: 1.45;
+}
+
+.grade-export-modal > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 15px 21px 21px;
+  border-top: 1px solid var(--border);
+}
+
+.grade-export-modal > footer button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 15px;
+  border-radius: 11px;
+  font-size: 0.73rem;
+  font-weight: 850;
+}
+
+.grade-export-cancel {
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--muted-strong);
+}
+
+.grade-export-submit {
+  border: 1px solid var(--violet);
+  background: var(--violet);
+  color: white;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--violet) 23%, transparent);
+}
+
+.grade-export-modal button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 @media (max-width: 1180px) {
+  .director-overview-hero {
+    flex-wrap: wrap;
+  }
+
+  .director-overview-metrics {
+    width: 100%;
+  }
+
+  .director-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .director-overview-card.is-students {
+    grid-column: auto;
+  }
+
   .grade-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1487,6 +2161,16 @@
 
   .grade-week-selector {
     min-width: 0;
+    width: 100%;
+  }
+
+  .weekly-grade-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .grade-export-button {
     width: 100%;
   }
 
@@ -1587,6 +2271,42 @@
     grid-template-columns: repeat(2, minmax(130px, 1fr));
   }
 
+  .director-overview-hero {
+    align-items: flex-start;
+  }
+
+  .director-overview-metrics {
+    min-width: 0;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .director-overview-metrics > span:nth-child(3) {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .director-overview-metrics > span:nth-child(4) {
+    border-top: 1px solid var(--border);
+  }
+
+  .director-student-list,
+  .student-grades-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .director-student-list > div:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .director-summary-table {
+    overflow-x: auto;
+  }
+
+  .director-summary-head,
+  .director-summary-table > div:not(.director-summary-head) {
+    min-width: 620px;
+  }
+
   .grading-total {
     align-items: flex-start;
   }
@@ -1629,6 +2349,90 @@
 
   .student-primary-results {
     padding: 16px;
+  }
+
+  .director-overview-hero {
+    padding: 16px;
+  }
+
+  .director-overview-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
+
+  .director-overview-hero > div:nth-child(2) {
+    min-width: calc(100% - 58px);
+  }
+
+  .director-group-list > div {
+    grid-template-columns: 1fr repeat(3, auto);
+  }
+
+  .student-grades-modal-backdrop,
+  .grade-export-modal-backdrop {
+    padding: 0;
+  }
+
+  .student-grades-fullscreen-modal,
+  .grade-export-modal {
+    width: 100vw;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .student-grades-fullscreen-modal > header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    padding: 16px;
+  }
+
+  .student-grades-fullscreen-modal > header > div {
+    min-width: calc(100% - 58px);
+    order: 1;
+  }
+
+  .student-grades-fullscreen-modal > header > button {
+    order: 2;
+  }
+
+  .student-modal-average {
+    width: 100%;
+    align-items: flex-start;
+    order: 3;
+  }
+
+  .student-grades-modal-content {
+    padding: 14px;
+  }
+
+  .grade-export-modal {
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
+    overflow-y: auto;
+  }
+
+  .grade-export-modal > header {
+    padding: 17px;
+  }
+
+  .grade-export-fields {
+    grid-template-columns: 1fr;
+    padding: 17px;
+  }
+
+  .grade-export-preview {
+    align-self: start;
+    margin: 0 17px 17px;
+  }
+
+  .grade-export-modal > footer {
+    padding: 14px 17px 18px;
+  }
+
+  .grade-export-modal > footer button {
+    flex: 1;
   }
 
   .teacher-capture-heading {

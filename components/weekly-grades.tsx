@@ -4,11 +4,13 @@ import {
   Activity,
   BarChart3,
   BookOpenCheck,
+  Building2,
   CalendarRange,
   Check,
   ChevronLeft,
   ChevronRight,
   ClipboardPenLine,
+  FileDown,
   GraduationCap,
   RotateCcw,
   Save,
@@ -18,9 +20,11 @@ import {
   Target,
   TrendingUp,
   UsersRound,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import {
   calculateWeightedGrade,
@@ -103,6 +107,10 @@ function formatWeekRange(week: AcademicWeek) {
     month: "short",
   }).format(new Date(`${value}T12:00:00`));
   return `${format(week.startDate)}–${format(week.endDate)}`;
+}
+
+function recordGroup(record: WeeklyGradeRecord) {
+  return [record.studentGrade, record.studentGroup].filter(Boolean).join(" ") || "Sin grupo";
 }
 
 function resolveWeekChoices(
@@ -700,6 +708,177 @@ function GradeRecentRecords({ records }: { records: WeeklyGradeRecord[] }) {
   );
 }
 
+function DirectorGradeOverview({
+  records,
+  accounts,
+}: {
+  records: WeeklyGradeRecord[];
+  accounts: ManagedAccount[];
+}) {
+  const teachers = accounts
+    .filter((account) => account.role === "teacher" && account.active)
+    .map((account) => {
+      const teacherRecords = records.filter((record) => record.teacherId === account.uid);
+      return {
+        id: account.uid,
+        name: account.name,
+        subjects: Array.from(new Set([
+          ...account.subjects,
+          ...teacherRecords.map((record) => record.subject),
+        ])).sort((first, second) => first.localeCompare(second, "es")),
+        students: new Set(teacherRecords.map((record) => record.studentId)).size,
+        records: teacherRecords.length,
+        average: teacherRecords.length
+          ? average(teacherRecords.map((record) => record.weightedScore))
+          : null,
+      };
+    });
+  records.forEach((record) => {
+    if (teachers.some((teacher) => teacher.id === record.teacherId)) return;
+    const teacherRecords = records.filter((item) => item.teacherId === record.teacherId);
+    teachers.push({
+      id: record.teacherId,
+      name: record.teacherName,
+      subjects: Array.from(new Set(teacherRecords.map((item) => item.subject)))
+        .sort((first, second) => first.localeCompare(second, "es")),
+      students: new Set(teacherRecords.map((item) => item.studentId)).size,
+      records: teacherRecords.length,
+      average: average(teacherRecords.map((item) => item.weightedScore)),
+    });
+  });
+  teachers.sort((first, second) => (
+    second.records - first.records || first.name.localeCompare(second.name, "es")
+  ));
+
+  const students = accounts
+    .filter((account) => account.role === "student" && account.active)
+    .map((account) => {
+      const studentRecords = records.filter((record) => record.studentId === account.uid);
+      return {
+        id: account.uid,
+        name: account.name,
+        group: [account.grade, account.group].filter(Boolean).join(" ") || "Sin grupo",
+        records: studentRecords.length,
+        subjects: new Set(studentRecords.map((record) => record.subject)).size,
+        average: studentRecords.length
+          ? average(studentRecords.map((record) => record.weightedScore))
+          : null,
+      };
+    });
+  records.forEach((record) => {
+    if (students.some((student) => student.id === record.studentId)) return;
+    const studentRecords = records.filter((item) => item.studentId === record.studentId);
+    students.push({
+      id: record.studentId,
+      name: record.studentName,
+      group: recordGroup(record),
+      records: studentRecords.length,
+      subjects: new Set(studentRecords.map((item) => item.subject)).size,
+      average: average(studentRecords.map((item) => item.weightedScore)),
+    });
+  });
+  students.sort((first, second) => (
+    first.group.localeCompare(second.group, "es") || first.name.localeCompare(second.name, "es")
+  ));
+
+  const groups = Array.from(new Set(students.map((student) => student.group)))
+    .map((group) => {
+      const members = students.filter((student) => student.group === group);
+      const evaluated = members.filter((student) => student.average !== null);
+      return {
+        group,
+        total: members.length,
+        evaluated: evaluated.length,
+        average: evaluated.length
+          ? average(evaluated.map((student) => student.average ?? 0))
+          : null,
+        attention: evaluated.filter((student) => (student.average ?? 100) < 70).length,
+      };
+    })
+    .sort((first, second) => first.group.localeCompare(second.group, "es"));
+  const evaluatedStudents = students.filter((student) => student.average !== null).length;
+  const institutionalAverage = records.length
+    ? average(records.map((record) => record.weightedScore))
+    : null;
+  const coverage = students.length ? Math.round(evaluatedStudents / students.length * 100) : 0;
+
+  return (
+    <section className="director-grade-overview" aria-label="Resumen institucional de calificaciones">
+      <header className="director-overview-hero">
+        <span className="director-overview-icon"><Building2 size={24} /></span>
+        <div>
+          <span className="eyebrow">Lectura institucional</span>
+          <h3>Maestros, alumnos y grupos en un solo vistazo</h3>
+          <p>Consulta la cobertura de captura y detecta rápidamente dónde dar seguimiento esta semana.</p>
+        </div>
+        <div className="director-overview-metrics">
+          <span><small>Maestros</small><strong>{teachers.length}</strong></span>
+          <span><small>Alumnos</small><strong>{students.length}</strong></span>
+          <span><small>Cobertura</small><strong>{coverage}%</strong></span>
+          <span><small>Promedio</small><strong>{institutionalAverage === null ? "—" : formatScore(institutionalAverage)}</strong></span>
+        </div>
+      </header>
+
+      <div className="director-overview-grid">
+        <article className="director-overview-card is-teachers">
+          <header>
+            <div><span className="grade-chart-kicker">Equipo docente</span><h4>Resumen por maestro</h4></div>
+            <span>{teachers.filter((teacher) => teacher.records > 0).length} con actividad</span>
+          </header>
+          <div className="director-summary-table">
+            <div className="director-summary-head"><span>Maestro</span><span>Materias</span><span>Alumnos</span><span>Promedio</span></div>
+            {teachers.length ? teachers.map((teacher) => (
+              <div key={teacher.id}>
+                <span><i>{teacher.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</i><b>{teacher.name}</b></span>
+                <span>{teacher.subjects.length ? teacher.subjects.join(", ") : "Sin materias"}</span>
+                <span>{teacher.students}</span>
+                <strong className={teacher.average === null ? "is-pending" : `is-${gradeTone(teacher.average)}`}>
+                  {teacher.average === null ? "Sin captura" : formatScore(teacher.average)}
+                </strong>
+              </div>
+            )) : <p className="director-overview-empty">No hay maestros activos.</p>}
+          </div>
+        </article>
+
+        <article className="director-overview-card is-groups">
+          <header>
+            <div><span className="grade-chart-kicker">Cobertura</span><h4>Resumen por grupo</h4></div>
+            <span>{groups.length} grupos</span>
+          </header>
+          <div className="director-group-list">
+            {groups.length ? groups.map((group) => (
+              <div key={group.group}>
+                <span className="director-group-name">{group.group}</span>
+                <span><small>Evaluados</small><b>{group.evaluated}/{group.total}</b></span>
+                <span><small>Promedio</small><b>{group.average === null ? "—" : formatScore(group.average)}</b></span>
+                <span className={group.attention ? "has-attention" : ""}><small>Atención</small><b>{group.attention}</b></span>
+              </div>
+            )) : <p className="director-overview-empty">No hay grupos activos.</p>}
+          </div>
+        </article>
+
+        <article className="director-overview-card is-students">
+          <header>
+            <div><span className="grade-chart-kicker">Seguimiento</span><h4>Resumen de alumnos</h4></div>
+            <span>{evaluatedStudents} de {students.length} evaluados</span>
+          </header>
+          <div className="director-student-list">
+            {students.length ? students.map((student) => (
+              <div key={student.id}>
+                <span><i>{student.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</i><b>{student.name}</b><small>{student.group}</small></span>
+                <span><small>Materias</small><b>{student.subjects}</b></span>
+                <strong className={student.average === null ? "is-pending" : `is-${gradeTone(student.average)}`}>
+                  {student.average === null ? "Pendiente" : formatScore(student.average)}
+                </strong>
+              </div>
+            )) : <p className="director-overview-empty">No hay alumnos activos.</p>}
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function GradeSummaryDashboard({
   profile,
   records,
@@ -868,6 +1047,45 @@ function GradeSummaryDashboard({
   );
 }
 
+function StudentSubjectGradeCard({
+  record,
+  index,
+}: {
+  record: WeeklyGradeRecord;
+  index: number;
+}) {
+  return (
+    <motion.article
+      className="student-subject-grade-card"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index, 5) * 0.045 }}
+    >
+      <header>
+        <div>
+          <span className="student-subject-teacher">
+            <small>Maestro</small>
+            <strong>{record.teacherName}</strong>
+          </span>
+          <h3>{record.subject}</h3>
+        </div>
+        <strong className={`grade-badge is-${gradeTone(record.weightedScore)}`}>
+          {record.weightedScore.toFixed(1)}
+        </strong>
+      </header>
+      <div className="student-grade-breakdown">
+        {GRADING_CRITERIA.map((criterion) => (
+          <div key={criterion.key}>
+            <span><strong>{criterion.shortLabel}</strong><small>{record.weights[criterion.key]}%</small></span>
+            <div><i style={{ width: `${record.scores[criterion.key]}%` }} /></div>
+            <b>{record.scores[criterion.key]}</b>
+          </div>
+        ))}
+      </div>
+    </motion.article>
+  );
+}
+
 function StudentGrades({
   records,
   selectedWeek,
@@ -875,12 +1093,27 @@ function StudentGrades({
   records: WeeklyGradeRecord[];
   selectedWeek?: AcademicWeek;
 }) {
+  const [showAll, setShowAll] = useState(false);
   const average = records.length
     ? Math.round(
         records.reduce((total, record) => total + record.weightedScore, 0) /
         records.length * 10,
       ) / 10
     : null;
+
+  useEffect(() => {
+    if (!showAll) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowAll(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [showAll]);
 
   if (!selectedWeek) {
     return <div className="grade-empty-state">El calendario académico aún no tiene una semana disponible.</div>;
@@ -909,39 +1142,229 @@ function StudentGrades({
         <div className="student-grade-summary-bar"><span style={{ width: `${average}%` }} /></div>
       </motion.article>
       <div className="student-subject-grades">
-        {records.map((record, index) => (
-          <motion.article
-            className="student-subject-grade-card"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.045 }}
-            key={record.id}
-          >
-            <header>
-              <div>
-                <span className="student-subject-teacher">
-                  <small>Maestro</small>
-                  <strong>{record.teacherName}</strong>
-                </span>
-                <h3>{record.subject}</h3>
-              </div>
-              <strong className={`grade-badge is-${gradeTone(record.weightedScore)}`}>
-                {record.weightedScore.toFixed(1)}
-              </strong>
-            </header>
-            <div className="student-grade-breakdown">
-              {GRADING_CRITERIA.map((criterion) => (
-                <div key={criterion.key}>
-                  <span><strong>{criterion.shortLabel}</strong><small>{record.weights[criterion.key]}%</small></span>
-                  <div><i style={{ width: `${record.scores[criterion.key]}%` }} /></div>
-                  <b>{record.scores[criterion.key]}</b>
-                </div>
-              ))}
-            </div>
-          </motion.article>
+        {records.slice(0, 3).map((record, index) => (
+          <StudentSubjectGradeCard record={record} index={index} key={record.id} />
         ))}
+        {records.length > 3 && (
+          <button className="student-show-all-button" onClick={() => setShowAll(true)} type="button">
+            <span><BookOpenCheck size={18} /></span>
+            <span><strong>Mostrar todo</strong><small>Ver el detalle de las {records.length} materias</small></span>
+            <ChevronRight size={18} />
+          </button>
+        )}
       </div>
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {showAll && (
+            <motion.div
+              className="student-grades-modal-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAll(false)}
+            >
+              <motion.section
+                className="student-grades-fullscreen-modal"
+                initial={{ opacity: 0, y: 18, scale: 0.985 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 14, scale: 0.985 }}
+                transition={{ duration: 0.22 }}
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="student-all-grades-title"
+              >
+                <header>
+                  <div>
+                    <span className="eyebrow">{selectedWeek.label} · Detalle completo</span>
+                    <h2 id="student-all-grades-title">Todas tus calificaciones</h2>
+                    <p>Consulta el resultado y la ponderación de cada materia publicada.</p>
+                  </div>
+                  <span className="student-modal-average">
+                    <small>Promedio semanal</small>
+                    <strong>{average?.toFixed(1)}</strong>
+                  </span>
+                  <button onClick={() => setShowAll(false)} type="button" aria-label="Cerrar detalle de calificaciones">
+                    <X size={20} />
+                  </button>
+                </header>
+                <div className="student-grades-modal-content">
+                  <div className="student-grades-modal-grid">
+                    {records.map((record, index) => (
+                      <StudentSubjectGradeCard record={record} index={index} key={record.id} />
+                    ))}
+                  </div>
+                </div>
+              </motion.section>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
+  );
+}
+
+function GradeExportDialog({
+  profile,
+  records,
+  selectedWeek,
+  termLabel,
+  schoolYearLabel,
+  onClose,
+}: {
+  profile: UserProfile;
+  records: WeeklyGradeRecord[];
+  selectedWeek?: AcademicWeek;
+  termLabel?: string;
+  schoolYearLabel: string;
+  onClose: () => void;
+}) {
+  const [teacherId, setTeacherId] = useState("all");
+  const [group, setGroup] = useState("all");
+  const [subject, setSubject] = useState("all");
+  const [studentId, setStudentId] = useState("all");
+  const [exporting, setExporting] = useState(false);
+  const teachers = Array.from(new Map(records.map((record) => (
+    [record.teacherId, record.teacherName]
+  ))).entries()).sort((first, second) => first[1].localeCompare(second[1], "es"));
+  const groups = Array.from(new Set(records.map(recordGroup)))
+    .sort((first, second) => first.localeCompare(second, "es"));
+  const subjects = Array.from(new Set(records.map((record) => record.subject)))
+    .sort((first, second) => first.localeCompare(second, "es"));
+  const students = Array.from(new Map(records.map((record) => (
+    [record.studentId, record.studentName]
+  ))).entries()).sort((first, second) => first[1].localeCompare(second[1], "es"));
+  const filteredRecords = records.filter((record) => (
+    (teacherId === "all" || record.teacherId === teacherId) &&
+    (group === "all" || recordGroup(record) === group) &&
+    (subject === "all" || record.subject === subject) &&
+    (studentId === "all" || record.studentId === studentId)
+  ));
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !exporting) onClose();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [exporting, onClose]);
+
+  const exportPdf = async () => {
+    if (!selectedWeek || !filteredRecords.length) return;
+    setExporting(true);
+    try {
+      const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
+      const teacherName = teachers.find(([id]) => id === teacherId)?.[1];
+      const studentName = students.find(([id]) => id === studentId)?.[1];
+      downloadGradeReportPdf({
+        role: profile.role,
+        generatedBy: profile.name,
+        records: filteredRecords,
+        weekLabel: selectedWeek.label,
+        weekRange: formatWeekRange(selectedWeek),
+        termLabel,
+        schoolYearLabel,
+        filters: [
+          `Grupo: ${group === "all" ? "Todos" : group}`,
+          `Materia: ${subject === "all" ? "Todas" : subject}`,
+          `Alumno: ${studentName ?? "Todos"}`,
+          ...(profile.role === "director" ? [`Maestro: ${teacherName ?? "Todos"}`] : []),
+        ],
+      });
+      toast.success("El reporte PDF se descargó correctamente.");
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos generar el PDF.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      className="grade-export-modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={() => !exporting && onClose()}
+    >
+      <motion.section
+        className="grade-export-modal"
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="grade-export-title"
+      >
+        <header>
+          <span className="grade-export-icon"><FileDown size={22} /></span>
+          <div>
+            <span className="eyebrow">Reporte listo para firma</span>
+            <h2 id="grade-export-title">Exportar calificaciones a PDF</h2>
+            <p>Define el alcance del reporte de {selectedWeek?.label.toLowerCase() ?? "la semana"}.</p>
+          </div>
+          <button disabled={exporting} onClick={onClose} type="button" aria-label="Cerrar exportación">
+            <X size={19} />
+          </button>
+        </header>
+
+        <div className="grade-export-fields">
+          {profile.role === "director" && (
+            <label>
+              <span>Maestro</span>
+              <select value={teacherId} onChange={(event) => setTeacherId(event.target.value)}>
+                <option value="all">Todos los maestros</option>
+                {teachers.map(([id, name]) => <option value={id} key={id}>{name}</option>)}
+              </select>
+            </label>
+          )}
+          <label>
+            <span>Grupo</span>
+            <select value={group} onChange={(event) => setGroup(event.target.value)}>
+              <option value="all">Todos los grupos</option>
+              {groups.map((item) => <option value={item} key={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Materia</span>
+            <select value={subject} onChange={(event) => setSubject(event.target.value)}>
+              <option value="all">Todas las materias</option>
+              {subjects.map((item) => <option value={item} key={item}>{item}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Alumno</span>
+            <select value={studentId} onChange={(event) => setStudentId(event.target.value)}>
+              <option value="all">Todos los alumnos</option>
+              {students.map(([id, name]) => <option value={id} key={id}>{name}</option>)}
+            </select>
+          </label>
+        </div>
+
+        <div className="grade-export-preview">
+          <span><strong>{filteredRecords.length}</strong><small>calificaciones</small></span>
+          <div>
+            <strong>Documento institucional</strong>
+            <p>Incluye encabezado CEHF, fecha, filtros, resultados, pie de página y espacios para las tres firmas.</p>
+          </div>
+        </div>
+
+        <footer>
+          <button className="grade-export-cancel" disabled={exporting} onClick={onClose} type="button">Cancelar</button>
+          <button className="grade-export-submit" disabled={exporting || !filteredRecords.length || !selectedWeek} onClick={exportPdf} type="button">
+            <FileDown size={17} /> {exporting ? "Generando…" : "Descargar PDF"}
+          </button>
+        </footer>
+      </motion.section>
+    </motion.div>
   );
 }
 
@@ -972,6 +1395,8 @@ export function WeeklyGradesPanel({
     profile.role === "teacher" ? "capture" : "summary",
   );
   const [studentSearch, setStudentSearch] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
+  const [studentExporting, setStudentExporting] = useState(false);
   const subjects = useMemo(() => profile.subjects ?? [], [profile.subjects]);
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "");
   const activeWeekId = calendar.weeks.some((week) => week.id === selectedWeekId)
@@ -1047,6 +1472,35 @@ export function WeeklyGradesPanel({
   const captureProgress = eligibleStudents.length
     ? Math.round(gradedStudents / eligibleStudents.length * 100)
     : 0;
+
+  const exportStudentPdf = async () => {
+    if (!selectedWeek || !visibleRecords.length) {
+      toast.error("Aún no hay calificaciones de esta semana para exportar.");
+      return;
+    }
+    setStudentExporting(true);
+    try {
+      const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
+      downloadGradeReportPdf({
+        role: "student",
+        generatedBy: profile.name,
+        records: visibleRecords,
+        weekLabel: selectedWeek.label,
+        weekRange: formatWeekRange(selectedWeek),
+        termLabel: selectedTerm?.label,
+        schoolYearLabel: academicConfig.schoolYearLabel,
+        filters: [
+          `Alumno: ${profile.name}`,
+          `Grupo: ${visibleRecords[0] ? recordGroup(visibleRecords[0]) : "Sin grupo"}`,
+        ],
+      });
+      toast.success("Tu boleta semanal se descargó en PDF.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos generar el PDF.");
+    } finally {
+      setStudentExporting(false);
+    }
+  };
 
   const persistGrade = async (student: ManagedAccount, scores: WeeklyGradeScores) => {
     if (!selectedWeek || !selectedTerm) {
@@ -1125,12 +1579,23 @@ export function WeeklyGradesPanel({
               : "Elige una semana del calendario académico."}
           </p>
         </div>
-        <WeekSelector
-          current={choices.current}
-          previous={choices.previous}
-          selectedId={activeWeekId}
-          onSelect={setSelectedWeekId}
-        />
+        <div className="weekly-grade-actions">
+          <button
+            className="grade-export-button"
+            disabled={loading || studentExporting}
+            onClick={() => profile.role === "student" ? void exportStudentPdf() : setExportOpen(true)}
+            type="button"
+          >
+            <FileDown size={17} />
+            {studentExporting ? "Generando…" : "Exportar PDF"}
+          </button>
+          <WeekSelector
+            current={choices.current}
+            previous={choices.previous}
+            selectedId={activeWeekId}
+            onSelect={setSelectedWeekId}
+          />
+        </div>
       </div>
 
       {profile.role === "teacher" && (
@@ -1185,6 +1650,9 @@ export function WeeklyGradesPanel({
                 <h3>Resumen y estadísticas</h3>
                 <p>Consulta tendencias, promedios y cómo se compone tu resultado semanal.</p>
               </div>
+            )}
+            {profile.role === "director" && (
+              <DirectorGradeOverview records={visibleRecords} accounts={accounts} />
             )}
             <GradeSummaryDashboard
               profile={profile}
@@ -1326,6 +1794,21 @@ export function WeeklyGradesPanel({
             </>
           )}
         </div>
+      )}
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {exportOpen && profile.role !== "student" && (
+            <GradeExportDialog
+              profile={profile}
+              records={visibleRecords}
+              selectedWeek={selectedWeek}
+              termLabel={selectedTerm?.label}
+              schoolYearLabel={academicConfig.schoolYearLabel}
+              onClose={() => setExportOpen(false)}
+            />
+          )}
+        </AnimatePresence>,
+        document.body,
       )}
     </section>
   );

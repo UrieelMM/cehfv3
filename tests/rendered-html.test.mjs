@@ -81,6 +81,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     gradesSource,
     gradesUiSource,
     gradesCss,
+    gradeReportPdfSource,
   ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
@@ -104,6 +105,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("lib/grades-firebase.ts", projectRoot), "utf8"),
       readFile(new URL("components/weekly-grades.tsx", projectRoot), "utf8"),
       readFile(new URL("app/grades.css", projectRoot), "utf8"),
+      readFile(new URL("lib/grade-report-pdf.ts", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -281,6 +283,16 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesUiSource, /Tus calificaciones por materia/);
   assert.match(gradesUiSource, /student-primary-results/);
   assert.match(gradesUiSource, /<small>Maestro<\/small>/);
+  assert.match(gradesUiSource, /DirectorGradeOverview/);
+  assert.match(gradesUiSource, /Maestros, alumnos y grupos en un solo vistazo/);
+  assert.match(gradesUiSource, /records\.slice\(0, 3\)/);
+  assert.match(gradesUiSource, /Mostrar todo/);
+  assert.match(gradesUiSource, /student-grades-fullscreen-modal/);
+  assert.match(gradesUiSource, /GradeExportDialog/);
+  assert.match(gradesUiSource, /Todos los grupos/);
+  assert.match(gradesUiSource, /Todas las materias/);
+  assert.match(gradesUiSource, /Todos los alumnos/);
+  assert.match(gradesUiSource, /downloadGradeReportPdf/);
   assert.match(gradesUiSource, /GradeSummaryDashboard/);
   assert.match(gradesUiSource, /Panorama académico/);
   assert.match(gradesUiSource, /Promedio por materia/);
@@ -292,8 +304,16 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesCss, /\.grade-roster-criteria/);
   assert.match(gradesCss, /\.student-primary-results/);
   assert.match(gradesCss, /\.student-subject-teacher/);
+  assert.match(gradesCss, /\.director-grade-overview/);
+  assert.match(gradesCss, /\.student-grades-fullscreen-modal/);
+  assert.match(gradesCss, /\.grade-export-modal/);
   assert.match(gradesCss, /\.qualifications-page/);
   assert.match(gradesCss, /\.grade-analytics-grid/);
+  assert.match(gradeReportPdfSource, /Reporte institucional de calificaciones/);
+  assert.match(gradeReportPdfSource, /Padre, madre o tutor/);
+  assert.match(gradeReportPdfSource, /Docente responsable/);
+  assert.match(gradeReportPdfSource, /Vo\. Bo\. Dirección/);
+  assert.match(gradeReportPdfSource, /Página \$\{page\} de/);
   assert.match(workshopSource, /Biblioteca creativa/);
   assert.match(workshopSource, /Laboratorio digital/);
   assert.match(workshopFirebaseSource, /ensureDefaultWorkshops/);
