@@ -1,25 +1,16 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import "./tasks.css";
-import "./workshops.css";
-import "./materials.css";
-import "./reviews.css";
-import "./grades.css";
+import "./grades-app.css";
 
 const themeBootstrapScript = `
   (() => {
     try {
-      let theme = window.localStorage.getItem("cehf-theme");
-      if (!theme) {
-        const savedState = window.localStorage.getItem("cehf-demo-state");
-        theme = savedState ? JSON.parse(savedState)?.settings?.theme : null;
-      }
-      document.documentElement.dataset.theme =
-        theme === "dark" || theme === "system" ? theme : "light";
+      const theme = window.localStorage.getItem("cehf-grades-theme");
+      document.documentElement.dataset.gradeTheme =
+        theme === "dark" ? "dark" : "light";
     } catch {
-      document.documentElement.dataset.theme = "light";
+      document.documentElement.dataset.gradeTheme = "light";
     }
   })();
 `;
@@ -42,36 +33,36 @@ export async function generateMetadata(): Promise<Metadata> {
     (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const description =
-    "Tu experiencia académica, comunidad y progreso en un solo lugar.";
+    "Calificaciones semanales, avances y estadísticas académicas del CEHF.";
 
   return {
     title: {
-      default: "Campus CEHF",
-      template: "%s · Campus CEHF",
+      default: "CEHF Calificaciones",
+      template: "%s · CEHF Calificaciones",
     },
     description,
-    applicationName: "Campus CEHF",
+    applicationName: "CEHF Calificaciones",
     manifest: "/manifest.webmanifest",
     openGraph: {
-      title: "Campus CEHF",
-      description: "Una semana clara para aprender mejor.",
+      title: "CEHF Calificaciones",
+      description: "Resultados claros para acompañar cada aprendizaje.",
       type: "website",
       locale: "es_MX",
       url: origin,
       images: [
         {
-          url: `${origin}/og-campus.png`,
-          width: 1739,
-          height: 904,
-          alt: "Campus CEHF — Una semana clara para aprender mejor",
+          url: `${origin}/og-calificaciones.png`,
+          width: 1734,
+          height: 907,
+          alt: "CEHF Calificaciones — resultados y avance semanal",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Campus CEHF",
-      description: "Una semana clara para aprender mejor.",
-      images: [`${origin}/og-campus.png`],
+      title: "CEHF Calificaciones",
+      description: "Resultados claros para acompañar cada aprendizaje.",
+      images: [`${origin}/og-calificaciones.png`],
     },
   };
 }

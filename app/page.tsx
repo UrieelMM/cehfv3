@@ -1,5 +1,5 @@
-import { CEHFApp } from "@/components/cehf-app";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <CEHFApp />;
+  redirect("/calificaciones");
 }

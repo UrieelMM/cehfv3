@@ -1,5 +1,5 @@
-const CACHE = "cehf-primaria-v1";
-const SHELL = ["/", "/dashboard", "/manifest.webmanifest"];
+const CACHE = "cehf-calificaciones-v2";
+const SHELL = ["/", "/calificaciones", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
