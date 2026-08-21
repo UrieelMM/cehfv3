@@ -141,42 +141,260 @@
   padding: 22px 24px 26px;
 }
 
-.teacher-grade-toolbar {
+.teacher-capture-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 95% 0, color-mix(in srgb, var(--blue) 10%, transparent), transparent 38%),
+    var(--surface);
+}
+
+.teacher-capture-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.teacher-capture-heading > div {
+  flex: 1;
+}
+
+.teacher-capture-heading h3 {
+  margin: 2px 0 6px;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: -0.025em;
+}
+
+.teacher-capture-heading p {
+  max-width: 700px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.teacher-capture-progress {
+  display: grid;
+  min-width: 190px;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-raised);
+}
+
+.teacher-capture-progress > span {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 18px;
+  gap: 12px;
 }
 
-.teacher-grade-toolbar > label {
+.teacher-capture-progress small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+}
+
+.teacher-capture-progress strong {
+  font-size: 0.86rem;
+}
+
+.teacher-capture-progress > div {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.teacher-capture-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--violet), var(--blue));
+  transition: width 360ms ease;
+}
+
+.teacher-capture-setup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+  padding: 17px 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.teacher-capture-step,
+.teacher-roster-heading > div {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.teacher-capture-step > div {
+  min-width: 0;
+}
+
+.teacher-step-number {
   display: grid;
-  min-width: 245px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--violet);
+  color: var(--on-primary);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.teacher-step-label {
+  display: block;
+  margin: 3px 0 10px;
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.teacher-subject-selector {
+  display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
-.teacher-grade-toolbar > label > span {
+.teacher-subject-selector button {
+  min-height: 37px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-raised);
   color: var(--muted-strong);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 780;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
 }
 
-.teacher-grade-toolbar select {
-  min-height: 46px;
-  padding: 0 38px 0 13px;
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
+.teacher-subject-selector button:hover {
+  transform: translateY(-1px);
+  border-color: var(--violet);
+  color: var(--violet);
+}
+
+.teacher-subject-selector button.active {
+  border-color: var(--violet);
+  background: var(--violet);
+  color: var(--on-primary);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--violet) 20%, transparent);
+}
+
+.teacher-capture-context {
+  display: flex;
+  min-width: 230px;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-soft);
+}
+
+.teacher-capture-context > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
   background: var(--surface);
-  font-weight: 750;
+  color: var(--violet);
+}
+
+.teacher-capture-context > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.teacher-capture-context small {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.teacher-capture-context strong {
+  font-size: 0.75rem;
+}
+
+.teacher-capture-roster-section {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.teacher-roster-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.teacher-roster-heading .teacher-step-label {
+  margin-bottom: 3px;
+}
+
+.teacher-roster-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.teacher-student-search {
+  display: flex;
+  min-width: 220px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+
+.teacher-student-search:focus-within {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 12%, transparent);
+}
+
+.teacher-student-search input {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  outline: 0;
+  font-size: 0.76rem;
 }
 
 .teacher-weight-preview {
   display: flex;
-  max-width: 680px;
+  width: 100%;
   align-items: flex-start;
   gap: 9px;
+  margin-bottom: 14px;
   padding: 11px 13px;
   border: 1px solid color-mix(in srgb, var(--violet) 18%, var(--border));
   border-radius: 13px;
@@ -195,6 +413,11 @@
   gap: 5px 12px;
 }
 
+.teacher-weight-preview b {
+  margin-right: 3px;
+  font-size: 0.72rem;
+}
+
 .teacher-weight-preview small {
   font-weight: 750;
 }
@@ -209,9 +432,33 @@
 .grade-roster-header,
 .grade-roster-row {
   display: grid;
-  grid-template-columns: minmax(190px, 0.8fr) minmax(540px, 2fr) minmax(130px, 0.55fr);
+  grid-template-columns: minmax(190px, 0.8fr) minmax(540px, 2fr) minmax(165px, 0.62fr);
   gap: 18px;
   align-items: center;
+}
+
+.grade-roster-criteria {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(86px, 1fr));
+  gap: 9px;
+}
+
+.grade-roster-criteria span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.grade-roster-criteria strong {
+  color: var(--muted-strong);
+  font-size: 0.68rem;
+}
+
+.grade-roster-criteria small {
+  color: var(--muted);
+  font-size: 0.61rem;
 }
 
 .grade-roster-header {
@@ -276,6 +523,17 @@
   color: var(--muted);
 }
 
+.grade-student-cell em {
+  width: fit-content;
+  margin-top: 2px;
+  font-size: 0.61rem;
+  font-style: normal;
+  font-weight: 760;
+}
+
+.grade-student-cell em.is-saved { color: var(--mint); }
+.grade-student-cell em.is-pending { color: var(--gold); }
+
 .grade-score-inputs {
   display: grid;
   grid-template-columns: repeat(5, minmax(86px, 1fr));
@@ -321,13 +579,25 @@
 }
 
 .grade-row-result {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "label label"
+    "score button";
   align-items: center;
-  justify-content: flex-end;
-  gap: 9px;
+  gap: 5px 8px;
+}
+
+.grade-row-result > small {
+  display: none;
+  grid-area: label;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 750;
 }
 
 .grade-badge {
+  grid-area: score;
   display: inline-grid;
   min-width: 56px;
   min-height: 38px;
@@ -365,6 +635,7 @@
 }
 
 .grade-save-button {
+  grid-area: button;
   display: inline-flex;
   min-height: 38px;
   align-items: center;
@@ -1098,7 +1369,7 @@
 
   .grade-roster-header,
   .grade-roster-row {
-    min-width: 950px;
+    min-width: 1080px;
   }
 
   .grading-weight-grid {
@@ -1129,13 +1400,68 @@
     flex: 0 0 auto;
   }
 
-  .teacher-grade-toolbar {
+  .teacher-capture-heading,
+  .teacher-capture-setup,
+  .teacher-roster-heading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .teacher-grade-toolbar > label {
+  .teacher-capture-progress,
+  .teacher-capture-context,
+  .teacher-student-search {
     min-width: 0;
+    width: 100%;
+  }
+
+  .teacher-capture-progress > span {
+    align-items: center;
+  }
+
+  .teacher-capture-roster-section {
+    padding: 16px;
+  }
+
+  .grade-roster {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .grade-roster-header {
+    display: none;
+  }
+
+  .grade-roster-row {
+    min-width: 0;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 12px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    background: var(--surface-raised);
+  }
+
+  .grade-score-inputs {
+    grid-template-columns: repeat(3, minmax(90px, 1fr));
+  }
+
+  .grade-score-inputs label > span {
+    display: block;
+  }
+
+  .grade-score-inputs label > small {
+    bottom: 13px;
+  }
+
+  .grade-row-result {
+    grid-template-columns: auto minmax(150px, 1fr);
+    justify-content: start;
+  }
+
+  .grade-row-result > small {
+    display: block;
   }
 
   .student-grades-layout {
@@ -1183,6 +1509,38 @@
   .grading-config-footer {
     padding-right: 16px;
     padding-left: 16px;
+  }
+
+  .teacher-capture-heading,
+  .teacher-capture-setup,
+  .teacher-capture-roster-section {
+    padding: 15px;
+  }
+
+  .teacher-capture-heading {
+    gap: 12px;
+  }
+
+  .teacher-capture-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
+
+  .teacher-subject-selector button {
+    flex: 1 1 auto;
+  }
+
+  .grade-score-inputs {
+    grid-template-columns: repeat(2, minmax(90px, 1fr));
+  }
+
+  .grade-row-result {
+    grid-template-columns: auto 1fr;
+  }
+
+  .grade-save-button {
+    min-height: 42px;
   }
 
   .grade-metrics-grid,

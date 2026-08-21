@@ -273,6 +273,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.doesNotMatch(appSource, /"my-week": "\/my-week"/);
   assert.match(gradesUiSource, /Cambiar semana/);
   assert.match(gradesUiSource, /Captura semanal/);
+  assert.match(gradesUiSource, /Calificar alumnos/);
+  assert.match(gradesUiSource, /Elige la materia/);
+  assert.match(gradesUiSource, /Buscar alumno para calificar/);
+  assert.match(gradesUiSource, /profile\.role === "teacher" \? "capture" : "summary"/);
   assert.match(gradesUiSource, /Así va tu semana/);
   assert.match(gradesUiSource, /GradeSummaryDashboard/);
   assert.match(gradesUiSource, /Panorama académico/);
@@ -280,6 +284,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesUiSource, /Tendencia semanal/);
   assert.match(gradesCss, /\.grade-week-selector/);
   assert.match(gradesCss, /\.grade-roster-row/);
+  assert.match(gradesCss, /\.teacher-capture-heading/);
+  assert.match(gradesCss, /\.teacher-subject-selector/);
+  assert.match(gradesCss, /\.grade-roster-criteria/);
   assert.match(gradesCss, /\.qualifications-page/);
   assert.match(gradesCss, /\.grade-analytics-grid/);
   assert.match(workshopSource, /Biblioteca creativa/);

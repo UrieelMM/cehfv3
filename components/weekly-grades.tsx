@@ -3,6 +3,8 @@
 import {
   Activity,
   BarChart3,
+  BookOpenCheck,
+  CalendarRange,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -10,6 +12,7 @@ import {
   GraduationCap,
   RotateCcw,
   Save,
+  Search,
   SlidersHorizontal,
   Sparkles,
   Target,
@@ -415,7 +418,13 @@ function GradeEditorRow({
     >
       <div className="grade-student-cell">
         <span className="grade-student-avatar">{student.initials}</span>
-        <span><strong>{student.name}</strong><small>{student.grade} {student.group}</small></span>
+        <span>
+          <strong>{student.name}</strong>
+          <small>{student.grade} {student.group}</small>
+          <em className={record ? "is-saved" : "is-pending"}>
+            {record ? "Calificación guardada" : "Pendiente de captura"}
+          </em>
+        </span>
       </div>
       <div className="grade-score-inputs">
         {GRADING_CRITERIA.map((criterion) => (
@@ -437,6 +446,7 @@ function GradeEditorRow({
         ))}
       </div>
       <div className="grade-row-result">
+        <small>Resultado</small>
         <motion.strong
           className={`grade-badge is-${gradeTone(result)}`}
           key={result}
@@ -453,7 +463,7 @@ function GradeEditorRow({
           type="button"
         >
           {record && !saving ? <Check size={17} /> : <Save size={17} />}
-          {saving ? "Guardando…" : record ? "Actualizar" : "Guardar"}
+          {saving ? "Guardando…" : record ? "Actualizar" : "Guardar alumno"}
         </button>
       </div>
     </motion.div>
@@ -952,7 +962,10 @@ export function WeeklyGradesPanel({
   const [config, setConfig] = useState<TeacherGradingConfig>(() => defaultConfig(profile));
   const [records, setRecords] = useState<WeeklyGradeRecord[]>([]);
   const [loading, setLoading] = useState(firebaseReady);
-  const [activeView, setActiveView] = useState<"summary" | "capture">("summary");
+  const [activeView, setActiveView] = useState<"summary" | "capture">(
+    profile.role === "teacher" ? "capture" : "summary",
+  );
+  const [studentSearch, setStudentSearch] = useState("");
   const subjects = useMemo(() => profile.subjects ?? [], [profile.subjects]);
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "");
   const activeWeekId = calendar.weeks.some((week) => week.id === selectedWeekId)
@@ -1011,6 +1024,23 @@ export function WeeklyGradesPanel({
     account.teacherIds.includes(profile.uid) &&
     account.subjects.includes(activeSubject)
   ));
+  const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase("es");
+  const filteredStudents = eligibleStudents.filter((student) => (
+    !normalizedStudentSearch ||
+    `${student.name} ${student.grade ?? ""} ${student.group ?? ""}`
+      .toLocaleLowerCase("es")
+      .includes(normalizedStudentSearch)
+  ));
+  const subjectRecords = visibleRecords.filter((record) => (
+    record.subject === activeSubject && record.teacherId === profile.uid
+  ));
+  const gradedStudentIds = new Set(subjectRecords.map((record) => record.studentId));
+  const gradedStudents = eligibleStudents.filter((student) => (
+    gradedStudentIds.has(student.uid)
+  )).length;
+  const captureProgress = eligibleStudents.length
+    ? Math.round(gradedStudents / eligibleStudents.length * 100)
+    : 0;
 
   const persistGrade = async (student: ManagedAccount, scores: WeeklyGradeScores) => {
     if (!selectedWeek || !selectedTerm) {
@@ -1100,18 +1130,18 @@ export function WeeklyGradesPanel({
       {profile.role === "teacher" && (
         <nav className="grade-view-tabs" aria-label="Vista de calificaciones">
           <button
+            className={activeView === "capture" ? "active" : ""}
+            onClick={() => setActiveView("capture")}
+            type="button"
+          >
+            <ClipboardPenLine size={17} /> Calificar alumnos
+          </button>
+          <button
             className={activeView === "summary" ? "active" : ""}
             onClick={() => setActiveView("summary")}
             type="button"
           >
             <BarChart3 size={17} /> Resumen y estadísticas
-          </button>
-          <button
-            className={activeView === "capture" ? "active" : ""}
-            onClick={() => setActiveView("capture")}
-            type="button"
-          >
-            <ClipboardPenLine size={17} /> Captura semanal
           </button>
         </nav>
       )}
@@ -1142,45 +1172,132 @@ export function WeeklyGradesPanel({
         </AnimatePresence>
       ) : (
         <div className="teacher-grades-workspace">
-          <div className="teacher-grade-toolbar">
-            <label>
-              <span>Materia asignada</span>
-              <select value={activeSubject} onChange={(event) => setSelectedSubject(event.target.value)}>
-                {subjects.map((subject) => <option key={subject}>{subject}</option>)}
-              </select>
-            </label>
-            <div className="teacher-weight-preview">
-              <Sparkles size={17} />
-              <span>
-                {GRADING_CRITERIA.map((criterion) => (
-                  <small key={criterion.key}>{criterion.shortLabel} {config.weights[criterion.key]}%</small>
-                ))}
-              </span>
+          <header className="teacher-capture-heading">
+            <span className="teacher-capture-icon"><BookOpenCheck size={23} /></span>
+            <div>
+              <span className="eyebrow">Captura semanal</span>
+              <h3>Califica a tus alumnos</h3>
+              <p>
+                Registra cada rubro de 0 a 100. El resultado semanal se calcula
+                automáticamente con tu ponderación configurada.
+              </p>
             </div>
-          </div>
+            <div className="teacher-capture-progress">
+              <span>
+                <small>Avance de captura</small>
+                <strong>{gradedStudents} de {eligibleStudents.length}</strong>
+              </span>
+              <div aria-label={`${captureProgress}% de captura completada`}>
+                <i style={{ width: `${captureProgress}%` }} />
+              </div>
+            </div>
+          </header>
+
           {!subjects.length ? (
             <div className="grade-empty-state"><h3>No tienes materias asignadas</h3><p>Dirección debe actualizar tu perfil antes de capturar calificaciones.</p></div>
-          ) : !eligibleStudents.length ? (
-            <div className="grade-empty-state"><h3>No hay alumnos asignados</h3><p>Revisa en Comunidad que los alumnos tengan esta materia y tu asignación docente.</p></div>
           ) : (
-            <div className="grade-roster">
-              <div className="grade-roster-header">
-                <span>Alumno</span><span>Rubros de 0 a 100</span><span>Resultado</span>
-              </div>
-              {eligibleStudents.map((student) => (
-                <GradeEditorRow
-                  key={`${activeWeekId}-${activeSubject}-${student.uid}-${visibleRecords.find((record) => record.studentId === student.uid && record.subject === activeSubject && record.teacherId === profile.uid)?.updatedAt ?? "new"}`}
-                  student={student}
-                  weights={config.weights}
-                  record={visibleRecords.find((record) => (
-                    record.studentId === student.uid &&
-                    record.subject === activeSubject &&
-                    record.teacherId === profile.uid
-                  ))}
-                  onSave={persistGrade}
-                />
-              ))}
-            </div>
+            <>
+              <section className="teacher-capture-setup">
+                <div className="teacher-capture-step">
+                  <span className="teacher-step-number">1</span>
+                  <div>
+                    <span className="teacher-step-label">Elige la materia</span>
+                    <div className="teacher-subject-selector">
+                      {subjects.map((subject) => (
+                        <button
+                          className={activeSubject === subject ? "active" : ""}
+                          key={subject}
+                          onClick={() => {
+                            setSelectedSubject(subject);
+                            setStudentSearch("");
+                          }}
+                          type="button"
+                        >
+                          {subject}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="teacher-capture-context">
+                  <span><CalendarRange size={17} /></span>
+                  <div>
+                    <small>Periodo seleccionado</small>
+                    <strong>{selectedTerm?.label ?? "Sin trimestre"} · {selectedWeek?.label ?? "Sin semana"}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section className="teacher-capture-roster-section">
+                <div className="teacher-roster-heading">
+                  <div>
+                    <span className="teacher-step-number">2</span>
+                    <div>
+                      <span className="teacher-step-label">Califica alumnos</span>
+                      <p>{activeSubject} · {eligibleStudents.length} alumnos asignados</p>
+                    </div>
+                  </div>
+                  <label className="teacher-student-search">
+                    <Search size={16} />
+                    <input
+                      aria-label="Buscar alumno para calificar"
+                      onChange={(event) => setStudentSearch(event.target.value)}
+                      placeholder="Buscar alumno…"
+                      type="search"
+                      value={studentSearch}
+                    />
+                  </label>
+                </div>
+
+                <div className="teacher-weight-preview">
+                  <Sparkles size={17} />
+                  <span>
+                    <b>Ponderación activa</b>
+                    {GRADING_CRITERIA.map((criterion) => (
+                      <small key={criterion.key}>
+                        {criterion.shortLabel} {config.weights[criterion.key]}%
+                      </small>
+                    ))}
+                  </span>
+                </div>
+
+                {!eligibleStudents.length ? (
+                  <div className="grade-empty-state">
+                    <h3>No hay alumnos asignados</h3>
+                    <p>Revisa en Comunidad que los alumnos tengan esta materia y tu asignación docente.</p>
+                  </div>
+                ) : !filteredStudents.length ? (
+                  <div className="grade-empty-state">
+                    <h3>No encontramos alumnos</h3>
+                    <p>Prueba con otro nombre, grado o grupo.</p>
+                  </div>
+                ) : (
+                  <div className="grade-roster">
+                    <div className="grade-roster-header">
+                      <span>Alumno</span>
+                      <div className="grade-roster-criteria">
+                        {GRADING_CRITERIA.map((criterion) => (
+                          <span key={criterion.key}>
+                            <strong>{criterion.shortLabel}</strong>
+                            <small>{config.weights[criterion.key]}%</small>
+                          </span>
+                        ))}
+                      </div>
+                      <span>Resultado semanal</span>
+                    </div>
+                    {filteredStudents.map((student) => (
+                      <GradeEditorRow
+                        key={`${activeWeekId}-${activeSubject}-${student.uid}-${subjectRecords.find((record) => record.studentId === student.uid)?.updatedAt ?? "new"}`}
+                        student={student}
+                        weights={config.weights}
+                        record={subjectRecords.find((record) => record.studentId === student.uid)}
+                        onSave={persistGrade}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
           )}
         </div>
       )}
