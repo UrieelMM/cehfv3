@@ -1,10 +1,10 @@
 {
-  "name": "CEHF Calificaciones",
-  "short_name": "Calificaciones",
-  "description": "Resultados, estadísticas y avance académico semanal.",
-  "start_url": "/calificaciones",
+  "name": "Campus CEHF",
+  "short_name": "Campus CEHF",
+  "description": "Tu experiencia académica y comunidad en un solo lugar.",
+  "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#f4f1e9",
-  "theme_color": "#171326",
+  "background_color": "#f3f6fa",
+  "theme_color": "#1f2985",
   "lang": "es-MX"
 }

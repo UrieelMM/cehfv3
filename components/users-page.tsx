@@ -83,7 +83,7 @@ export function UsersPage({
       <section className="panel guided-state">
         <LockKeyhole size={28} />
         <h2>Esta sección es para personal autorizado</h2>
-        <p>Tu información académica sigue disponible en Mi semana, Avance y Reportes.</p>
+        <p>Tu información académica sigue disponible en Calificaciones, Avance y Reportes.</p>
       </section>
     );
   }

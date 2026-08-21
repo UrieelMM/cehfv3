@@ -1,18 +1,23 @@
 "use client";
 
 import {
+  Activity,
   BarChart3,
   Check,
   ChevronLeft,
   ChevronRight,
   ClipboardPenLine,
+  GraduationCap,
   RotateCcw,
   Save,
   SlidersHorizontal,
   Sparkles,
+  Target,
+  TrendingUp,
+  UsersRound,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   calculateWeightedGrade,
@@ -70,6 +75,23 @@ function gradeTone(score: number) {
   if (score >= 80) return "good";
   if (score >= 70) return "developing";
   return "support";
+}
+
+function average(values: number[]) {
+  if (!values.length) return 0;
+  return Math.round(
+    values.reduce((total, value) => total + value, 0) / values.length * 10,
+  ) / 10;
+}
+
+function formatScore(value: number) {
+  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+}
+
+function sortedWeeks(calendar: AcademicCalendar) {
+  return [...calendar.weeks].sort((first, second) => (
+    first.startDate.localeCompare(second.startDate) || first.order - second.order
+  ));
 }
 
 function formatWeekRange(week: AcademicWeek) {
@@ -438,6 +460,404 @@ function GradeEditorRow({
   );
 }
 
+function GradeMetricCard({
+  label,
+  value,
+  detail,
+  icon,
+  tone,
+  delay,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: ReactNode;
+  tone: string;
+  delay: number;
+}) {
+  return (
+    <motion.article
+      className={`grade-metric-card is-${tone}`}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay }}
+    >
+      <div><span>{icon}</span><small>{label}</small></div>
+      <strong>{value}</strong>
+      <p>{detail}</p>
+    </motion.article>
+  );
+}
+
+function GradeChartEmpty() {
+  return (
+    <div className="grade-chart-empty">
+      <BarChart3 size={22} />
+      <span>Los datos aparecerán al guardar calificaciones.</span>
+    </div>
+  );
+}
+
+function GradeDistributionChart({ records }: { records: WeeklyGradeRecord[] }) {
+  const bands = [
+    {
+      label: "90–100",
+      tone: "excellent",
+      count: records.filter((record) => record.weightedScore >= 90).length,
+    },
+    {
+      label: "80–89",
+      tone: "good",
+      count: records.filter((record) => (
+        record.weightedScore >= 80 && record.weightedScore < 90
+      )).length,
+    },
+    {
+      label: "70–79",
+      tone: "developing",
+      count: records.filter((record) => (
+        record.weightedScore >= 70 && record.weightedScore < 80
+      )).length,
+    },
+    {
+      label: "< 70",
+      tone: "support",
+      count: records.filter((record) => record.weightedScore < 70).length,
+    },
+  ];
+  const maximum = Math.max(1, ...bands.map((band) => band.count));
+
+  return (
+    <div
+      className="grade-distribution-chart"
+      role="img"
+      aria-label="Distribución de calificaciones por rango"
+    >
+      {bands.map((band, index) => (
+        <div key={band.tone}>
+          <strong>{band.count}</strong>
+          <div>
+            <motion.i
+              className={`is-${band.tone}`}
+              initial={{ height: 0 }}
+              animate={{ height: `${Math.max(8, band.count / maximum * 100)}%` }}
+              transition={{ delay: index * 0.06, duration: 0.45 }}
+            />
+          </div>
+          <span>{band.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GradeSubjectAverages({ records }: { records: WeeklyGradeRecord[] }) {
+  const subjects = Array.from(new Set(records.map((record) => record.subject)))
+    .map((subject) => ({
+      subject,
+      value: average(
+        records
+          .filter((record) => record.subject === subject)
+          .map((record) => record.weightedScore),
+      ),
+    }))
+    .sort((first, second) => second.value - first.value);
+
+  if (!subjects.length) return <GradeChartEmpty />;
+
+  return (
+    <div className="grade-subject-chart">
+      {subjects.map((item, index) => (
+        <div key={item.subject}>
+          <span>{item.subject}</span>
+          <div>
+            <motion.i
+              initial={{ width: 0 }}
+              animate={{ width: `${item.value}%` }}
+              transition={{ duration: 0.5, delay: index * 0.05 }}
+            />
+          </div>
+          <strong>{formatScore(item.value)}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GradeRubricAverages({ records }: { records: WeeklyGradeRecord[] }) {
+  if (!records.length) return <GradeChartEmpty />;
+
+  return (
+    <div className="grade-rubric-chart">
+      {GRADING_CRITERIA.map((criterion, index) => {
+        const value = average(records.map((record) => record.scores[criterion.key]));
+        return (
+          <div data-criterion={criterion.key} key={criterion.key}>
+            <span>{criterion.shortLabel}</span>
+            <div>
+              <motion.i
+                initial={{ width: 0 }}
+                animate={{ width: `${value}%` }}
+                transition={{ duration: 0.5, delay: index * 0.04 }}
+              />
+            </div>
+            <strong>{formatScore(value)}</strong>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GradeTrendChart({
+  records,
+  calendar,
+}: {
+  records: WeeklyGradeRecord[];
+  calendar: AcademicCalendar;
+}) {
+  const entries = sortedWeeks(calendar)
+    .map((week) => {
+      const weekRecords = records.filter((record) => record.weekId === week.id);
+      return {
+        week,
+        value: average(weekRecords.map((record) => record.weightedScore)),
+        count: weekRecords.length,
+      };
+    })
+    .filter((entry) => entry.count > 0)
+    .slice(-6);
+
+  if (!entries.length) return <GradeChartEmpty />;
+
+  return (
+    <div
+      className="grade-trend-chart"
+      role="img"
+      aria-label="Evolución del promedio por semana"
+    >
+      {entries.map((entry, index) => (
+        <div key={entry.week.id}>
+          <strong>{formatScore(entry.value)}</strong>
+          <div>
+            <motion.i
+              initial={{ height: 0 }}
+              animate={{
+                height: `${Math.max(10, Math.min(100, (entry.value - 60) * 2.5))}%`,
+              }}
+              transition={{ duration: 0.48, delay: index * 0.05 }}
+            />
+          </div>
+          <span>{entry.week.label.replace("Semana ", "S")}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GradeRecentRecords({ records }: { records: WeeklyGradeRecord[] }) {
+  const recent = [...records]
+    .sort((first, second) => second.updatedAt.localeCompare(first.updatedAt))
+    .slice(0, 7);
+
+  if (!recent.length) return <GradeChartEmpty />;
+
+  return (
+    <div className="grade-recent-table">
+      <div className="grade-recent-head">
+        <span>Alumno</span><span>Materia</span><span>Docente</span><span>Resultado</span>
+      </div>
+      {recent.map((record) => (
+        <div key={record.id}>
+          <span>
+            <i>
+              {record.studentName
+                .split(/\s+/)
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2)}
+            </i>
+            <b>{record.studentName}</b>
+          </span>
+          <span>{record.subject}</span>
+          <span>{record.teacherName}</span>
+          <strong className={`grade-score-pill is-${gradeTone(record.weightedScore)}`}>
+            {formatScore(record.weightedScore)}
+          </strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GradeSummaryDashboard({
+  profile,
+  records,
+  allRecords,
+  calendar,
+  accounts,
+  selectedWeekId,
+}: {
+  profile: UserProfile;
+  records: WeeklyGradeRecord[];
+  allRecords: WeeklyGradeRecord[];
+  calendar: AcademicCalendar;
+  accounts: ManagedAccount[];
+  selectedWeekId?: string;
+}) {
+  const overall = average(records.map((record) => record.weightedScore));
+  const students = new Set(records.map((record) => record.studentId)).size;
+  const teachers = new Set(records.map((record) => record.teacherId)).size;
+  const attention = records.filter((record) => record.weightedScore < 70).length;
+  const assignedExpected = profile.role === "teacher"
+    ? (profile.subjects ?? []).reduce((total, subject) => total + accounts.filter((account) => (
+        account.role === "student" &&
+        account.active &&
+        account.teacherIds.includes(profile.uid) &&
+        account.subjects.includes(subject)
+      )).length, 0)
+    : records.length;
+  const completion = assignedExpected
+    ? Math.min(100, Math.round(records.length / assignedExpected * 100))
+    : 0;
+  const weeks = sortedWeeks(calendar);
+  const currentIndex = weeks.findIndex((week) => week.id === selectedWeekId);
+  const previousWeek = currentIndex > 0 ? weeks[currentIndex - 1] : undefined;
+  const previousRecords = previousWeek
+    ? allRecords.filter((record) => record.weekId === previousWeek.id)
+    : [];
+  const previousAverage = average(previousRecords.map((record) => record.weightedScore));
+  const delta = previousRecords.length
+    ? Math.round((overall - previousAverage) * 10) / 10
+    : 0;
+
+  const metrics = profile.role === "student"
+    ? [
+        {
+          label: "Promedio semanal",
+          value: records.length ? formatScore(overall) : "—",
+          detail: previousRecords.length
+            ? `${delta > 0 ? "+" : ""}${formatScore(delta)} vs. semana anterior`
+            : "Sin comparación disponible",
+          icon: <TrendingUp size={19} />,
+          tone: records.length ? gradeTone(overall) : "violet",
+        },
+        {
+          label: "Materias calificadas",
+          value: String(records.length),
+          detail: "Resultados publicados esta semana",
+          icon: <GraduationCap size={19} />,
+          tone: "violet",
+        },
+        {
+          label: "Mejor resultado",
+          value: records.length
+            ? formatScore(Math.max(...records.map((record) => record.weightedScore)))
+            : "—",
+          detail: [...records].sort((first, second) => (
+            second.weightedScore - first.weightedScore
+          ))[0]?.subject ?? "Aún sin datos",
+          icon: <Sparkles size={19} />,
+          tone: "lime",
+        },
+        {
+          label: "Rubros destacados",
+          value: String(GRADING_CRITERIA.filter((criterion) => (
+            records.length &&
+            average(records.map((record) => record.scores[criterion.key])) >= 90
+          )).length),
+          detail: "Con promedio igual o mayor a 90",
+          icon: <Target size={19} />,
+          tone: "coral",
+        },
+      ]
+    : [
+        {
+          label: "Promedio general",
+          value: records.length ? formatScore(overall) : "—",
+          detail: `${records.length} calificaciones en la semana`,
+          icon: <TrendingUp size={19} />,
+          tone: records.length ? gradeTone(overall) : "violet",
+        },
+        {
+          label: profile.role === "director" ? "Alumnos evaluados" : "Captura completada",
+          value: profile.role === "director" ? String(students) : `${completion}%`,
+          detail: profile.role === "director"
+            ? `${teachers} docentes con actividad`
+            : `${records.length} de ${assignedExpected} registros`,
+          icon: <UsersRound size={19} />,
+          tone: "violet",
+        },
+        {
+          label: "Resultados destacados",
+          value: String(records.filter((record) => record.weightedScore >= 90).length),
+          detail: "Calificaciones de 90 o más",
+          icon: <Sparkles size={19} />,
+          tone: "lime",
+        },
+        {
+          label: "Requieren atención",
+          value: String(attention),
+          detail: "Calificaciones menores a 70",
+          icon: <Target size={19} />,
+          tone: "coral",
+        },
+      ];
+
+  return (
+    <div className="grade-summary-stack">
+      <section className="grade-metrics-grid" aria-label="Resumen de calificaciones">
+        {metrics.map((metric, index) => (
+          <GradeMetricCard
+            {...metric}
+            delay={index * 0.045}
+            key={metric.label}
+          />
+        ))}
+      </section>
+      <section className="grade-analytics-grid">
+        <article className="grade-chart-card is-wide">
+          <header>
+            <div><span className="grade-chart-kicker">Rendimiento</span><h2>Promedio por materia</h2></div>
+            <Activity size={20} />
+          </header>
+          <GradeSubjectAverages records={records} />
+        </article>
+        <article className="grade-chart-card">
+          <header>
+            <div><span className="grade-chart-kicker">Distribución</span><h2>Rangos de resultado</h2></div>
+            <BarChart3 size={20} />
+          </header>
+          <GradeDistributionChart records={records} />
+        </article>
+        <article className="grade-chart-card">
+          <header>
+            <div><span className="grade-chart-kicker">Composición</span><h2>Promedio por rubro</h2></div>
+            <Target size={20} />
+          </header>
+          <GradeRubricAverages records={records} />
+        </article>
+        <article className="grade-chart-card is-wide">
+          <header>
+            <div><span className="grade-chart-kicker">Evolución</span><h2>Tendencia semanal</h2></div>
+            <TrendingUp size={20} />
+          </header>
+          <GradeTrendChart records={allRecords} calendar={calendar} />
+        </article>
+      </section>
+      {profile.role !== "student" && (
+        <section className="grade-chart-card grade-recent-card">
+          <header>
+            <div><span className="grade-chart-kicker">Actividad reciente</span><h2>Últimas calificaciones guardadas</h2></div>
+            <ClipboardPenLine size={20} />
+          </header>
+          <GradeRecentRecords records={records} />
+        </section>
+      )}
+    </div>
+  );
+}
+
 function StudentGrades({
   records,
   selectedWeek,
@@ -532,6 +952,7 @@ export function WeeklyGradesPanel({
   const [config, setConfig] = useState<TeacherGradingConfig>(() => defaultConfig(profile));
   const [records, setRecords] = useState<WeeklyGradeRecord[]>([]);
   const [loading, setLoading] = useState(firebaseReady);
+  const [activeView, setActiveView] = useState<"summary" | "capture">("summary");
   const subjects = useMemo(() => profile.subjects ?? [], [profile.subjects]);
   const [selectedSubject, setSelectedSubject] = useState(subjects[0] ?? "");
   const activeWeekId = calendar.weeks.some((week) => week.id === selectedWeekId)
@@ -579,19 +1000,17 @@ export function WeeklyGradesPanel({
   const selectedTerm = selectedWeek
     ? termForWeek(calendar, selectedWeek.id)
     : undefined;
-  const visibleRecords = records.filter((record) => (
+  const cycleRecords = records.filter((record) => (
     record.schoolYearId === academicConfig.schoolYearId &&
-    record.weekId === activeWeekId &&
     (profile.role !== "student" || record.studentId === profile.uid)
   ));
+  const visibleRecords = cycleRecords.filter((record) => record.weekId === activeWeekId);
   const eligibleStudents = accounts.filter((account) => (
     account.role === "student" &&
     account.active &&
     account.teacherIds.includes(profile.uid) &&
     account.subjects.includes(activeSubject)
   ));
-
-  if (profile.role === "director") return null;
 
   const persistGrade = async (student: ManagedAccount, scores: WeeklyGradeScores) => {
     if (!selectedWeek || !selectedTerm) {
@@ -656,8 +1075,14 @@ export function WeeklyGradesPanel({
     <section className="panel weekly-grades-panel">
       <div className="weekly-grades-heading">
         <div>
-          <span className="eyebrow">Calificaciones</span>
-          <h2>{profile.role === "teacher" ? "Captura semanal" : "Así va tu semana"}</h2>
+          <span className="eyebrow">Centro de resultados</span>
+          <h2>
+            {profile.role === "director"
+              ? "Panorama académico"
+              : profile.role === "teacher"
+                ? "Calificaciones semanales"
+                : "Así va tu semana"}
+          </h2>
           <p>
             {selectedWeek
               ? `${selectedWeek.label} · ${formatWeekRange(selectedWeek)}${selectedTerm ? ` · ${selectedTerm.label}` : ""}`
@@ -672,17 +1097,47 @@ export function WeeklyGradesPanel({
         />
       </div>
 
+      {profile.role === "teacher" && (
+        <nav className="grade-view-tabs" aria-label="Vista de calificaciones">
+          <button
+            className={activeView === "summary" ? "active" : ""}
+            onClick={() => setActiveView("summary")}
+            type="button"
+          >
+            <BarChart3 size={17} /> Resumen y estadísticas
+          </button>
+          <button
+            className={activeView === "capture" ? "active" : ""}
+            onClick={() => setActiveView("capture")}
+            type="button"
+          >
+            <ClipboardPenLine size={17} /> Captura semanal
+          </button>
+        </nav>
+      )}
+
       {loading ? (
         <div className="grade-loading"><span /><span /><span /></div>
-      ) : profile.role === "student" ? (
+      ) : profile.role !== "teacher" || activeView === "summary" ? (
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeWeekId}
+            className="grade-summary-content"
+            key={`summary-${activeWeekId}`}
             initial={{ opacity: 0, x: 8 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -8 }}
           >
-            <StudentGrades records={visibleRecords} selectedWeek={selectedWeek} />
+            <GradeSummaryDashboard
+              profile={profile}
+              records={visibleRecords}
+              allRecords={cycleRecords}
+              calendar={calendar}
+              accounts={accounts}
+              selectedWeekId={activeWeekId}
+            />
+            {profile.role === "student" && (
+              <StudentGrades records={visibleRecords} selectedWeek={selectedWeek} />
+            )}
           </motion.div>
         </AnimatePresence>
       ) : (

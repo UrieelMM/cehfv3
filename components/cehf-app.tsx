@@ -189,7 +189,7 @@ const schoolLevelLabels: Record<SchoolLevel, string> = {
 
 const routes: Record<SectionKey, string> = {
   dashboard: "/dashboard",
-  "my-week": "/my-week",
+  "my-week": "/qualifications",
   "weekly-review": "/weekly-review",
   tasks: "/tasks",
   "weekly-progress": "/weekly-progress",
@@ -204,8 +204,9 @@ const routes: Record<SectionKey, string> = {
 };
 
 const sectionFromPath = (path: string): SectionKey => {
-  const name = path.split("/").filter(Boolean)[0] as SectionKey | undefined;
+  const name = path.split("/").filter(Boolean)[0] as SectionKey | "qualifications" | undefined;
   if (!name || name === ("login" as SectionKey)) return "dashboard";
+  if (name === "qualifications" || name === "my-week") return "my-week";
   return name in routes ? name : "dashboard";
 };
 
@@ -263,7 +264,7 @@ const navigation: Array<{
   roles?: Role[];
 }> = [
   { key: "dashboard", label: "Inicio", icon: LayoutDashboard },
-  { key: "my-week", label: "Mi semana", icon: CalendarDays },
+  { key: "my-week", label: "Calificaciones", icon: GraduationCap },
   { key: "weekly-review", label: "Repasos", icon: BookOpen },
   { key: "tasks", label: "Tareas", icon: ClipboardCheck },
   { key: "weekly-progress", label: "Mi avance", icon: Target },
@@ -282,7 +283,7 @@ const navigation: Array<{
 
 const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
   dashboard: { eyebrow: "Panorama académico", title: "Buenos días" },
-  "my-week": { eyebrow: "Planeación semanal", title: "Mi semana" },
+  "my-week": { eyebrow: "Resultados y seguimiento", title: "Calificaciones" },
   "weekly-review": { eyebrow: "Práctica breve", title: "Repasos" },
   tasks: { eyebrow: "Actividades y entregas", title: "Tareas" },
   "weekly-progress": {
@@ -421,6 +422,9 @@ export function CEHFApp() {
   );
 
   useEffect(() => {
+    if (window.location.pathname.split("/").filter(Boolean)[0] === "my-week") {
+      window.history.replaceState({}, "", routes["my-week"]);
+    }
     const onPopState = () => {
       setActiveSection(sectionFromPath(window.location.pathname));
       setDetailOpen(taskIdFromPath(window.location.pathname));
@@ -1131,7 +1135,6 @@ export function CEHFApp() {
               {["teacher", "director"].includes(role) &&
                 (activeSection !== "users" || role === "director") &&
                 [
-                  "my-week",
                   "weekly-review",
                   "tasks",
                   "weekly-materials",
@@ -1489,19 +1492,6 @@ export function CEHFApp() {
                       },
                       ...previous.forumTopics,
                     ],
-                  };
-                }
-                if (activeSection === "my-week") {
-                  return {
-                    ...previous,
-                    week: {
-                      ...previous.week,
-                      id,
-                      label: titleValue,
-                      title: "Nueva planeación semanal",
-                      status: "draft",
-                      completion: 0,
-                    },
                   };
                 }
                 return previous;
@@ -1883,15 +1873,11 @@ function SectionContent({
     case "my-week":
       return (
         <WeekPage
-          role={role}
           profile={profile}
-          state={state}
           academicConfig={academicConfig}
           academicCalendar={academicCalendar}
           managedAccounts={managedAccounts}
           firebaseReady={firebaseReady}
-          navigate={navigate}
-          updateState={updateState}
         />
       );
     case "weekly-review":
@@ -2051,7 +2037,7 @@ function Dashboard({
               className="light-button"
               onClick={() => navigate("my-week")}
             >
-              {director ? "Ver resumen institucional" : "Continuar planeación"}
+              {director ? "Ver calificaciones institucionales" : "Capturar calificaciones"}
               <ArrowRight size={17} />
             </button>
           </div>
@@ -2175,7 +2161,7 @@ function Dashboard({
             className="light-button"
             onClick={() => navigate("my-week")}
           >
-            Ver mi semana <ArrowRight size={17} />
+            Ver mis calificaciones <ArrowRight size={17} />
           </button>
         </div>
         <div className="hero-metric">
@@ -2483,188 +2469,20 @@ function VerseEditorModal({
 }
 
 function WeekPage({
-  role,
   profile,
-  state,
   academicConfig,
   academicCalendar,
   managedAccounts,
   firebaseReady,
-  navigate,
-  updateState,
 }: {
-  role: Role;
   profile: UserProfile;
-  state: PortalState;
   academicConfig: AcademicConfig;
   academicCalendar: AcademicCalendar;
   managedAccounts: ManagedAccount[];
   firebaseReady: boolean;
-  navigate: (section: SectionKey) => void;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
 }) {
   return (
-    <div className="week-layout">
-      <section className="panel week-overview">
-        <div className="week-header">
-          <div>
-            <span
-              className={`pill ${
-                academicConfig.calendarStatus === "active"
-                  ? "pill-active"
-                  : "pill-warning"
-              }`}
-            >
-              {academicConfig.calendarStatus === "active"
-                ? academicConfig.weekLabel
-                : "Sin semana activa"}
-            </span>
-            <small className="week-calendar-context">
-              {academicConfig.calendarStatus === "active"
-                ? `${academicWeekRange(academicConfig)} · ${academicConfig.termLabel}`
-                : academicConfig.nextWeekLabel
-                  ? `La siguiente será ${academicConfig.nextWeekLabel}`
-                  : "Dirección debe completar el calendario académico"}
-            </small>
-            <h2>{state.week.title}</h2>
-            <p>{state.week.welcomeMessage}</p>
-          </div>
-          {role !== "student" && (
-            <button
-              className="secondary-button"
-              onClick={() =>
-                updateState(
-                  (previous) => ({
-                    ...previous,
-                    week: {
-                      ...previous.week,
-                      status:
-                        previous.week.status === "active" ? "draft" : "active",
-                    },
-                  }),
-                  state.week.status === "active"
-                    ? "Semana devuelta a borrador"
-                    : "Semana publicada",
-                )
-              }
-            >
-              {state.week.status === "active"
-                ? "Editar planeación"
-                : "Publicar semana"}
-            </button>
-          )}
-        </div>
-        <div className="objective-block">
-          <span className="eyebrow">Lo que aprenderemos</span>
-          {state.week.objectives.map((objective, index) => (
-            <div className="objective-row" key={objective}>
-              <span>{index + 1}</span>
-              <p>{objective}</p>
-              {role !== "student" && <MoreHorizontal size={18} />}
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="week-path">
-        <div className="section-title-row compact">
-          <div>
-            <span className="eyebrow">Ruta sugerida</span>
-            <h2>Tu semana, día por día</h2>
-          </div>
-        </div>
-        {[
-          {
-            day: "Lun",
-            title: "Observar y preguntar",
-            detail: "Guía visual · Repaso de Ciencias",
-            complete: true,
-          },
-          {
-            day: "Mar",
-            title: "Explicar con evidencias",
-            detail: "Bitácora de un cambio",
-            complete: true,
-          },
-          {
-            day: "Mié",
-            title: "Representar fracciones",
-            detail: "Video · Reto de fracciones",
-            complete: false,
-          },
-          {
-            day: "Jue",
-            title: "Leer para comprender",
-            detail: "Audio y lectura · Repaso",
-            complete: false,
-          },
-          {
-            day: "Vie",
-            title: "Cerrar y reconocer avances",
-            detail: "Revisión de pendientes",
-            complete: false,
-          },
-        ].map((day) => (
-          <article className={`day-card ${day.complete ? "complete" : ""}`} key={day.day}>
-            <span className="day-label">{day.day}</span>
-            <div>
-              <h3>{day.title}</h3>
-              <p>{day.detail}</p>
-            </div>
-            {day.complete ? (
-              <CheckCircle2 size={22} />
-            ) : (
-              <ArrowRight size={20} />
-            )}
-          </article>
-        ))}
-      </section>
-      <aside className="week-side">
-        <article className="panel">
-          <span className="eyebrow">Contenido semanal</span>
-          <div className="content-counts">
-            {[
-              {
-                label: "Repasos",
-                value: state.reviews.length,
-                icon: BookOpen,
-                section: "weekly-review" as SectionKey,
-              },
-              {
-                label: "Tareas",
-                value: state.tasks.length,
-                icon: ClipboardCheck,
-                section: "tasks" as SectionKey,
-              },
-              {
-                label: "Materiales",
-                value: state.materials.length,
-                icon: Library,
-                section: "weekly-materials" as SectionKey,
-              },
-            ].map((item) => (
-              <button key={item.label} onClick={() => navigate(item.section)}>
-                <item.icon size={19} />
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </button>
-            ))}
-          </div>
-        </article>
-        <article className="panel family-note">
-          <span className="eyebrow">Para las familias</span>
-          <h3>Acompañar sin resolver</h3>
-          <p>
-            Pregunten qué evidencia encontró y pídanle explicar su idea con un
-            ejemplo cotidiano.
-          </p>
-          <span className="safe-note">
-            <ShieldCheck size={16} /> Aviso listo para WhatsApp
-          </span>
-        </article>
-      </aside>
+    <div className="qualifications-page">
       <WeeklyGradesPanel
         profile={profile}
         academicConfig={academicConfig}
@@ -4180,7 +3998,7 @@ function MobileNavigation({
     { key: "dashboard", label: "Inicio", icon: Home },
     { key: "weekly-review", label: "Repaso", icon: BookOpen },
     { key: "tasks", label: "Tareas", icon: ClipboardCheck },
-    { key: "my-week", label: "Mi semana", icon: CalendarDays },
+    { key: "my-week", label: "Calificaciones", icon: GraduationCap },
   ];
   return (
     <nav className="mobile-nav" aria-label="Navegación móvil">
@@ -4437,7 +4255,6 @@ function GuidedState({
 
 function createLabel(section: SectionKey) {
   const labels: Partial<Record<SectionKey, string>> = {
-    "my-week": "Nueva semana",
     "weekly-review": "Nuevo repaso",
     tasks: "Nueva tarea",
     "weekly-materials": "Nuevo material",
