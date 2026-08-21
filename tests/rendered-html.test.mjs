@@ -280,6 +280,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesUiSource, /Tus calificaciones de la semana/);
   assert.match(gradesUiSource, /Tus calificaciones por materia/);
   assert.match(gradesUiSource, /student-primary-results/);
+  assert.match(gradesUiSource, /<small>Maestro<\/small>/);
   assert.match(gradesUiSource, /GradeSummaryDashboard/);
   assert.match(gradesUiSource, /Panorama académico/);
   assert.match(gradesUiSource, /Promedio por materia/);
@@ -290,6 +291,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesCss, /\.teacher-subject-selector/);
   assert.match(gradesCss, /\.grade-roster-criteria/);
   assert.match(gradesCss, /\.student-primary-results/);
+  assert.match(gradesCss, /\.student-subject-teacher/);
   assert.match(gradesCss, /\.qualifications-page/);
   assert.match(gradesCss, /\.grade-analytics-grid/);
   assert.match(workshopSource, /Biblioteca creativa/);

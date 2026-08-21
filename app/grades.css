@@ -826,8 +826,28 @@
 }
 
 .student-subject-grade-card h3 {
-  margin: 3px 0 0;
+  margin: 5px 0 0;
   font-size: 1.14rem;
+}
+
+.student-subject-teacher {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted-strong);
+}
+
+.student-subject-teacher small {
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.student-subject-teacher strong {
+  font-size: 0.72rem;
+  font-weight: 760;
 }
 
 .student-grade-breakdown {

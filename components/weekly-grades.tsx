@@ -918,7 +918,13 @@ function StudentGrades({
             key={record.id}
           >
             <header>
-              <div><span className="eyebrow">{record.teacherName}</span><h3>{record.subject}</h3></div>
+              <div>
+                <span className="student-subject-teacher">
+                  <small>Maestro</small>
+                  <strong>{record.teacherName}</strong>
+                </span>
+                <h3>{record.subject}</h3>
+              </div>
               <strong className={`grade-badge is-${gradeTone(record.weightedScore)}`}>
                 {record.weightedScore.toFixed(1)}
               </strong>
