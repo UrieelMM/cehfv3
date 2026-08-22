@@ -662,6 +662,10 @@ service cloud.firestore {
           return get(parentTaskPath()).data;
         }
 
+        function parentTaskAfterWrite() {
+          return getAfter(parentTaskPath()).data;
+        }
+
         function extensionPath(studentId) {
           return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId);
         }
@@ -722,8 +726,11 @@ service cloud.firestore {
         match /historial/{eventId} {
           allow read: if taskBelongsToInstitution(parentTask())
             && isTaskStaff(parentTask());
-          allow create: if taskBelongsToInstitution(parentTask())
-            && isTaskStaff(parentTask())
+          // La creación y los cambios de estado de una tarea escriben su
+          // historial en el mismo lote. getAfter valida el documento padre
+          // tal como quedará al terminar ese lote, incluso en la creación.
+          allow create: if taskBelongsToInstitution(parentTaskAfterWrite())
+            && isTaskStaff(parentTaskAfterWrite())
             && request.resource.data.authorId == request.auth.uid
             && request.resource.data.authorRole in ["teacher", "director"];
           allow update, delete: if false;
