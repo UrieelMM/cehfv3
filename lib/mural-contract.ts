@@ -25,6 +25,81 @@ export const muralLimits = {
   reviewNote: 500,
 } as const;
 
+export const muralCoverLayouts = ["split", "editorial", "immersive"] as const;
+export const muralCoverFonts = ["modern", "editorial", "classic"] as const;
+export const muralCoverMotifs = [
+  "orbits",
+  "grid",
+  "confetti",
+  "waves",
+  "rays",
+  "frames",
+  "dots",
+  "ribbons",
+  "stars",
+  "geometry",
+  "arches",
+  "checkerboard",
+  "sprinkles",
+  "bubbles",
+  "crosses",
+  "leaves",
+  "pixels",
+  "halftone",
+  "corners",
+  "spiral",
+] as const;
+
+export const muralCoverLimits = {
+  kicker: 48,
+  title: 90,
+  description: 240,
+  badge: 32,
+  ctaLabel: 32,
+  seasonName: 50,
+} as const;
+
+const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, "Selecciona un color válido.");
+
+export const muralEditionSchema = z.object({
+  id: z.string().max(180).optional(),
+  periodType: z.enum(["month", "season"]),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Selecciona el mes de la edición."),
+  seasonName: z.string().trim().max(muralCoverLimits.seasonName),
+  group: z.string().trim().min(2, "Selecciona el grupo responsable.").max(40),
+  teacherId: z.string().trim().min(1, "Selecciona la maestra responsable.").max(128),
+  teacherName: z.string().trim().min(2).max(120),
+  cover: z.object({
+    kicker: z.string().trim().min(2, "Escribe el antetítulo de la portada.").max(muralCoverLimits.kicker),
+    title: z.string().trim().min(4, "Escribe el título de la portada.").max(muralCoverLimits.title),
+    description: z.string().trim().min(12, "Agrega una breve presentación de la edición.").max(muralCoverLimits.description),
+    badge: z.string().trim().max(muralCoverLimits.badge),
+    ctaLabel: z.string().trim().min(2).max(muralCoverLimits.ctaLabel),
+    backgroundColor: hexColor,
+    accentColor: hexColor,
+    textColor: hexColor,
+    layout: z.enum(muralCoverLayouts),
+    font: z.enum(muralCoverFonts),
+    motif: z.enum(muralCoverMotifs),
+    showBadge: z.boolean(),
+    showManager: z.boolean(),
+    imagePath: z.string().max(500),
+    imagePositionX: z.number().min(0).max(100),
+    imagePositionY: z.number().min(0).max(100),
+    overlayOpacity: z.number().min(0).max(85),
+  }),
+}).superRefine((input, context) => {
+  if (input.periodType === "season" && input.seasonName.trim().length < 3) {
+    context.addIssue({
+      code: "custom",
+      path: ["seasonName"],
+      message: "Escribe el nombre de la temporada.",
+    });
+  }
+});
+
+export type MuralEditionInput = z.infer<typeof muralEditionSchema>;
+
 export const muralSubmissionSchema = z
   .object({
     title: z

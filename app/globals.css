@@ -2618,6 +2618,1525 @@ code {
   gap: 20px;
 }
 
+.mural-edition-bar {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.8fr) minmax(300px, 1.2fr) auto;
+  align-items: center;
+  gap: 22px;
+  min-height: 78px;
+  padding: 13px 15px;
+}
+
+.mural-edition-identity,
+.mural-edition-team,
+.mural-edition-team > span {
+  display: flex;
+  align-items: center;
+}
+
+.mural-edition-identity {
+  gap: 11px;
+}
+
+.mural-edition-icon {
+  display: grid;
+  width: 43px;
+  height: 43px;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.mural-edition-identity > div,
+.mural-edition-team > span {
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.mural-edition-identity span:not(.mural-edition-icon),
+.mural-edition-team > span,
+.mural-edition-alert {
+  color: var(--muted);
+  font-size: 0.57rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mural-edition-identity strong,
+.mural-edition-team strong {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--foreground);
+  font-size: 0.72rem;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.mural-edition-team {
+  justify-content: center;
+  gap: 18px;
+}
+
+.mural-edition-team > i {
+  width: 1px;
+  height: 31px;
+  background: var(--border);
+}
+
+.mural-edition-alert {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--coral);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.mural-cover {
+  --mural-cover-bg: #172554;
+  --mural-cover-accent: #fb7185;
+  --mural-cover-text: #fff;
+  --mural-cover-overlay: 0.24;
+  --mural-image-x: 50%;
+  --mural-image-y: 50%;
+  position: relative;
+  display: grid;
+  min-height: 470px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-text) 12%, transparent);
+  border-radius: 24px;
+  background: var(--mural-cover-bg);
+  box-shadow: 0 22px 58px color-mix(in srgb, var(--mural-cover-bg) 25%, transparent);
+  color: var(--mural-cover-text);
+  isolation: isolate;
+}
+
+.mural-cover::before {
+  position: absolute;
+  z-index: -2;
+  width: 520px;
+  height: 520px;
+  border: 90px solid color-mix(in srgb, var(--mural-cover-accent) 15%, transparent);
+  border-radius: 50%;
+  content: "";
+  right: -220px;
+  bottom: -280px;
+}
+
+.mural-cover-split {
+  grid-template-columns: minmax(0, 1.06fr) minmax(330px, 0.94fr);
+}
+
+.mural-cover-copy {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(36px, 5vw, 74px);
+  flex-direction: column;
+}
+
+.mural-cover-topline {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.mural-cover-topline > span {
+  color: color-mix(in srgb, var(--mural-cover-text) 68%, transparent);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.mural-cover-topline > span::after {
+  display: inline-block;
+  width: 38px;
+  height: 2px;
+  margin: 0 0 3px 12px;
+  background: var(--mural-cover-accent);
+  content: "";
+}
+
+.mural-cover-topline strong {
+  margin-left: auto;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-text) 20%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mural-cover-text) 9%, transparent);
+  font-size: 0.57rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.mural-cover h1 {
+  max-width: 760px;
+  margin: 0;
+  color: inherit;
+  font-size: clamp(2.8rem, 5.4vw, 5.4rem);
+  line-height: 0.94;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+}
+
+.mural-cover-font-editorial h1 {
+  font-family: var(--font-display);
+}
+
+.mural-cover-font-modern h1 {
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-weight: 820;
+  letter-spacing: -0.075em;
+}
+
+.mural-cover-font-classic h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+
+.mural-cover-copy > p {
+  max-width: 640px;
+  margin: 23px 0 0;
+  color: color-mix(in srgb, var(--mural-cover-text) 74%, transparent);
+  font-size: clamp(0.78rem, 1.25vw, 0.95rem);
+  line-height: 1.65;
+}
+
+.mural-cover-management {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.mural-cover-management span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-text) 16%, transparent);
+  border-radius: 9px;
+  color: color-mix(in srgb, var(--mural-cover-text) 78%, transparent);
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.mural-cover-management svg {
+  color: var(--mural-cover-accent);
+}
+
+.mural-cover-cta {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 27px;
+  padding: 0 17px;
+  border-radius: 10px;
+  background: var(--mural-cover-accent);
+  color: var(--mural-cover-bg);
+  font-size: 0.67rem;
+  font-weight: 850;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.mural-cover-cta:hover {
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--mural-cover-accent) 30%, transparent);
+  transform: translateY(-2px);
+}
+
+.mural-cover-visual {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  min-height: 360px;
+  overflow: hidden;
+}
+
+.mural-cover-split .mural-cover-visual {
+  margin: 18px 18px 18px 0;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--mural-cover-text) 8%, transparent);
+}
+
+.mural-cover-image {
+  position: absolute;
+  inset: 0;
+  background-position: var(--mural-image-x) var(--mural-image-y);
+  background-size: cover;
+  transform: scale(1.01);
+}
+
+.mural-cover-visual::after {
+  position: absolute;
+  z-index: 1;
+  background: rgb(0 0 0 / var(--mural-cover-overlay));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+}
+
+.mural-cover.no-image .mural-cover-visual::after {
+  background:
+    radial-gradient(circle at 72% 25%, color-mix(in srgb, var(--mural-cover-accent) 50%, transparent), transparent 24%),
+    linear-gradient(145deg, color-mix(in srgb, var(--mural-cover-accent) 24%, transparent), transparent 54%);
+}
+
+.mural-cover-monogram {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  inset: 0;
+  color: var(--mural-cover-text);
+  pointer-events: none;
+}
+
+.mural-cover.has-image .mural-cover-monogram {
+  opacity: 0.28;
+  mix-blend-mode: overlay;
+}
+
+.mural-cover-monogram > span {
+  position: absolute;
+  top: 30px;
+  right: 31px;
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.mural-cover-monogram > strong {
+  font-family: var(--font-display);
+  font-size: clamp(7rem, 13vw, 12rem);
+  font-weight: 500;
+  letter-spacing: -0.08em;
+  opacity: 0.9;
+}
+
+.mural-cover-monogram > small {
+  position: absolute;
+  right: 31px;
+  bottom: 31px;
+  padding-left: 12px;
+  border-left: 3px solid var(--mural-cover-accent);
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1.45;
+  letter-spacing: 0.1em;
+}
+
+.mural-cover-featured {
+  position: absolute;
+  z-index: 4;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  width: min(280px, calc(100% - 40px));
+  align-items: flex-start;
+  padding: 15px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 13px;
+  background: rgb(10 15 30 / 0.76);
+  box-shadow: 0 12px 35px rgb(0 0 0 / 0.22);
+  color: white;
+  text-align: left;
+  backdrop-filter: blur(14px);
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mural-cover-featured > span {
+  color: var(--mural-cover-accent);
+  font-size: 0.54rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.mural-cover-featured > strong {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  line-height: 1.18;
+}
+
+.mural-cover-featured > small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  color: rgb(255 255 255 / 0.72);
+  font-size: 0.58rem;
+}
+
+.mural-cover-editorial {
+  grid-template-columns: 1fr;
+}
+
+.mural-cover-editorial .mural-cover-copy {
+  width: 70%;
+  min-height: 470px;
+  padding-right: 12%;
+}
+
+.mural-cover-editorial .mural-cover-visual {
+  position: absolute;
+  z-index: 0;
+  width: 44%;
+  inset: 0 0 0 auto;
+}
+
+.mural-cover-editorial.has-image .mural-cover-copy::after {
+  position: absolute;
+  z-index: -1;
+  width: 170px;
+  background: linear-gradient(90deg, var(--mural-cover-bg), transparent);
+  content: "";
+  inset: 0 -100px 0 auto;
+}
+
+.mural-cover-immersive {
+  grid-template-columns: 1fr;
+}
+
+.mural-cover-immersive .mural-cover-visual {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+
+.mural-cover-immersive .mural-cover-visual::after {
+  background: linear-gradient(90deg, rgb(0 0 0 / calc(var(--mural-cover-overlay) + 0.3)) 0%, rgb(0 0 0 / var(--mural-cover-overlay)) 65%, rgb(0 0 0 / 0.08));
+}
+
+.mural-cover-immersive .mural-cover-copy {
+  width: min(760px, 72%);
+  min-height: 470px;
+}
+
+.mural-cover-motif {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  inset: 0;
+}
+
+.mural-cover-motif i {
+  position: absolute;
+  display: block;
+}
+
+.mural-cover-motif.motif-orbits i {
+  top: -50px;
+  left: 42%;
+  width: 260px;
+  height: 260px;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-accent) 35%, transparent);
+  border-radius: 50%;
+}
+
+.mural-cover-motif.motif-orbits i:nth-child(2) {
+  top: 33px;
+  left: calc(42% + 83px);
+  width: 94px;
+  height: 94px;
+  border-width: 15px;
+  opacity: 0.48;
+}
+
+.mural-cover-motif.motif-orbits i:nth-child(3) {
+  top: 88%;
+  left: 43%;
+  width: 10px;
+  height: 10px;
+  border: 0;
+  background: var(--mural-cover-accent);
+}
+
+.mural-cover-motif.motif-grid {
+  opacity: 0.2;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--mural-cover-text) 30%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--mural-cover-text) 30%, transparent) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: linear-gradient(90deg, black, transparent 72%);
+}
+
+.mural-cover-motif.motif-confetti i {
+  width: 8px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--mural-cover-accent);
+  transform: rotate(35deg);
+}
+
+.mural-cover-motif.motif-confetti i:nth-child(1) { top: 12%; left: 8%; }
+.mural-cover-motif.motif-confetti i:nth-child(2) { top: 22%; left: 48%; transform: rotate(-55deg); }
+.mural-cover-motif.motif-confetti i:nth-child(3) { right: 7%; bottom: 14%; transform: rotate(78deg); }
+.mural-cover-motif.motif-confetti i:nth-child(4) { bottom: 8%; left: 36%; transform: rotate(-22deg); }
+.mural-cover-motif.motif-confetti i:nth-child(5) { top: 8%; right: 22%; transform: rotate(5deg); }
+.mural-cover-motif.motif-confetti i:nth-child(6) { top: 41%; left: 7%; width: 15px; height: 15px; border-radius: 50%; transform: none; }
+.mural-cover-motif.motif-confetti i:nth-child(7) { top: 57%; left: 43%; width: 5px; height: 28px; transform: rotate(63deg); opacity: 0.52; }
+.mural-cover-motif.motif-confetti i:nth-child(8) { top: 34%; right: 9%; width: 13px; height: 13px; border-radius: 2px; transform: rotate(22deg); }
+.mural-cover-motif.motif-confetti i:nth-child(9) { right: 38%; bottom: 7%; width: 6px; height: 18px; transform: rotate(-68deg); opacity: 0.7; }
+.mural-cover-motif.motif-confetti i:nth-child(10) { top: 68%; left: 19%; width: 11px; height: 11px; border-radius: 50%; background: color-mix(in srgb, var(--mural-cover-text) 70%, transparent); transform: none; }
+.mural-cover-motif.motif-confetti i:nth-child(11) { top: 16%; left: 29%; width: 4px; height: 17px; transform: rotate(82deg); opacity: 0.66; }
+.mural-cover-motif.motif-confetti i:nth-child(12) { top: 52%; right: 25%; width: 16px; height: 5px; transform: rotate(-38deg); }
+.mural-cover-motif.motif-confetti i:nth-child(13) { right: 4%; bottom: 39%; width: 6px; height: 20px; transform: rotate(11deg); opacity: 0.5; }
+.mural-cover-motif.motif-confetti i:nth-child(14) { bottom: 18%; left: 8%; width: 14px; height: 6px; transform: rotate(47deg); background: color-mix(in srgb, var(--mural-cover-text) 60%, transparent); }
+
+.mural-cover-motif.motif-waves {
+  top: auto;
+  height: 38%;
+  opacity: 0.42;
+  background: repeating-radial-gradient(ellipse at 50% 130%, transparent 0 25px, var(--mural-cover-accent) 27px 28px, transparent 30px 48px);
+  mask-image: linear-gradient(transparent, black);
+}
+
+.mural-cover-motif.motif-rays {
+  left: auto;
+  width: 58%;
+  opacity: 0.24;
+  background: repeating-conic-gradient(from -18deg at 100% 0%, var(--mural-cover-accent) 0 8deg, transparent 8deg 20deg);
+  mask-image: radial-gradient(circle at 100% 0%, black, transparent 72%);
+}
+
+.mural-cover-motif.motif-frames i {
+  top: 8%;
+  right: 5%;
+  width: 35%;
+  height: 84%;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-accent) 48%, transparent);
+  border-radius: 2px;
+}
+
+.mural-cover-motif.motif-frames i:nth-child(2) {
+  top: 13%;
+  right: 8%;
+  width: 29%;
+  height: 74%;
+  border-width: 8px;
+  opacity: 0.28;
+}
+
+.mural-cover-motif.motif-frames i:nth-child(3) {
+  top: auto;
+  right: 3%;
+  bottom: 4%;
+  width: 42%;
+  height: 1px;
+  border: 0;
+  background: var(--mural-cover-accent);
+}
+
+.mural-cover-motif.motif-dots {
+  left: auto;
+  width: 52%;
+  opacity: 0.34;
+  background-image: radial-gradient(circle, var(--mural-cover-accent) 1.7px, transparent 2px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(90deg, transparent, black 42%);
+}
+
+.mural-cover-motif.motif-ribbons i {
+  top: -16%;
+  right: 12%;
+  width: 22px;
+  height: 138%;
+  border-radius: 999px;
+  background: var(--mural-cover-accent);
+  opacity: 0.24;
+  transform: rotate(23deg);
+}
+
+.mural-cover-motif.motif-ribbons i:nth-child(2) {
+  right: 21%;
+  width: 8px;
+  opacity: 0.5;
+}
+
+.mural-cover-motif.motif-ribbons i:nth-child(3) {
+  right: 27%;
+  width: 48px;
+  opacity: 0.1;
+}
+
+.mural-cover-motif.motif-stars i {
+  width: 28px;
+  height: 28px;
+  background: var(--mural-cover-accent);
+  clip-path: polygon(50% 0%, 61% 36%, 100% 50%, 61% 64%, 50% 100%, 39% 64%, 0% 50%, 39% 36%);
+  opacity: 0.7;
+}
+
+.mural-cover-motif.motif-stars i:nth-child(1) { top: 10%; right: 9%; }
+.mural-cover-motif.motif-stars i:nth-child(2) { top: 23%; right: 31%; width: 13px; height: 13px; opacity: 0.42; }
+.mural-cover-motif.motif-stars i:nth-child(3) { right: 17%; bottom: 13%; width: 45px; height: 45px; opacity: 0.2; }
+.mural-cover-motif.motif-stars i:nth-child(4) { top: 45%; left: 47%; width: 9px; height: 9px; }
+.mural-cover-motif.motif-stars i:nth-child(5) { left: 37%; bottom: 8%; width: 17px; height: 17px; opacity: 0.35; }
+
+.mural-cover-motif.motif-geometry i {
+  top: 9%;
+  right: 7%;
+  width: 120px;
+  height: 120px;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-accent) 55%, transparent);
+  transform: rotate(45deg);
+}
+
+.mural-cover-motif.motif-geometry i:nth-child(2) {
+  top: auto;
+  right: 28%;
+  bottom: -70px;
+  width: 190px;
+  height: 190px;
+  border-width: 24px;
+  opacity: 0.22;
+}
+
+.mural-cover-motif.motif-geometry i:nth-child(3) {
+  top: 43%;
+  right: 19%;
+  width: 25px;
+  height: 25px;
+  border: 0;
+  background: var(--mural-cover-accent);
+  opacity: 0.48;
+}
+
+.mural-cover-motif.motif-arches {
+  top: auto;
+  height: 60%;
+  opacity: 0.38;
+  background: repeating-radial-gradient(ellipse at 84% 105%, transparent 0 38px, var(--mural-cover-accent) 40px 42px, transparent 44px 74px);
+  mask-image: linear-gradient(90deg, transparent 30%, black);
+}
+
+.mural-cover-motif.motif-checkerboard {
+  left: auto;
+  width: 44%;
+  opacity: 0.18;
+  background: conic-gradient(from 90deg, var(--mural-cover-accent) 25%, transparent 0 50%, var(--mural-cover-accent) 0 75%, transparent 0) 0 0 / 54px 54px;
+  mask-image: linear-gradient(90deg, transparent, black 45%);
+}
+
+.mural-cover-motif.motif-sprinkles i {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--mural-cover-accent);
+  opacity: 0.58;
+}
+
+.mural-cover-motif.motif-sprinkles i:nth-child(1) { top: 9%; right: 8%; transform: rotate(35deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(2) { top: 16%; right: 19%; transform: rotate(-42deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(3) { top: 29%; right: 5%; transform: rotate(78deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(4) { top: 37%; right: 27%; transform: rotate(13deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(5) { top: 47%; right: 13%; transform: rotate(-61deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(6) { top: 59%; right: 33%; transform: rotate(47deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(7) { right: 7%; bottom: 27%; transform: rotate(-18deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(8) { right: 21%; bottom: 12%; transform: rotate(72deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(9) { right: 43%; bottom: 7%; transform: rotate(-35deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(10) { top: 13%; left: 48%; transform: rotate(54deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(11) { top: 53%; left: 43%; transform: rotate(-73deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(12) { bottom: 9%; left: 31%; transform: rotate(21deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(13) { top: 5%; left: 21%; transform: rotate(-9deg); }
+.mural-cover-motif.motif-sprinkles i:nth-child(14) { bottom: 33%; left: 9%; transform: rotate(66deg); }
+
+.mural-cover-motif.motif-bubbles i {
+  width: 42px;
+  height: 42px;
+  border: 2px solid color-mix(in srgb, var(--mural-cover-accent) 62%, transparent);
+  border-radius: 50%;
+}
+
+.mural-cover-motif.motif-bubbles i:nth-child(1) { top: 8%; right: 8%; width: 110px; height: 110px; }
+.mural-cover-motif.motif-bubbles i:nth-child(2) { top: 34%; right: 28%; width: 58px; height: 58px; opacity: 0.7; }
+.mural-cover-motif.motif-bubbles i:nth-child(3) { right: 7%; bottom: 9%; width: 76px; height: 76px; border-width: 14px; opacity: 0.25; }
+.mural-cover-motif.motif-bubbles i:nth-child(4) { bottom: 19%; left: 43%; width: 25px; height: 25px; }
+.mural-cover-motif.motif-bubbles i:nth-child(5) { top: 17%; left: 48%; width: 16px; height: 16px; opacity: 0.5; }
+
+.mural-cover-motif.motif-crosses {
+  left: auto;
+  width: 48%;
+  opacity: 0.28;
+  background-image:
+    linear-gradient(var(--mural-cover-accent) 5px, transparent 5px),
+    linear-gradient(90deg, var(--mural-cover-accent) 5px, transparent 5px);
+  background-position: 0 12px, 12px 0;
+  background-size: 34px 34px;
+  mask-image: linear-gradient(90deg, transparent, black 34%);
+}
+
+.mural-cover-motif.motif-leaves i {
+  right: 8%;
+  bottom: -6%;
+  width: 74px;
+  height: 150px;
+  border-radius: 90% 0 90% 0;
+  background: var(--mural-cover-accent);
+  opacity: 0.28;
+  transform: rotate(18deg);
+  transform-origin: bottom center;
+}
+
+.mural-cover-motif.motif-leaves i:nth-child(2) { right: 18%; bottom: -10%; width: 58px; height: 128px; transform: rotate(-28deg); opacity: 0.45; }
+.mural-cover-motif.motif-leaves i:nth-child(3) { right: 28%; bottom: -8%; width: 45px; height: 100px; transform: rotate(-55deg); opacity: 0.22; }
+.mural-cover-motif.motif-leaves i:nth-child(4) { top: 7%; right: 4%; bottom: auto; width: 37px; height: 78px; transform: rotate(78deg); opacity: 0.2; }
+
+.mural-cover-motif.motif-pixels i {
+  width: 28px;
+  height: 28px;
+  background: var(--mural-cover-accent);
+  opacity: 0.38;
+}
+
+.mural-cover-motif.motif-pixels i:nth-child(1) { top: 0; right: 0; width: 90px; height: 90px; opacity: 0.13; }
+.mural-cover-motif.motif-pixels i:nth-child(2) { top: 90px; right: 0; }
+.mural-cover-motif.motif-pixels i:nth-child(3) { top: 62px; right: 28px; }
+.mural-cover-motif.motif-pixels i:nth-child(4) { top: 118px; right: 56px; width: 56px; height: 56px; opacity: 0.21; }
+.mural-cover-motif.motif-pixels i:nth-child(5) { right: 0; bottom: 0; width: 126px; height: 56px; opacity: 0.1; }
+.mural-cover-motif.motif-pixels i:nth-child(6) { right: 126px; bottom: 0; }
+.mural-cover-motif.motif-pixels i:nth-child(7) { right: 98px; bottom: 28px; }
+
+.mural-cover-motif.motif-halftone {
+  left: auto;
+  width: 58%;
+  opacity: 0.48;
+  background-image: radial-gradient(circle, var(--mural-cover-accent) 0 2px, transparent 2.5px);
+  background-size: 13px 13px;
+  mask-image: radial-gradient(circle at 100% 50%, black 0, transparent 72%);
+}
+
+.mural-cover-motif.motif-corners i {
+  top: 22px;
+  left: 22px;
+  width: 100px;
+  height: 100px;
+  border-top: 3px solid var(--mural-cover-accent);
+  border-left: 3px solid var(--mural-cover-accent);
+  opacity: 0.55;
+}
+
+.mural-cover-motif.motif-corners i:nth-child(2) { top: 22px; right: 22px; left: auto; border-right: 3px solid var(--mural-cover-accent); border-left: 0; }
+.mural-cover-motif.motif-corners i:nth-child(3) { top: auto; bottom: 22px; border-top: 0; border-bottom: 3px solid var(--mural-cover-accent); }
+.mural-cover-motif.motif-corners i:nth-child(4) { top: auto; right: 22px; bottom: 22px; left: auto; border: 0; border-right: 3px solid var(--mural-cover-accent); border-bottom: 3px solid var(--mural-cover-accent); }
+
+.mural-cover-motif.motif-spiral {
+  left: auto;
+  width: 56%;
+  opacity: 0.36;
+  background: repeating-radial-gradient(circle at 84% 46%, transparent 0 18px, var(--mural-cover-accent) 19px 21px, transparent 22px 35px);
+  mask-image: radial-gradient(circle at 84% 46%, black, transparent 70%);
+}
+
+.mural-not-assigned {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.mural-not-assigned > svg {
+  color: var(--mint);
+}
+
+.mural-not-assigned > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mural-not-assigned strong {
+  font-size: 0.78rem;
+}
+
+.mural-not-assigned p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+.mural-studio-backdrop {
+  z-index: 220;
+  padding: 18px;
+}
+
+.mural-studio {
+  display: grid;
+  width: min(1440px, 100%);
+  height: min(900px, calc(100vh - 36px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 32px 90px rgb(8 15 35 / 0.28);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.mural-studio-header,
+.mural-studio-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mural-studio-header h2 {
+  margin: 3px 0 2px;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+}
+
+.mural-studio-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.mural-studio-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(390px, 0.75fr) minmax(560px, 1.25fr);
+}
+
+.mural-studio-controls {
+  display: flex;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mural-studio-tabs {
+  display: grid;
+  padding: 4px;
+  border-radius: 11px;
+  background: var(--surface-soft);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mural-studio-tabs button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 750;
+}
+
+.mural-studio-tabs button.active {
+  background: var(--surface);
+  box-shadow: 0 3px 12px rgb(20 30 60 / 0.08);
+  color: var(--violet);
+}
+
+.mural-studio-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mural-control-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mural-control-heading > svg {
+  margin-top: 1px;
+  color: var(--violet);
+}
+
+.mural-control-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mural-control-heading strong {
+  font-size: 0.72rem;
+}
+
+.mural-control-heading span {
+  color: var(--muted);
+  font-size: 0.61rem;
+  line-height: 1.4;
+}
+
+.mural-studio-panel > label,
+.mural-control-grid > label,
+.mural-color-row > label {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 0.64rem;
+  font-weight: 750;
+  flex-direction: column;
+}
+
+.mural-studio-panel input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]),
+.mural-studio-panel select,
+.mural-studio-panel textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  outline: 0;
+  background: var(--surface-soft);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.5) inset;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-size: 0.69rem;
+  font-weight: 600;
+  line-height: 1.45;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.mural-studio-panel input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]):hover,
+.mural-studio-panel select:hover,
+.mural-studio-panel textarea:hover {
+  border-color: color-mix(in srgb, var(--violet) 28%, var(--border-strong));
+  background: var(--surface);
+}
+
+.mural-studio-panel input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]):focus,
+.mural-studio-panel select:focus,
+.mural-studio-panel textarea:focus {
+  border-color: color-mix(in srgb, var(--violet) 68%, var(--border));
+  background: var(--surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 10%, transparent);
+}
+
+.mural-studio-panel input::placeholder,
+.mural-studio-panel textarea::placeholder {
+  color: color-mix(in srgb, var(--muted) 72%, transparent);
+  font-weight: 500;
+}
+
+.mural-studio-panel input[type="month"] {
+  color-scheme: light;
+  letter-spacing: 0.02em;
+}
+
+:root[data-theme="dark"] .mural-studio-panel input[type="month"] {
+  color-scheme: dark;
+}
+
+.mural-studio-panel select {
+  cursor: pointer;
+}
+
+.mural-studio-panel label > small {
+  align-self: flex-end;
+  color: var(--muted);
+  font-size: 0.55rem;
+  font-weight: 650;
+}
+
+.mural-studio-panel textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.mural-control-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mural-choice-row,
+.mural-option-grid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mural-choice-row button,
+.mural-option-grid button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.61rem;
+  font-weight: 750;
+}
+
+.mural-choice-row button.active,
+.mural-option-grid button.active {
+  border-color: color-mix(in srgb, var(--violet) 48%, var(--border));
+  background: var(--violet-soft);
+  color: var(--violet);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 16%, transparent);
+}
+
+.mural-option-grid.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mural-option-grid.three button {
+  flex-direction: column;
+}
+
+.mural-option-grid button[class*="font-"] {
+  min-height: 65px;
+  font-size: 1.15rem;
+}
+
+.mural-option-grid .font-modern { font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif; }
+.mural-option-grid .font-editorial { font-family: var(--font-display); }
+.mural-option-grid .font-classic { font-family: Georgia, serif; }
+
+.mural-option-grid button small {
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-size: 0.54rem;
+}
+
+.mural-motif-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mural-motif-grid button {
+  min-height: 60px;
+  justify-content: flex-start;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.mural-motif-grid button small {
+  color: inherit;
+  font-size: 0.58rem;
+  font-weight: 750;
+}
+
+.mural-motif-swatch {
+  position: relative;
+  display: block;
+  width: 50px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #172554;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+  flex: 0 0 auto;
+}
+
+.mural-motif-swatch i {
+  position: absolute;
+  display: block;
+  background: #fb7185;
+}
+
+.mural-motif-swatch.orbits i:first-child {
+  width: 30px;
+  height: 30px;
+  border: 2px solid #fb7185;
+  border-radius: 50%;
+  background: transparent;
+  right: -4px;
+  top: -5px;
+}
+
+.mural-motif-swatch.orbits i:nth-child(2) { width: 9px; height: 9px; border-radius: 50%; right: 8px; top: 6px; }
+
+.mural-motif-swatch.grid {
+  background-color: #172554;
+  background-image: linear-gradient(rgb(251 113 133 / 0.5) 1px, transparent 1px), linear-gradient(90deg, rgb(251 113 133 / 0.5) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+.mural-motif-swatch.confetti i { width: 4px; height: 13px; border-radius: 4px; transform: rotate(30deg); }
+.mural-motif-swatch.confetti i:nth-child(1) { top: 4px; left: 9px; }
+.mural-motif-swatch.confetti i:nth-child(2) { top: 16px; left: 27px; transform: rotate(-45deg); }
+.mural-motif-swatch.confetti i:nth-child(3) { top: 5px; right: 5px; transform: rotate(68deg); }
+.mural-motif-swatch.confetti i:nth-child(4) { bottom: 2px; left: 5px; transform: rotate(-70deg); }
+.mural-motif-swatch.confetti i:nth-child(5) { top: 2px; left: 25px; width: 7px; height: 7px; border-radius: 50%; transform: none; }
+.mural-motif-swatch.confetti i:nth-child(6) { right: 15px; bottom: 1px; width: 3px; height: 10px; transform: rotate(18deg); }
+.mural-motif-swatch.confetti i:nth-child(7) { top: 13px; left: 15px; width: 8px; height: 3px; transform: rotate(12deg); }
+.mural-motif-swatch.confetti i:nth-child(8) { top: 14px; right: 2px; width: 4px; height: 4px; border-radius: 50%; }
+.mural-motif-swatch.confetti i:nth-child(9) { bottom: 3px; left: 20px; width: 3px; height: 8px; transform: rotate(61deg); }
+.mural-motif-swatch.confetti i:nth-child(10) { top: 2px; left: 2px; width: 5px; height: 3px; transform: rotate(-25deg); }
+.mural-motif-swatch.confetti i:nth-child(n+11) { opacity: 0.48; transform: scale(0.65); }
+
+.mural-motif-swatch.waves {
+  background-color: #172554;
+  background-image: repeating-radial-gradient(ellipse at 50% 120%, transparent 0 5px, #fb7185 6px 7px, transparent 8px 12px);
+}
+
+.mural-motif-swatch.rays {
+  background: repeating-conic-gradient(from 0deg at 100% 0%, #fb7185 0 10deg, #172554 10deg 24deg);
+}
+
+.mural-motif-swatch.frames i {
+  width: 29px;
+  height: 24px;
+  border: 2px solid #fb7185;
+  background: transparent;
+  right: 4px;
+  top: 5px;
+}
+
+.mural-motif-swatch.frames i:nth-child(2) { width: 21px; height: 16px; right: 8px; top: 9px; border-width: 1px; }
+
+.mural-motif-swatch.dots {
+  background-color: #172554;
+  background-image: radial-gradient(circle, #fb7185 1.3px, transparent 1.5px);
+  background-size: 8px 8px;
+}
+
+.mural-motif-swatch.ribbons i { width: 5px; height: 48px; top: -7px; right: 12px; transform: rotate(28deg); }
+.mural-motif-swatch.ribbons i:nth-child(2) { width: 10px; right: 24px; opacity: 0.38; }
+.mural-motif-swatch.ribbons i:nth-child(3) { width: 3px; right: 36px; opacity: 0.7; }
+
+.mural-motif-swatch.stars i {
+  width: 13px;
+  height: 13px;
+  clip-path: polygon(50% 0%, 61% 36%, 100% 50%, 61% 64%, 50% 100%, 39% 64%, 0% 50%, 39% 36%);
+}
+
+.mural-motif-swatch.stars i:nth-child(1) { top: 5px; right: 7px; }
+.mural-motif-swatch.stars i:nth-child(2) { width: 7px; height: 7px; top: 19px; right: 25px; opacity: 0.6; }
+.mural-motif-swatch.stars i:nth-child(3) { width: 5px; height: 5px; top: 7px; left: 8px; opacity: 0.4; }
+
+.mural-motif-swatch.geometry i { width: 18px; height: 18px; border: 2px solid #fb7185; background: transparent; right: 7px; top: 8px; transform: rotate(45deg); }
+.mural-motif-swatch.geometry i:nth-child(2) { width: 8px; height: 8px; left: 8px; top: 5px; background: #fb7185; }
+.mural-motif-swatch.geometry i:nth-child(3) { width: 11px; height: 11px; left: 15px; bottom: 3px; opacity: 0.35; }
+
+.mural-motif-swatch.arches {
+  background-color: #172554;
+  background-image: repeating-radial-gradient(ellipse at 82% 115%, transparent 0 6px, #fb7185 7px 8px, transparent 9px 13px);
+}
+
+.mural-motif-swatch.checkerboard {
+  background: conic-gradient(from 90deg, #fb7185 25%, #172554 0 50%, #fb7185 0 75%, #172554 0) 0 0 / 12px 12px;
+}
+
+.mural-motif-swatch.sprinkles i {
+  width: 3px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.mural-motif-swatch.sprinkles i:nth-child(1) { top: 3px; left: 5px; transform: rotate(28deg); }
+.mural-motif-swatch.sprinkles i:nth-child(2) { top: 4px; left: 20px; transform: rotate(-48deg); }
+.mural-motif-swatch.sprinkles i:nth-child(3) { top: 2px; right: 5px; transform: rotate(72deg); }
+.mural-motif-swatch.sprinkles i:nth-child(4) { top: 15px; left: 11px; transform: rotate(-17deg); }
+.mural-motif-swatch.sprinkles i:nth-child(5) { top: 14px; right: 15px; transform: rotate(42deg); }
+.mural-motif-swatch.sprinkles i:nth-child(6) { bottom: 1px; left: 25px; transform: rotate(78deg); }
+.mural-motif-swatch.sprinkles i:nth-child(7) { right: 4px; bottom: 2px; transform: rotate(-30deg); }
+.mural-motif-swatch.sprinkles i:nth-child(n+8) { width: 2px; height: 7px; opacity: 0.48; }
+
+.mural-motif-swatch.bubbles i {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #fb7185;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.mural-motif-swatch.bubbles i:nth-child(1) { top: 3px; right: 4px; }
+.mural-motif-swatch.bubbles i:nth-child(2) { left: 8px; bottom: 3px; width: 11px; height: 11px; }
+.mural-motif-swatch.bubbles i:nth-child(3) { right: 19px; bottom: 3px; width: 7px; height: 7px; opacity: 0.5; }
+
+.mural-motif-swatch.crosses {
+  background-color: #172554;
+  background-image: linear-gradient(#fb7185 3px, transparent 3px), linear-gradient(90deg, #fb7185 3px, transparent 3px);
+  background-position: 0 6px, 6px 0;
+  background-size: 16px 16px;
+}
+
+.mural-motif-swatch.leaves i {
+  right: 5px;
+  bottom: -9px;
+  width: 14px;
+  height: 34px;
+  border-radius: 90% 0 90% 0;
+  transform: rotate(18deg);
+  transform-origin: bottom center;
+}
+
+.mural-motif-swatch.leaves i:nth-child(2) { right: 17px; transform: rotate(-28deg); opacity: 0.55; }
+.mural-motif-swatch.leaves i:nth-child(3) { right: 29px; width: 10px; height: 26px; transform: rotate(-55deg); opacity: 0.3; }
+
+.mural-motif-swatch.pixels i { width: 10px; height: 10px; }
+.mural-motif-swatch.pixels i:nth-child(1) { top: 0; right: 0; width: 20px; height: 20px; opacity: 0.3; }
+.mural-motif-swatch.pixels i:nth-child(2) { top: 20px; right: 0; }
+.mural-motif-swatch.pixels i:nth-child(3) { top: 10px; right: 20px; }
+.mural-motif-swatch.pixels i:nth-child(4) { bottom: 0; left: 4px; width: 16px; height: 8px; opacity: 0.45; }
+
+.mural-motif-swatch.halftone {
+  background-color: #172554;
+  background-image: radial-gradient(circle, #fb7185 0 1.4px, transparent 1.8px);
+  background-size: 6px 6px;
+  mask-image: radial-gradient(circle at 82% 50%, black, transparent 82%);
+}
+
+.mural-motif-swatch.corners i {
+  top: 4px;
+  left: 4px;
+  width: 15px;
+  height: 15px;
+  border-top: 2px solid #fb7185;
+  border-left: 2px solid #fb7185;
+  background: transparent;
+}
+
+.mural-motif-swatch.corners i:nth-child(2) { right: 4px; left: auto; border-right: 2px solid #fb7185; border-left: 0; }
+.mural-motif-swatch.corners i:nth-child(3) { top: auto; bottom: 4px; border-top: 0; border-bottom: 2px solid #fb7185; }
+.mural-motif-swatch.corners i:nth-child(4) { top: auto; right: 4px; bottom: 4px; left: auto; border: 0; border-right: 2px solid #fb7185; border-bottom: 2px solid #fb7185; }
+
+.mural-motif-swatch.spiral {
+  background-color: #172554;
+  background-image: repeating-radial-gradient(circle at 78% 50%, transparent 0 4px, #fb7185 5px 6px, transparent 7px 10px);
+}
+
+.layout-icon {
+  display: grid;
+  width: 35px;
+  height: 22px;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  grid-template-columns: 1fr 1fr;
+  opacity: 0.7;
+}
+
+.layout-icon i { border-radius: 1px; background: currentColor; opacity: 0.5; }
+.layout-icon.editorial { grid-template-columns: 1.5fr 0.5fr; }
+.layout-icon.immersive { position: relative; grid-template-columns: 1fr; }
+.layout-icon.immersive i:first-child { opacity: 0.25; }
+.layout-icon.immersive i:last-child { position: absolute; width: 45%; height: 10px; left: 6px; top: 6px; }
+
+.mural-assignment-note,
+.mural-image-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border-radius: 10px;
+  background: var(--mint-soft);
+  color: var(--mint);
+}
+
+.mural-assignment-note > span {
+  display: flex;
+  color: var(--muted-strong);
+  font-size: 0.6rem;
+  line-height: 1.45;
+  flex-direction: column;
+}
+
+.mural-assignment-note strong { color: var(--mint); }
+
+.mural-toggle-stack {
+  display: grid;
+  gap: 7px;
+}
+
+.mural-toggle-stack > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.mural-toggle-stack input {
+  margin-top: 3px;
+  accent-color: var(--violet);
+}
+
+.mural-toggle-stack span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mural-toggle-stack strong { font-size: 0.63rem; }
+.mural-toggle-stack small { color: var(--muted); font-size: 0.56rem; font-weight: 500; }
+
+.mural-palette-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.mural-palette-grid button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mural-palette-grid button.active {
+  border-color: var(--violet);
+  background: var(--violet-soft);
+}
+
+.mural-palette-grid i {
+  position: relative;
+  width: 100%;
+  height: 28px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.mural-palette-grid i span {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(255 255 255 / 0.8);
+  border-radius: 50%;
+  right: 5px;
+  bottom: 5px;
+}
+
+.mural-palette-grid em {
+  overflow: hidden;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 0.49rem;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mural-color-row {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mural-color-row label > span {
+  display: flex;
+  height: 38px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+
+.mural-color-row input {
+  width: 31px;
+  height: 29px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.mural-color-row code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.5rem;
+  text-overflow: ellipsis;
+}
+
+.mural-reset-button {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  color: var(--violet);
+  font-size: 0.6rem;
+  font-weight: 750;
+}
+
+.mural-image-drop {
+  display: grid !important;
+  min-height: 142px;
+  place-items: center;
+  align-content: center;
+  gap: 4px !important;
+  padding: 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--violet) !important;
+  text-align: center;
+  cursor: pointer;
+}
+
+.mural-image-drop input { display: none; }
+.mural-image-drop strong { font-size: 0.68rem; }
+.mural-image-drop span { color: var(--muted); font-size: 0.57rem; font-weight: 500; }
+
+.mural-image-mini {
+  display: flex;
+  height: 120px;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 8px;
+  border-radius: 11px;
+  background-position: center;
+  background-size: cover;
+}
+
+.mural-image-mini button {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: rgb(15 20 35 / 0.74);
+  color: white;
+  font-size: 0.56rem;
+  backdrop-filter: blur(8px);
+}
+
+.mural-range-label > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mural-range-label input {
+  width: 100%;
+  padding: 0;
+  accent-color: var(--violet);
+}
+
+.mural-image-tip {
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-size: 0.59rem;
+  line-height: 1.45;
+}
+
+.mural-studio-preview {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  justify-content: center;
+  overflow: auto;
+  padding: 22px;
+  background:
+    linear-gradient(45deg, var(--surface-soft) 25%, transparent 25%) 0 0 / 24px 24px,
+    linear-gradient(-45deg, var(--surface-soft) 25%, transparent 25%) 0 0 / 24px 24px,
+    var(--background);
+  flex-direction: column;
+}
+
+.mural-preview-heading,
+.mural-preview-devices {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+}
+
+.mural-preview-heading small {
+  font-size: 0.54rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.mural-studio-preview .mural-cover {
+  width: 100%;
+  min-height: min(520px, 62vh);
+  border-radius: 17px;
+  box-shadow: 0 24px 60px rgb(8 15 35 / 0.22);
+}
+
+.mural-studio-preview .mural-cover-copy {
+  padding: clamp(28px, 4vw, 54px);
+}
+
+.mural-studio-preview .mural-cover h1 {
+  font-size: clamp(2.3rem, 4.7vw, 4.8rem);
+}
+
+.mural-studio-preview .mural-cover-cta {
+  pointer-events: none;
+}
+
+.mural-preview-devices {
+  justify-content: flex-start;
+  margin: 11px 0 0;
+  letter-spacing: 0;
+}
+
+.mural-preview-devices span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mural-preview-devices i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mint);
+}
+
+.mural-studio-footer {
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+
+.mural-studio-footer > span,
+.mural-studio-footer > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mural-studio-footer > span {
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.mural-studio-footer > span svg { color: var(--mint); }
+
 .wall-page-stack .wall-feature {
   margin-bottom: 0;
 }
@@ -5019,7 +6538,6 @@ code {
   font-size: 0.69rem;
   font-weight: 780;
 }
-
 .danger-button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -10875,12 +12393,172 @@ code {
 }
 
 @media (max-width: 1020px) {
+  .mural-edition-bar {
+    grid-template-columns: 1fr auto;
+  }
+
+  .mural-edition-team {
+    display: none;
+  }
+
+  .mural-cover-split {
+    grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+  }
+
+  .mural-studio-body {
+    grid-template-columns: 350px minmax(450px, 1fr);
+  }
+
+  .mural-studio-preview {
+    padding: 16px;
+  }
+
   .mural-discovery {
     grid-template-columns: minmax(240px, 1fr) minmax(150px, 0.55fr);
   }
 }
 
 @media (max-width: 760px) {
+  .mural-edition-bar {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .mural-edition-bar > button {
+    justify-content: center;
+  }
+
+  .mural-cover {
+    min-height: 0;
+    border-radius: 18px;
+  }
+
+  .mural-cover-split {
+    grid-template-columns: 1fr;
+  }
+
+  .mural-cover-copy,
+  .mural-cover-editorial .mural-cover-copy,
+  .mural-cover-immersive .mural-cover-copy {
+    width: auto;
+    min-height: 410px;
+    padding: 31px 25px;
+  }
+
+  .mural-cover h1 {
+    font-size: clamp(2.7rem, 13vw, 4.2rem);
+  }
+
+  .mural-cover-topline {
+    align-items: flex-start;
+    flex-direction: column-reverse;
+    margin-bottom: 22px;
+  }
+
+  .mural-cover-topline strong {
+    margin-left: 0;
+  }
+
+  .mural-cover-topline > span::after {
+    display: none;
+  }
+
+  .mural-cover-split .mural-cover-visual {
+    min-height: 280px;
+    margin: 0 12px 12px;
+  }
+
+  .mural-cover-editorial .mural-cover-visual {
+    position: relative;
+    width: auto;
+    min-height: 280px;
+  }
+
+  .mural-cover-editorial.has-image .mural-cover-copy::after {
+    display: none;
+  }
+
+  .mural-cover-immersive .mural-cover-visual {
+    position: absolute;
+  }
+
+  .mural-cover-management {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mural-cover-featured {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .mural-studio-backdrop {
+    padding: 0;
+  }
+
+  .mural-studio {
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .mural-studio-header,
+  .mural-studio-footer {
+    padding: 13px 15px;
+  }
+
+  .mural-studio-header p,
+  .mural-studio-footer > span {
+    display: none;
+  }
+
+  .mural-studio-body {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .mural-studio-controls {
+    overflow: visible;
+    padding: 12px;
+    border-right: 0;
+  }
+
+  .mural-studio-tabs {
+    position: sticky;
+    z-index: 8;
+    top: -12px;
+  }
+
+  .mural-studio-tabs button {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .mural-studio-preview {
+    min-height: 520px;
+    overflow: hidden;
+    padding: 15px;
+  }
+
+  .mural-studio-preview .mural-cover {
+    min-height: 470px;
+  }
+
+  .mural-preview-devices {
+    display: none;
+  }
+
+  .mural-studio-footer > div {
+    width: 100%;
+  }
+
+  .mural-studio-footer button {
+    flex: 1;
+    justify-content: center;
+  }
+
   .mural-editorial-desk,
   .mural-my-stories {
     padding: 18px;

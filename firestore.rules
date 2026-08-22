@@ -1047,6 +1047,12 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /muralEditions/{editionId} {
+      allow read: if sameInstitution(resource.data);
+      // La asignación editorial y la portada se validan en Cloud Functions.
+      allow create, update, delete: if false;
+    }
+
     match /wallPosts/{postId} {
       allow read: if sameInstitution(resource.data) && (
         isStaff() ||

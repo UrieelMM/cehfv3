@@ -546,6 +546,75 @@ export type WallPost = {
   createdAt?: string;
   updatedAt?: string;
   submittedAt?: string;
+  editionId?: string;
+  editionLabel?: string;
+  editionGroup?: string;
+  assignedTeacherId?: string;
+  assignedTeacherName?: string;
+};
+
+export type MuralCoverLayout = "split" | "editorial" | "immersive";
+export type MuralCoverFont = "modern" | "editorial" | "classic";
+export type MuralCoverMotif =
+  | "orbits"
+  | "grid"
+  | "confetti"
+  | "waves"
+  | "rays"
+  | "frames"
+  | "dots"
+  | "ribbons"
+  | "stars"
+  | "geometry"
+  | "arches"
+  | "checkerboard"
+  | "sprinkles"
+  | "bubbles"
+  | "crosses"
+  | "leaves"
+  | "pixels"
+  | "halftone"
+  | "corners"
+  | "spiral";
+
+export type MuralEditionCover = {
+  kicker: string;
+  title: string;
+  description: string;
+  badge: string;
+  ctaLabel: string;
+  backgroundColor: string;
+  accentColor: string;
+  textColor: string;
+  layout: MuralCoverLayout;
+  font: MuralCoverFont;
+  motif: MuralCoverMotif;
+  showBadge: boolean;
+  showManager: boolean;
+  imagePath: string;
+  imageUrl?: string;
+  imagePositionX: number;
+  imagePositionY: number;
+  overlayOpacity: number;
+};
+
+export type MuralEdition = {
+  id: string;
+  institutionId: string;
+  active: boolean;
+  periodType: "month" | "season";
+  periodKey: string;
+  periodLabel: string;
+  month: string;
+  seasonName: string;
+  group: string;
+  teacherId: string;
+  teacherName: string;
+  cover: MuralEditionCover;
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  updatedByName?: string;
 };
 
 export type ForumReactionKind = "helpful" | "interesting" | "celebrate";
@@ -837,6 +906,7 @@ export type PortalState = {
   progress: ProgressCriterion[];
   reports: WeeklyReport[];
   wallPosts: WallPost[];
+  muralEdition?: MuralEdition;
   forumTopics: ForumTopic[];
   forumModeration: ForumModerationCase[];
   forumBans: ForumBan[];

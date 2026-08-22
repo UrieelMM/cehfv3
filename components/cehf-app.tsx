@@ -1935,6 +1935,7 @@ function SectionContent({
           state={state}
           updateState={updateState}
           profile={profile}
+          accounts={managedAccounts}
           firebaseReady={firebaseReady}
         />
       );

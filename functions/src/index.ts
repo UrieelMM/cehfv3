@@ -2335,6 +2335,31 @@ const MURAL_CATEGORIES = [
   "Entrevistas",
 ] as const;
 
+const MURAL_COVER_LAYOUTS = ["split", "editorial", "immersive"] as const;
+const MURAL_COVER_FONTS = ["modern", "editorial", "classic"] as const;
+const MURAL_COVER_MOTIFS = [
+  "orbits",
+  "grid",
+  "confetti",
+  "waves",
+  "rays",
+  "frames",
+  "dots",
+  "ribbons",
+  "stars",
+  "geometry",
+  "arches",
+  "checkerboard",
+  "sprinkles",
+  "bubbles",
+  "crosses",
+  "leaves",
+  "pixels",
+  "halftone",
+  "corners",
+  "spiral",
+] as const;
+
 type MuralRole = "director" | "teacher" | "student";
 
 type MuralUser = {
@@ -2427,6 +2452,131 @@ function muralStoryId(value: unknown) {
   return id;
 }
 
+function muralOptionalText(value: unknown, label: string, maximum: number) {
+  const normalized = compactMuralText(value);
+  if (normalized.length > maximum) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${label} puede tener hasta ${maximum} caracteres.`,
+    );
+  }
+  return normalized;
+}
+
+function muralColor(value: unknown, label: string) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", `Selecciona un color válido para ${label}.`);
+  }
+  return normalized;
+}
+
+function muralRange(value: unknown, label: string, minimum: number, maximum: number) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) {
+    throw new HttpsError("invalid-argument", `${label} está fuera del rango permitido.`);
+  }
+  return Math.round(number);
+}
+
+function muralEditionId(value: unknown) {
+  const id = String(value ?? "").trim();
+  if (id && !/^[A-Za-z0-9_-]{1,180}$/.test(id)) {
+    throw new HttpsError("invalid-argument", "La edición seleccionada no es válida.");
+  }
+  return id;
+}
+
+function muralPeriodLabel(month: string) {
+  const date = new Date(`${month}-15T12:00:00-06:00`);
+  const label = new Intl.DateTimeFormat("es-MX", {
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Mexico_City",
+  }).format(date);
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function muralSlug(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48) || "temporada";
+}
+
+function muralEditionInput(value: unknown, institutionId: string) {
+  const input = (value ?? {}) as Record<string, unknown>;
+  const periodType = input.periodType === "season" ? "season" : "month";
+  const month = String(input.month ?? "").trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw new HttpsError("invalid-argument", "Selecciona el mes de la edición.");
+  }
+  const seasonName = muralOptionalText(input.seasonName, "La temporada", 50);
+  if (periodType === "season" && seasonName.length < 3) {
+    throw new HttpsError("invalid-argument", "Escribe el nombre de la temporada.");
+  }
+  const group = muralText(input.group, "El grupo", 2, 40);
+  const teacherId = muralStoryId(input.teacherId);
+  const coverInput = input.cover && typeof input.cover === "object"
+    ? input.cover as Record<string, unknown>
+    : {};
+  const layout = String(coverInput.layout ?? "split");
+  const font = String(coverInput.font ?? "editorial");
+  const motif = String(coverInput.motif ?? "orbits");
+  if (!MURAL_COVER_LAYOUTS.includes(layout as typeof MURAL_COVER_LAYOUTS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona una composición válida.");
+  }
+  if (!MURAL_COVER_FONTS.includes(font as typeof MURAL_COVER_FONTS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona una tipografía válida.");
+  }
+  if (!MURAL_COVER_MOTIFS.includes(motif as typeof MURAL_COVER_MOTIFS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un elemento decorativo válido.");
+  }
+  const imagePath = String(coverInput.imagePath ?? "").trim();
+  if (
+    imagePath &&
+    !new RegExp(`^institutions/${institutionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/wall/covers/[A-Za-z0-9._-]{1,180}$`).test(imagePath)
+  ) {
+    throw new HttpsError("invalid-argument", "La imagen de portada no pertenece a esta institución.");
+  }
+  const periodLabel = periodType === "month" ? muralPeriodLabel(month) : seasonName;
+  const periodKey = periodType === "month"
+    ? month
+    : `${month.slice(0, 4)}-${muralSlug(seasonName)}`;
+  return {
+    requestedId: muralEditionId(input.id),
+    periodType,
+    periodKey,
+    periodLabel,
+    month,
+    seasonName,
+    group,
+    teacherId,
+    cover: {
+      kicker: muralText(coverInput.kicker, "El antetítulo", 2, 48),
+      title: muralText(coverInput.title, "El título de portada", 4, 90),
+      description: muralText(coverInput.description, "La presentación", 12, 240),
+      badge: muralOptionalText(coverInput.badge, "La insignia", 32),
+      ctaLabel: muralText(coverInput.ctaLabel, "El botón", 2, 32),
+      backgroundColor: muralColor(coverInput.backgroundColor, "el fondo"),
+      accentColor: muralColor(coverInput.accentColor, "el acento"),
+      textColor: muralColor(coverInput.textColor, "el texto"),
+      layout: layout as typeof MURAL_COVER_LAYOUTS[number],
+      font: font as typeof MURAL_COVER_FONTS[number],
+      motif: motif as typeof MURAL_COVER_MOTIFS[number],
+      showBadge: coverInput.showBadge !== false,
+      showManager: coverInput.showManager !== false,
+      imagePath,
+      imagePositionX: muralRange(coverInput.imagePositionX, "El enfoque horizontal", 0, 100),
+      imagePositionY: muralRange(coverInput.imagePositionY, "El enfoque vertical", 0, 100),
+      overlayOpacity: muralRange(coverInput.overlayOpacity, "El contraste", 0, 85),
+    },
+  };
+}
+
 async function requireMuralUser(
   auth: CallableRequest<unknown>["auth"],
 ): Promise<MuralUser> {
@@ -2506,8 +2656,166 @@ function muralStoryResponse(id: string, story: DocumentData) {
     createdAt: muralIso(story.createdAt),
     updatedAt: muralIso(story.updatedAt),
     submittedAt: muralIso(story.submittedAt),
+    editionId: String(story.editionId ?? ""),
+    editionLabel: String(story.editionLabel ?? ""),
+    editionGroup: String(story.editionGroup ?? ""),
+    assignedTeacherId: String(story.assignedTeacherId ?? ""),
+    assignedTeacherName: String(story.assignedTeacherName ?? ""),
   };
 }
+
+function muralEditionResponse(id: string, edition: DocumentData) {
+  return {
+    id,
+    institutionId: String(edition.institutionId ?? ""),
+    active: edition.active === true,
+    periodType: edition.periodType === "season" ? "season" : "month",
+    periodKey: String(edition.periodKey ?? ""),
+    periodLabel: String(edition.periodLabel ?? "Edición actual"),
+    month: String(edition.month ?? ""),
+    seasonName: String(edition.seasonName ?? ""),
+    group: String(edition.group ?? "Comunidad CEHF"),
+    teacherId: String(edition.teacherId ?? ""),
+    teacherName: String(edition.teacherName ?? "Dirección CEHF"),
+    cover: edition.cover ?? {},
+    createdAt: muralIso(edition.createdAt),
+    updatedAt: muralIso(edition.updatedAt),
+    updatedBy: String(edition.updatedBy ?? ""),
+    updatedByName: String(edition.updatedByName ?? ""),
+  };
+}
+
+export const saveMuralEdition = onCall(async (request) => {
+  const actor = await requireMuralUser(request.auth);
+  if (actor.role === "student") {
+    throw new HttpsError("permission-denied", "Sólo el equipo editorial puede editar la portada.");
+  }
+  const input = muralEditionInput(request.data, actor.institutionId);
+  const activeQuery = db.collection("muralEditions")
+    .where("institutionId", "==", actor.institutionId)
+    .where("active", "==", true)
+    .limit(5);
+  const activeSnapshot = await activeQuery.get();
+  const current = activeSnapshot.docs[0];
+  const currentData = current?.data();
+  const now = Timestamp.now();
+
+  if (actor.role === "teacher") {
+    if (!current || currentData?.teacherId !== actor.uid) {
+      throw new HttpsError(
+        "permission-denied",
+        "Esta edición está asignada a otra maestra. Dirección puede cambiar la responsable.",
+      );
+    }
+    const next = {
+      ...currentData,
+      cover: input.cover,
+      updatedAt: now,
+      updatedBy: actor.uid,
+      updatedByName: actor.name,
+    };
+    const batch = db.batch();
+    batch.set(current.ref, next);
+    batch.create(db.collection("auditEvents").doc(), {
+      entityType: "muralEdition",
+      entityId: current.id,
+      institutionId: actor.institutionId,
+      action: "wall.edition.cover_updated",
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      after: { periodKey: currentData.periodKey, group: currentData.group },
+      createdAt: now,
+    });
+    await batch.commit();
+    return { edition: muralEditionResponse(current.id, next) };
+  }
+
+  const teacherSnapshot = await db.doc(`users/${input.teacherId}`).get();
+  const teacher = teacherSnapshot.data();
+  if (
+    !teacherSnapshot.exists ||
+    teacher?.active !== true ||
+    teacher.role !== "teacher" ||
+    teacher.institutionId !== actor.institutionId
+  ) {
+    throw new HttpsError("invalid-argument", "Selecciona una maestra activa de la institución.");
+  }
+  const reuseCurrent = current && input.requestedId === current.id && currentData?.periodKey === input.periodKey;
+  const targetId = reuseCurrent
+    ? current.id
+    : muralEditionId(`${actor.institutionId}-${input.periodKey}`);
+  const targetReference = db.doc(`muralEditions/${targetId}`);
+  const targetSnapshot = await targetReference.get();
+  const targetData = targetSnapshot.data();
+  const pendingStoriesSnapshot = reuseCurrent && currentData?.teacherId !== input.teacherId
+    ? await db.collection("wallPosts")
+        .where("institutionId", "==", actor.institutionId)
+        .where("status", "==", "submitted")
+        .limit(400)
+        .get()
+    : null;
+  const next = {
+    institutionId: actor.institutionId,
+    active: true,
+    periodType: input.periodType,
+    periodKey: input.periodKey,
+    periodLabel: input.periodLabel,
+    month: input.month,
+    seasonName: input.seasonName,
+    group: input.group,
+    teacherId: input.teacherId,
+    teacherName: String(teacher.name ?? "Maestra CEHF"),
+    cover: input.cover,
+    createdAt: targetData?.createdAt ?? now,
+    createdBy: targetData?.createdBy ?? actor.uid,
+    updatedAt: now,
+    updatedBy: actor.uid,
+    updatedByName: actor.name,
+  };
+  const batch = db.batch();
+  activeSnapshot.docs.forEach((edition) => {
+    if (edition.id !== targetId) {
+      batch.update(edition.ref, { active: false, updatedAt: now, updatedBy: actor.uid });
+    }
+  });
+  pendingStoriesSnapshot?.docs
+    .filter((story) => story.data().editionId === targetId)
+    .forEach((story) => batch.update(story.ref, {
+      assignedTeacherId: input.teacherId,
+      assignedTeacherName: String(teacher.name ?? "Maestra CEHF"),
+      updatedAt: now,
+      updatedBy: actor.uid,
+    }));
+  batch.set(targetReference, next);
+  batch.create(db.collection("auditEvents").doc(), {
+    entityType: "muralEdition",
+    entityId: targetId,
+    institutionId: actor.institutionId,
+    action: reuseCurrent ? "wall.edition.updated" : "wall.edition.activated",
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    after: {
+      periodKey: input.periodKey,
+      periodLabel: input.periodLabel,
+      group: input.group,
+      teacherId: input.teacherId,
+    },
+    createdAt: now,
+  });
+  await batch.commit();
+  if (!reuseCurrent || currentData?.teacherId !== input.teacherId) {
+    await writeNotifications([input.teacherId], `mural-edition-${targetId}-${input.teacherId}`, {
+      category: "wall",
+      title: `Tienes a cargo la edición ${input.periodLabel}`,
+      detail: `Dirección asignó el Periódico mural al grupo ${input.group}.`,
+      url: "/wall-newspaper",
+      eventType: "wall_edition_assigned",
+    });
+  }
+  return { edition: muralEditionResponse(targetId, next) };
+});
 
 export const submitWallStory = onCall(async (request) => {
   const student = await requireMuralUser(request.auth);
@@ -2521,6 +2829,13 @@ export const submitWallStory = onCall(async (request) => {
     ? db.doc(`wallPosts/${requestedStoryId}`)
     : db.collection("wallPosts").doc();
   const now = Timestamp.now();
+  const editionSnapshot = await db.collection("muralEditions")
+    .where("institutionId", "==", student.institutionId)
+    .where("active", "==", true)
+    .limit(1)
+    .get();
+  const activeEditionDocument = editionSnapshot.docs[0];
+  const activeEdition = activeEditionDocument?.data();
   const content = {
     title: submission.title,
     excerpt: submission.lead,
@@ -2581,6 +2896,11 @@ export const submitWallStory = onCall(async (request) => {
       author: student.name,
       authorId: student.uid,
       group: student.group,
+      editionId: activeEditionDocument?.id ?? "",
+      editionLabel: String(activeEdition?.periodLabel ?? ""),
+      editionGroup: String(activeEdition?.group ?? ""),
+      assignedTeacherId: String(activeEdition?.teacherId ?? ""),
+      assignedTeacherName: String(activeEdition?.teacherName ?? ""),
       accent: muralAccent(storyReference.id),
       status: "submitted",
       version: 1,
@@ -2663,6 +2983,16 @@ export const reviewWallStory = onCall(async (request) => {
         "La historia ya fue revisada por otra persona. Actualiza la bandeja.",
       );
     }
+    if (
+      reviewer.role === "teacher" &&
+      previous.assignedTeacherId &&
+      previous.assignedTeacherId !== reviewer.uid
+    ) {
+      throw new HttpsError(
+        "permission-denied",
+        `Esta edición está a cargo de ${String(previous.assignedTeacherName ?? "otra maestra")}.`,
+      );
+    }
     const approved = decision === "approve";
     const nextStory = {
       ...previous,
@@ -2709,7 +3039,7 @@ export const reviewWallStory = onCall(async (request) => {
   return { story: muralStoryResponse(storyId, savedStory) };
 });
 
-async function muralReviewers(institutionId: string) {
+async function muralReviewers(institutionId: string, assignedTeacherId = "") {
   const snapshot = await db
     .collection("users")
     .where("institutionId", "==", institutionId)
@@ -2717,7 +3047,10 @@ async function muralReviewers(institutionId: string) {
   return snapshot.docs
     .filter((entry) => {
       const profile = entry.data();
-      return profile.active === true && ["teacher", "director"].includes(profile.role);
+      return profile.active === true && (
+        profile.role === "director" ||
+        (profile.role === "teacher" && (!assignedTeacherId || entry.id === assignedTeacherId))
+      );
     })
     .map((entry) => entry.id);
 }
@@ -2727,7 +3060,10 @@ export const onWallStoryCreated = onDocumentCreated(
   async (event) => {
     const story = event.data?.data();
     if (!story || story.status !== "submitted") return;
-    const recipients = await muralReviewers(String(story.institutionId ?? ""));
+    const recipients = await muralReviewers(
+      String(story.institutionId ?? ""),
+      String(story.assignedTeacherId ?? ""),
+    );
     await writeNotifications(recipients, `wall-review-${event.params.storyId}-v1`, {
       category: "wall",
       title: "Nueva historia por revisar",
@@ -2752,7 +3088,10 @@ export const onWallStoryChanged = onDocumentWritten(
     const storyId = event.params.storyId;
     const version = Number(after.version ?? 1);
     if (before.status === "changes_requested" && after.status === "submitted") {
-      const recipients = await muralReviewers(String(after.institutionId ?? ""));
+      const recipients = await muralReviewers(
+        String(after.institutionId ?? ""),
+        String(after.assignedTeacherId ?? ""),
+      );
       await writeNotifications(recipients, `wall-review-${storyId}-v${version}`, {
         category: "wall",
         title: "Historia corregida por revisar",
