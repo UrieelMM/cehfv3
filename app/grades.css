@@ -35,7 +35,7 @@
 .grading-config-heading h2 {
   margin: 4px 0 6px;
   font-family: var(--font-display);
-  font-size: clamp(1.45rem, 2vw, 1.9rem);
+  font-size: calc(clamp(1.45rem, 2vw, 1.9rem) + 0.125rem);
   letter-spacing: -0.025em;
 }
 
@@ -65,7 +65,7 @@
   border-radius: 12px;
   background: transparent;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + 0.125rem);
   font-weight: 800;
   transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
 }
@@ -125,7 +125,7 @@
 }
 
 .grade-week-selector button small {
-  font-size: 0.68rem;
+  font-size: calc(0.68rem + 0.125rem);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -133,7 +133,7 @@
 
 .grade-week-selector button strong {
   margin-top: 2px;
-  font-size: 0.88rem;
+  font-size: calc(0.88rem + 0.125rem);
 }
 
 .teacher-grades-workspace,
@@ -172,7 +172,7 @@
 .teacher-capture-heading h3 {
   margin: 2px 0 6px;
   font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: calc(1.5rem + 0.125rem);
   letter-spacing: -0.025em;
 }
 
@@ -180,7 +180,7 @@
   max-width: 700px;
   margin: 0;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: calc(0.82rem + 0.125rem);
   line-height: 1.55;
 }
 
@@ -203,12 +203,12 @@
 
 .teacher-capture-progress small {
   color: var(--muted);
-  font-size: 0.66rem;
+  font-size: calc(0.66rem + 0.125rem);
   font-weight: 750;
 }
 
 .teacher-capture-progress strong {
-  font-size: 0.86rem;
+  font-size: calc(0.86rem + 0.125rem);
 }
 
 .teacher-capture-progress > div {
@@ -259,7 +259,7 @@
   border-radius: 9px;
   background: var(--violet);
   color: var(--on-primary);
-  font-size: 0.76rem;
+  font-size: calc(0.76rem + 0.125rem);
   font-weight: 850;
 }
 
@@ -267,7 +267,7 @@
   display: block;
   margin: 3px 0 10px;
   color: var(--foreground);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + 0.125rem);
   font-weight: 850;
 }
 
@@ -284,7 +284,7 @@
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--muted-strong);
-  font-size: 0.75rem;
+  font-size: calc(0.75rem + 0.125rem);
   font-weight: 780;
   transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
 }
@@ -331,11 +331,11 @@
 
 .teacher-capture-context small {
   color: var(--muted);
-  font-size: 0.64rem;
+  font-size: calc(0.64rem + 0.125rem);
 }
 
 .teacher-capture-context strong {
-  font-size: 0.75rem;
+  font-size: calc(0.75rem + 0.125rem);
 }
 
 .teacher-capture-roster-section {
@@ -360,7 +360,7 @@
 .teacher-roster-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: calc(0.72rem + 0.125rem);
 }
 
 .teacher-student-search {
@@ -386,7 +386,7 @@
   border: 0;
   background: transparent;
   outline: 0;
-  font-size: 0.76rem;
+  font-size: calc(0.76rem + 0.125rem);
 }
 
 .teacher-weight-preview {
@@ -415,7 +415,7 @@
 
 .teacher-weight-preview b {
   margin-right: 3px;
-  font-size: 0.72rem;
+  font-size: calc(0.72rem + 0.125rem);
 }
 
 .teacher-weight-preview small {
@@ -453,12 +453,12 @@
 
 .grade-roster-criteria strong {
   color: var(--muted-strong);
-  font-size: 0.68rem;
+  font-size: calc(0.68rem + 0.125rem);
 }
 
 .grade-roster-criteria small {
   color: var(--muted);
-  font-size: 0.61rem;
+  font-size: calc(0.61rem + 0.125rem);
 }
 
 .grade-roster-header {
@@ -466,7 +466,7 @@
   border-bottom: 1px solid var(--border);
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: calc(0.7rem + 0.125rem);
   font-weight: 800;
   letter-spacing: 0.075em;
   text-transform: uppercase;
@@ -502,7 +502,7 @@
   border-radius: 12px;
   background: var(--violet-soft);
   color: var(--violet);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + 0.125rem);
   font-weight: 850;
 }
 
@@ -526,7 +526,7 @@
 .grade-student-cell em {
   width: fit-content;
   margin-top: 2px;
-  font-size: 0.61rem;
+  font-size: calc(0.61rem + 0.125rem);
   font-style: normal;
   font-weight: 760;
 }
@@ -549,7 +549,7 @@
 .grade-score-inputs label > span {
   display: none;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: calc(0.7rem + 0.125rem);
   font-weight: 750;
 }
 
@@ -574,7 +574,7 @@
   right: 7px;
   bottom: 13px;
   color: var(--muted);
-  font-size: 0.62rem;
+  font-size: calc(0.62rem + 0.125rem);
   pointer-events: none;
 }
 
@@ -592,7 +592,7 @@
   display: none;
   grid-area: label;
   color: var(--muted);
-  font-size: 0.67rem;
+  font-size: calc(0.67rem + 0.125rem);
   font-weight: 750;
 }
 
@@ -605,7 +605,7 @@
   padding: 5px 9px;
   border: 1px solid transparent;
   border-radius: 12px;
-  font-size: 1rem;
+  font-size: calc(1rem + 0.125rem);
   font-variant-numeric: tabular-nums;
   font-weight: 850;
 }
@@ -646,7 +646,7 @@
   border-radius: 10px;
   background: var(--surface);
   color: var(--foreground);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + 0.125rem);
   font-weight: 780;
   transition: transform 160ms ease, border-color 160ms ease, color 160ms ease;
 }
@@ -688,7 +688,7 @@
 .student-analysis-heading h3 {
   margin: 2px 0 5px;
   font-family: var(--font-display);
-  font-size: 1.42rem;
+  font-size: calc(1.42rem + 0.125rem);
   letter-spacing: -0.025em;
 }
 
@@ -696,7 +696,7 @@
 .student-analysis-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + 0.125rem);
   line-height: 1.5;
 }
 
@@ -714,14 +714,14 @@
 .student-results-count strong {
   color: var(--violet);
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: calc(1.35rem + 0.125rem);
   line-height: 1;
 }
 
 .student-results-count small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 0.63rem;
+  font-size: calc(0.63rem + 0.125rem);
   font-weight: 750;
 }
 
@@ -745,7 +745,7 @@
 
 .student-grade-summary .eyebrow {
   margin-bottom: 5px;
-  font-size: 0.58rem;
+  font-size: calc(0.58rem + 0.125rem);
 }
 
 .student-grade-summary::after {
@@ -765,7 +765,7 @@
   display: block;
   margin: 7px 0 3px;
   font-family: var(--font-display);
-  font-size: clamp(2.35rem, 4vw, 3.15rem);
+  font-size: calc(clamp(2.35rem, 4vw, 3.15rem) + 0.125rem);
   line-height: 1;
   letter-spacing: -0.06em;
 }
@@ -774,7 +774,7 @@
   position: relative;
   z-index: 1;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: calc(0.72rem + 0.125rem);
 }
 
 .student-grade-summary-bar {
@@ -827,7 +827,7 @@
 
 .student-subject-grade-card h3 {
   margin: 5px 0 0;
-  font-size: 1.14rem;
+  font-size: calc(1.14rem + 0.125rem);
 }
 
 .student-subject-teacher {
@@ -839,14 +839,14 @@
 
 .student-subject-teacher small {
   color: var(--muted);
-  font-size: 0.55rem;
+  font-size: calc(0.55rem + 0.125rem);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .student-subject-teacher strong {
-  font-size: 0.72rem;
+  font-size: calc(0.72rem + 0.125rem);
   font-weight: 760;
 }
 
@@ -877,7 +877,7 @@
 
 .student-grade-breakdown strong {
   overflow: hidden;
-  font-size: 0.74rem;
+  font-size: calc(0.74rem + 0.125rem);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -887,7 +887,7 @@
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted-strong);
-  font-size: 0.6rem;
+  font-size: calc(0.6rem + 0.125rem);
   font-weight: 750;
 }
 
@@ -911,7 +911,7 @@
   grid-row: 1;
   align-self: center;
   color: var(--foreground);
-  font-size: 0.86rem;
+  font-size: calc(0.86rem + 0.125rem);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1000,14 +1000,14 @@
 }
 
 .grading-total strong {
-  font-size: 1.25rem;
+  font-size: calc(1.25rem + 0.125rem);
   font-variant-numeric: tabular-nums;
 }
 
 .grading-total small {
   margin-top: 1px;
   color: var(--muted);
-  font-size: 0.67rem;
+  font-size: calc(0.67rem + 0.125rem);
 }
 
 .grading-total.is-ready strong { color: var(--mint); }
@@ -1045,12 +1045,12 @@
 }
 
 .grading-weight-field strong {
-  font-size: 0.83rem;
+  font-size: calc(0.83rem + 0.125rem);
 }
 
 .grading-weight-field output {
   color: var(--violet);
-  font-size: 0.84rem;
+  font-size: calc(0.84rem + 0.125rem);
   font-weight: 850;
 }
 
@@ -1083,7 +1083,7 @@
   align-items: center;
   gap: 8px;
   color: var(--muted-strong);
-  font-size: 0.86rem;
+  font-size: calc(0.86rem + 0.125rem);
   font-weight: 700;
 }
 
@@ -1156,7 +1156,7 @@
 
 .grade-metric-card small {
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: calc(0.7rem + 0.125rem);
   font-weight: 760;
 }
 
@@ -1167,7 +1167,7 @@
   margin: 18px 0 6px;
   color: var(--foreground);
   font-family: var(--font-display);
-  font-size: 2.3rem;
+  font-size: calc(2.3rem + 0.125rem);
   font-weight: 600;
   letter-spacing: -0.045em;
 }
@@ -1177,7 +1177,7 @@
   z-index: 1;
   margin: 0;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: calc(0.72rem + 0.125rem);
   line-height: 1.45;
 }
 
@@ -1223,13 +1223,13 @@
 .grade-chart-card h2 {
   margin: 4px 0 0;
   font-family: var(--font-display);
-  font-size: 1.34rem;
+  font-size: calc(1.34rem + 0.125rem);
   letter-spacing: -0.025em;
 }
 
 .grade-chart-kicker {
   color: var(--violet);
-  font-size: 0.65rem;
+  font-size: calc(0.65rem + 0.125rem);
   font-weight: 900;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1258,7 +1258,7 @@
 .grade-distribution-chart > div > strong,
 .grade-trend-chart > div > strong {
   color: var(--foreground);
-  font-size: 0.75rem;
+  font-size: calc(0.75rem + 0.125rem);
 }
 
 .grade-distribution-chart > div > div,
@@ -1289,7 +1289,7 @@
 .grade-distribution-chart span,
 .grade-trend-chart span {
   color: var(--muted);
-  font-size: 0.66rem;
+  font-size: calc(0.66rem + 0.125rem);
   font-weight: 780;
 }
 
@@ -1319,7 +1319,7 @@
 .grade-rubric-chart span {
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: calc(0.72rem + 0.125rem);
   font-weight: 740;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1344,7 +1344,7 @@
 .grade-subject-chart strong,
 .grade-rubric-chart strong {
   color: var(--foreground);
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + 0.125rem);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -1366,7 +1366,7 @@
 
 .grade-chart-empty span {
   max-width: 250px;
-  font-size: 0.76rem;
+  font-size: calc(0.76rem + 0.125rem);
   line-height: 1.45;
 }
 
@@ -1392,7 +1392,7 @@
   padding: 11px 14px;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 0.63rem;
+  font-size: calc(0.63rem + 0.125rem);
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1402,7 +1402,7 @@
   padding: 12px 14px;
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 0.73rem;
+  font-size: calc(0.73rem + 0.125rem);
 }
 
 .grade-recent-table > div:not(.grade-recent-head) > span:first-child {
@@ -1421,7 +1421,7 @@
   border-radius: 9px;
   background: var(--violet-soft);
   color: var(--violet);
-  font-size: 0.62rem;
+  font-size: calc(0.62rem + 0.125rem);
   font-style: normal;
   font-weight: 900;
 }
@@ -1440,7 +1440,7 @@
   padding: 4px 9px;
   border: 1px solid transparent;
   border-radius: 12px;
-  font-size: 0.88rem;
+  font-size: calc(0.88rem + 0.125rem);
   font-variant-numeric: tabular-nums;
   font-weight: 880;
 }
@@ -1468,7 +1468,7 @@
   border-radius: 13px;
   background: var(--surface);
   color: var(--violet);
-  font-size: 0.76rem;
+  font-size: calc(0.76rem + 0.125rem);
   font-weight: 850;
   white-space: nowrap;
   box-shadow: var(--shadow-sm);
@@ -1525,7 +1525,7 @@
 .director-overview-hero h3 {
   margin: 3px 0 5px;
   font-family: var(--font-display);
-  font-size: 1.42rem;
+  font-size: calc(1.42rem + 0.125rem);
   letter-spacing: -0.028em;
 }
 
@@ -1533,7 +1533,7 @@
   max-width: 620px;
   margin: 0;
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: calc(0.76rem + 0.125rem);
   line-height: 1.5;
 }
 
@@ -1563,14 +1563,14 @@
 
 .director-overview-metrics small {
   color: var(--muted);
-  font-size: 0.61rem;
+  font-size: calc(0.61rem + 0.125rem);
   font-weight: 760;
 }
 
 .director-overview-metrics strong {
   color: var(--violet);
   font-family: var(--font-display);
-  font-size: 1.34rem;
+  font-size: calc(1.34rem + 0.125rem);
   line-height: 1;
 }
 
@@ -1606,7 +1606,7 @@
 .director-overview-card h4 {
   margin: 3px 0 0;
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: calc(1.1rem + 0.125rem);
 }
 
 .director-overview-card > header > span {
@@ -1614,7 +1614,7 @@
   border-radius: 999px;
   background: var(--violet-soft);
   color: var(--violet);
-  font-size: 0.64rem;
+  font-size: calc(0.64rem + 0.125rem);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -1641,7 +1641,7 @@
   padding: 9px 15px;
   background: var(--surface-raised);
   color: var(--muted);
-  font-size: 0.61rem;
+  font-size: calc(0.61rem + 0.125rem);
   font-weight: 850;
   letter-spacing: 0.07em;
   text-transform: uppercase;
@@ -1651,7 +1651,7 @@
   padding: 11px 15px;
   border-top: 1px solid var(--border);
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: calc(0.7rem + 0.125rem);
 }
 
 .director-summary-table > div:not(.director-summary-head) > span:first-child,
@@ -1673,7 +1673,7 @@
   border-radius: 9px;
   background: var(--violet-soft);
   color: var(--violet);
-  font-size: 0.61rem;
+  font-size: calc(0.61rem + 0.125rem);
   font-style: normal;
   font-weight: 900;
 }
@@ -1692,7 +1692,7 @@
   border-radius: 9px;
   background: var(--violet-soft);
   color: var(--violet);
-  font-size: 0.68rem;
+  font-size: calc(0.68rem + 0.125rem);
   white-space: nowrap;
 }
 
@@ -1733,7 +1733,7 @@
 .director-group-list small,
 .director-student-list small {
   color: var(--muted);
-  font-size: 0.57rem;
+  font-size: calc(0.57rem + 0.125rem);
   font-weight: 720;
 }
 
@@ -1744,7 +1744,7 @@
 }
 
 .director-group-list b {
-  font-size: 0.72rem;
+  font-size: calc(0.72rem + 0.125rem);
 }
 
 .director-group-list .has-attention b {
@@ -1836,12 +1836,12 @@
 }
 
 .student-show-all-button strong {
-  font-size: 0.78rem;
+  font-size: calc(0.78rem + 0.125rem);
 }
 
 .student-show-all-button small {
   color: var(--muted);
-  font-size: 0.65rem;
+  font-size: calc(0.65rem + 0.125rem);
 }
 
 .student-grades-modal-backdrop,
@@ -1886,14 +1886,14 @@
 .student-grades-fullscreen-modal h2 {
   margin: 3px 0 4px;
   font-family: var(--font-display);
-  font-size: 1.55rem;
+  font-size: calc(1.55rem + 0.125rem);
   letter-spacing: -0.03em;
 }
 
 .student-grades-fullscreen-modal header p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: calc(0.75rem + 0.125rem);
 }
 
 .student-modal-average {
@@ -1909,7 +1909,7 @@
 
 .student-modal-average small {
   color: var(--muted);
-  font-size: 0.6rem;
+  font-size: calc(0.6rem + 0.125rem);
   font-weight: 750;
 }
 
@@ -1917,7 +1917,7 @@
   margin-top: 2px;
   color: var(--violet);
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: calc(1.35rem + 0.125rem);
 }
 
 .student-grades-fullscreen-modal > header > button,
@@ -1989,14 +1989,14 @@
 .grade-export-modal h2 {
   margin: 3px 0 4px;
   font-family: var(--font-display);
-  font-size: 1.4rem;
+  font-size: calc(1.4rem + 0.125rem);
   letter-spacing: -0.028em;
 }
 
 .grade-export-modal header p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: calc(0.75rem + 0.125rem);
 }
 
 .grade-export-fields {
@@ -2013,7 +2013,7 @@
 
 .grade-export-fields label > span {
   color: var(--muted-strong);
-  font-size: 0.69rem;
+  font-size: calc(0.69rem + 0.125rem);
   font-weight: 800;
 }
 
@@ -2056,13 +2056,13 @@
 
 .grade-export-preview > span strong {
   font-family: var(--font-display);
-  font-size: 1.45rem;
+  font-size: calc(1.45rem + 0.125rem);
 }
 
 .grade-export-preview > span small,
 .grade-export-preview p {
   color: var(--muted);
-  font-size: 0.62rem;
+  font-size: calc(0.62rem + 0.125rem);
 }
 
 .grade-export-preview p {
@@ -2086,7 +2086,7 @@
   gap: 7px;
   padding: 0 15px;
   border-radius: 11px;
-  font-size: 0.73rem;
+  font-size: calc(0.73rem + 0.125rem);
   font-weight: 850;
 }
 
@@ -2501,7 +2501,7 @@
   }
 
   .grade-week-selector button strong {
-    font-size: 0.78rem;
+    font-size: calc(0.78rem + 0.125rem);
   }
 
   .student-grade-breakdown,
