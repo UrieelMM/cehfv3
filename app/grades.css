@@ -1,3 +1,6 @@
+@import "./academic-grades.css";
+@import "./academic-reports.css";
+
 .qualifications-page {
   padding: clamp(10px, 1.6vw, 22px);
   border: 1px solid var(--border);

@@ -260,6 +260,31 @@ export type GradingWeights = Record<GradingCriterion, number>;
 
 export type WeeklyGradeScores = Record<GradingCriterion, number>;
 
+export type DailyGradeRecord = {
+  id: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  gradeDate: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentGrade?: string;
+  studentGroup?: string;
+  scores: WeeklyGradeScores;
+  weights: GradingWeights;
+  weightedScore: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TeacherGradingConfig = {
   teacherId: string;
   teacherName: string;
@@ -289,8 +314,64 @@ export type WeeklyGradeRecord = {
   scores: WeeklyGradeScores;
   weights: GradingWeights;
   weightedScore: number;
+  dayCount?: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type GradePeriodLevel = "daily" | "weekly" | "bimonthly" | "cycle";
+
+export type GradePeriodSummary = {
+  id: string;
+  level: GradePeriodLevel;
+  periodId: string;
+  periodLabel: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId?: string;
+  termLabel?: string;
+  weekId?: string;
+  weekLabel?: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentGrade?: string;
+  studentGroup?: string;
+  scores: WeeklyGradeScores;
+  weightedScore: number;
+  evidenceCount: number;
+};
+
+export type StudentWeeklyReport = {
+  id: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentGrade?: string;
+  studentGroup?: string;
+  achievement: string;
+  supportArea: string;
+  nextStep: string;
+  weeklyScore: number;
+  gradedDays: number;
+  status: "draft" | "published";
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
 };
 
 export type TaskPublicationStatus =

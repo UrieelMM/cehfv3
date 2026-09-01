@@ -15,7 +15,6 @@ import {
   Clock3,
   Copy,
   FileBarChart,
-  FileText,
   GraduationCap,
   Home,
   Eye,
@@ -58,10 +57,9 @@ import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { WorkshopsPage } from "@/components/workshops-page";
-import {
-  GradingWeightsCard,
-  WeeklyGradesPanel,
-} from "@/components/weekly-grades";
+import { GradingWeightsCard } from "@/components/weekly-grades";
+import { AcademicGradesPanel } from "@/components/academic-grades";
+import { AcademicReportsPage } from "@/components/academic-reports";
 import {
   ReviewCreateModal,
   ReviewsPage,
@@ -487,7 +485,7 @@ export function CEHFApp() {
     return watchAcademicCalendar(
       storedAcademicConfig,
       setAcademicCalendar,
-      (error) => reportFirebaseError("cargar semanas y trimestres", error),
+      (error) => reportFirebaseError("cargar semanas y bimestres", error),
     );
   }, [firebaseUser, profile, storedAcademicConfig]);
 
@@ -1896,10 +1894,12 @@ function SectionContent({
       );
     case "reports":
       return (
-        <ReportsPage
-          role={role}
-          state={state}
-          updateState={updateState}
+        <AcademicReportsPage
+          profile={profile}
+          academicConfig={academicConfig}
+          calendar={academicCalendar}
+          accounts={managedAccounts}
+          firebaseReady={firebaseReady}
         />
       );
     case "wall-newspaper":
@@ -2457,7 +2457,7 @@ function WeekPage({
 }) {
   return (
     <div className="qualifications-page">
-      <WeeklyGradesPanel
+      <AcademicGradesPanel
         profile={profile}
         academicConfig={academicConfig}
         calendar={academicCalendar}
@@ -2576,106 +2576,6 @@ function ProgressPage({
         )}
       </aside>
     </div>
-  );
-}
-
-function ReportsPage({
-  role,
-  state,
-  updateState,
-}: {
-  role: Role;
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-}) {
-  return (
-    <section className="reports-stack">
-      {state.reports
-        .filter((report) => role !== "student" || report.status === "published")
-        .map((report) => (
-          <article className="report-card" key={report.id}>
-            <div className="report-header">
-              <div>
-                <span
-                  className={`status-tag ${
-                    report.status === "published"
-                      ? "status-achieved"
-                      : "status-neutral"
-                  }`}
-                >
-                  {report.status === "published" ? "Publicado" : "Borrador"}
-                </span>
-                <h2>{report.week}</h2>
-                <p>
-                  {report.teacher} · Versión {report.version}
-                  {report.publishedAt ? ` · ${report.publishedAt}` : ""}
-                </p>
-              </div>
-              <FileText size={28} />
-            </div>
-            <div className="report-body">
-              <div className="report-summary">
-                <span className="eyebrow">Resumen</span>
-                <p>{report.summary}</p>
-              </div>
-              <div className="report-detail success-block">
-                <CheckCircle2 size={19} />
-                <div>
-                  <strong>Un logro para reconocer</strong>
-                  <p>{report.achievement}</p>
-                </div>
-              </div>
-              <div className="report-detail support-block">
-                <CircleHelp size={19} />
-                <div>
-                  <strong>Área de acompañamiento</strong>
-                  <p>{report.support}</p>
-                </div>
-              </div>
-              <div className="report-detail next-block">
-                <ArrowRight size={19} />
-                <div>
-                  <strong>Próximo paso</strong>
-                  <p>{report.nextStep}</p>
-                </div>
-              </div>
-            </div>
-            <div className="report-footer">
-              <span>
-                <ShieldCheck size={16} /> El detalle solo se muestra dentro del
-                portal.
-              </span>
-              {role !== "student" && report.status === "draft" && (
-                <button
-                  className="primary-button"
-                  onClick={() =>
-                    updateState(
-                      (previous) => ({
-                        ...previous,
-                        reports: previous.reports.map((item) =>
-                          item.id === report.id
-                            ? {
-                                ...item,
-                                status: "published",
-                                publishedAt: "Ahora",
-                              }
-                            : item,
-                        ),
-                      }),
-                      "Reporte publicado y aviso seguro encolado",
-                    )
-                  }
-                >
-                  Publicar reporte
-                </button>
-              )}
-            </div>
-          </article>
-        ))}
-    </section>
   );
 }
 

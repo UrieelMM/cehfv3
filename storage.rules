@@ -230,7 +230,7 @@ service firebase.storage {
 
     function academicTask(institutionId, schoolYearId, termId, weekId, subjectId, taskId) {
       return firestore.get(
-        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)
+        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)
       ).data;
     }
 
@@ -249,9 +249,9 @@ service firebase.storage {
 
     function hasActiveTaskExtension(institutionId, schoolYearId, termId, weekId, subjectId, taskId, studentId) {
       return firestore.exists(
-        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId)
+        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId)
       ) && firestore.get(
-        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId)
+        /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId)
       ).data.dueAt >= request.time;
     }
 
@@ -274,7 +274,7 @@ service firebase.storage {
         );
     }
 
-    match /institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}/recursos/{assetId} {
+    match /institutions/{institutionId}/ciclosEscolares/{schoolYearId}/bimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}/recursos/{assetId} {
       allow read: if canReadAcademicTask(
         institutionId, schoolYearId, termId, weekId, subjectId, taskId
       );
@@ -285,7 +285,7 @@ service firebase.storage {
       allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
-    match /institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}/entregas/{studentId}/{versionId}/{assetId} {
+    match /institutions/{institutionId}/ciclosEscolares/{schoolYearId}/bimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}/entregas/{studentId}/{versionId}/{assetId} {
       allow read: if canReadAcademicTask(
         institutionId, schoolYearId, termId, weekId, subjectId, taskId
       ) && (request.auth.uid == studentId || isStaff());

@@ -53,7 +53,7 @@ const whatsappPhoneNumberId = defineSecret("WHATSAPP_PHONE_NUMBER_ID");
 const whatsappWebhookVerifyToken = defineSecret("WHATSAPP_WEBHOOK_VERIFY_TOKEN");
 const whatsappAppSecret = defineSecret("WHATSAPP_APP_SECRET");
 const TASK_PATH =
-  "institutions/{institutionId}/ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}";
+  "institutions/{institutionId}/ciclosEscolares/{schoolYearId}/bimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}";
 const HISTORY_PATH = `${TASK_PATH}/entregas/{studentId}/historial/{eventId}`;
 const EXTENSION_PATH = `${TASK_PATH}/prorrogas/{studentId}`;
 const WORKSHOP_PATH =
@@ -645,10 +645,10 @@ export const saveAcademicCalendar = onCall(async (request) => {
       "Configura entre 1 y 60 semanas para el ciclo.",
     );
   }
-  if (!Array.isArray(input.terms) || input.terms.length < 1 || input.terms.length > 6) {
+  if (!Array.isArray(input.terms) || input.terms.length < 1 || input.terms.length > 5) {
     throw new HttpsError(
       "invalid-argument",
-      "Configura entre 1 y 6 trimestres para el ciclo.",
+      "Configura entre 1 y 5 bimestres para el ciclo.",
     );
   }
 
@@ -697,9 +697,9 @@ export const saveAcademicCalendar = onCall(async (request) => {
   const assignedWeeks = new Set<string>();
   const terms = input.terms.map((raw, index) => {
     const value = raw as Record<string, unknown>;
-    const id = calendarId(value.id, `El identificador del trimestre ${index + 1}`);
+    const id = calendarId(value.id, `El identificador del bimestre ${index + 1}`);
     if (termIds.has(id)) {
-      throw new HttpsError("invalid-argument", `El trimestre ${id} está duplicado.`);
+      throw new HttpsError("invalid-argument", `El bimestre ${id} está duplicado.`);
     }
     termIds.add(id);
     const selectedIds = Array.isArray(value.weekIds)
@@ -715,7 +715,7 @@ export const saveAcademicCalendar = onCall(async (request) => {
       if (assignedWeeks.has(weekId)) {
         throw new HttpsError(
           "invalid-argument",
-          "Cada semana sólo puede pertenecer a un trimestre.",
+          "Cada semana sólo puede pertenecer a un bimestre.",
         );
       }
       assignedWeeks.add(weekId);
@@ -747,7 +747,7 @@ export const saveAcademicCalendar = onCall(async (request) => {
   if (assignedWeeks.size !== weeks.length) {
     throw new HttpsError(
       "invalid-argument",
-      "Todas las semanas deben pertenecer exactamente a un trimestre.",
+      "Todas las semanas deben pertenecer exactamente a un bimestre.",
     );
   }
 
@@ -759,7 +759,7 @@ export const saveAcademicCalendar = onCall(async (request) => {
   const institutionRef = db.doc(`institutions/${director.institutionId}`);
   const cycleRef = institutionRef.collection("ciclosEscolares").doc(schoolYearId);
   const weeksCollection = cycleRef.collection("semanas");
-  const termsCollection = cycleRef.collection("trimestres");
+  const termsCollection = cycleRef.collection("bimestres");
   const configReference = institutionRef.collection("configuracion").doc("academica");
   const [existingWeeks, existingTerms, previousConfigSnapshot] = await Promise.all([
     weeksCollection.get(),
@@ -863,7 +863,7 @@ export const saveAcademicCalendar = onCall(async (request) => {
       schoolYearLabel,
       timezone,
       termId: context.currentTerm?.id ?? "",
-      termLabel: context.currentTerm?.label ?? "Sin trimestre activo",
+      termLabel: context.currentTerm?.label ?? "Sin bimestre activo",
       weekId: context.currentWeek?.id ?? "",
       weekLabel: context.currentWeek?.label ?? "Sin semana activa",
       weekStartDate: context.currentWeek?.startDate ?? "",
@@ -1205,13 +1205,13 @@ export const createMaterial = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Agrega al menos un enlace o archivo.");
   }
   const schoolYearId = calendarId(input.schoolYearId, "El ciclo escolar");
-  const termId = calendarId(input.termId, "El trimestre");
+  const termId = calendarId(input.termId, "El bimestre");
   const weekId = calendarId(input.weekId, "La semana");
   const weekReference = db.doc(
     `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/semanas/${weekId}`,
   );
   const termReference = db.doc(
-    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/trimestres/${termId}`,
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/bimestres/${termId}`,
   );
   const configReference = db.doc(
     `institutions/${actor.institutionId}/configuracion/academica`,
@@ -1311,7 +1311,7 @@ export const createMaterial = onCall(async (request) => {
     schoolYearId,
     schoolYearLabel: String(config?.schoolYearLabel ?? input.schoolYearLabel ?? schoolYearId),
     termId,
-    termLabel: String(term?.label ?? input.termLabel ?? "Trimestre"),
+    termLabel: String(term?.label ?? input.termLabel ?? "Bimestre"),
     weekId,
     weekLabel: String(week?.label ?? input.weekLabel ?? "Semana"),
     subjectId,
@@ -1764,13 +1764,13 @@ export const createWeeklyReview = onCall(async (request) => {
   );
   const { publicQuestions, answerKey } = reviewQuestions(input.questions);
   const schoolYearId = calendarId(input.schoolYearId, "El ciclo escolar");
-  const termId = calendarId(input.termId, "El trimestre");
+  const termId = calendarId(input.termId, "El bimestre");
   const weekId = calendarId(input.weekId, "La semana");
   const weekReference = db.doc(
     `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/semanas/${weekId}`,
   );
   const termReference = db.doc(
-    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/trimestres/${termId}`,
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/bimestres/${termId}`,
   );
   const configReference = db.doc(
     `institutions/${actor.institutionId}/configuracion/academica`,
@@ -1855,7 +1855,7 @@ export const createWeeklyReview = onCall(async (request) => {
     schoolYearId,
     schoolYearLabel: String(config?.schoolYearLabel ?? input.schoolYearLabel ?? schoolYearId),
     termId,
-    termLabel: String(term?.label ?? input.termLabel ?? "Trimestre"),
+    termLabel: String(term?.label ?? input.termLabel ?? "Bimestre"),
     weekId,
     weekLabel: String(week?.label ?? input.weekLabel ?? "Semana"),
     subjectId,
@@ -3331,7 +3331,7 @@ async function syncInstitutionAcademicContext(institutionId: string) {
   );
   const [weekSnapshots, termSnapshots] = await Promise.all([
     cycleReference.collection("semanas").where("active", "==", true).get(),
-    cycleReference.collection("trimestres").where("active", "==", true).get(),
+    cycleReference.collection("bimestres").where("active", "==", true).get(),
   ]);
   const weeks = weekSnapshots.docs
     .map((snapshot) => {
@@ -3351,7 +3351,7 @@ async function syncInstitutionAcademicContext(institutionId: string) {
     const data = snapshot.data();
     return {
       id: snapshot.id,
-      label: String(data.label ?? "Trimestre"),
+      label: String(data.label ?? "Bimestre"),
       weekIds: Array.isArray(data.weekIds) ? data.weekIds.map(String) : [],
       startDate: String(data.startDate ?? ""),
       endDate: String(data.endDate ?? ""),
@@ -3367,7 +3367,7 @@ async function syncInstitutionAcademicContext(institutionId: string) {
       : "unconfigured";
   const nextState = {
     termId: context.currentTerm?.id ?? "",
-    termLabel: context.currentTerm?.label ?? "Sin trimestre activo",
+    termLabel: context.currentTerm?.label ?? "Sin bimestre activo",
     weekId: context.currentWeek?.id ?? "",
     weekLabel:
       context.currentWeek?.label ??

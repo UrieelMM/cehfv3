@@ -1773,8 +1773,8 @@ export function AcademicConfigurationCard({
       ? calendar.terms.map(({ id, label, weekIds }) => ({ id, label, weekIds }))
       : [
           {
-            id: "trimestre1",
-            label: "Trimestre 1",
+            id: "bimestre1",
+            label: "Bimestre 1",
             weekIds: firstWeek ? [firstWeek.id] : [],
           },
         ],
@@ -1820,9 +1820,10 @@ export function AcademicConfigurationCard({
         return `${sortedWeeks[index - 1].label} y ${sortedWeeks[index].label} se traslapan.`;
       }
     }
-    if (!terms.length) return "Agrega al menos un trimestre.";
+    if (!terms.length) return "Agrega al menos un bimestre.";
+    if (terms.length > 5) return "El ciclo puede tener un máximo de cinco bimestres.";
     if (terms.some((term) => !term.label.trim() || !term.weekIds.length)) {
-      return "Cada trimestre necesita nombre y al menos una semana.";
+      return "Cada bimestre necesita nombre y al menos una semana.";
     }
     const weekOrder = new Map(
       sortedWeeks.map((week, index) => [week.id, index]),
@@ -1842,9 +1843,9 @@ export function AcademicConfigurationCard({
     }
     const assignments = terms.flatMap((term) => term.weekIds);
     const unassigned = weeks.find((week) => !assignments.includes(week.id));
-    if (unassigned) return `Asigna ${unassigned.label} a un trimestre.`;
+    if (unassigned) return `Asigna ${unassigned.label} a un bimestre.`;
     if (new Set(assignments).size !== assignments.length) {
-      return "Cada semana sólo puede pertenecer a un trimestre.";
+      return "Cada semana sólo puede pertenecer a un bimestre.";
     }
     return "";
   }, [schoolYearId, schoolYearLabel, terms, weeks]);
@@ -1890,15 +1891,15 @@ export function AcademicConfigurationCard({
   function addTerm() {
     const nextNumber = terms.length + 1;
     const usedIds = new Set(terms.map((term) => term.id));
-    let id = `trimestre${nextNumber}`;
+    let id = `bimestre${nextNumber}`;
     let suffix = nextNumber;
     while (usedIds.has(id)) {
       suffix += 1;
-      id = `trimestre${suffix}`;
+      id = `bimestre${suffix}`;
     }
     setTerms((current) => [
       ...current,
-      { id, label: `Trimestre ${nextNumber}`, weekIds: [] },
+      { id, label: `Bimestre ${nextNumber}`, weekIds: [] },
     ]);
   }
 
@@ -1976,7 +1977,7 @@ export function AcademicConfigurationCard({
       <div className="academic-path-preview">
         <span>{schoolYearId || "ciclo-escolar"}</span>
         <ChevronRight size={14} />
-        <span>{config.termId || "trimestre"}</span>
+        <span>{config.termId || "bimestre"}</span>
         <ChevronRight size={14} />
         <span>{currentWeek?.id ?? "semana"}</span>
         <ChevronRight size={14} />
@@ -2113,12 +2114,12 @@ export function AcademicConfigurationCard({
       <div className="academic-calendar-block">
         <div className="academic-calendar-title">
           <div>
-            <span className="eyebrow">Trimestres</span>
+            <span className="eyebrow">Bimestres</span>
             <h3>Agrupa las semanas</h3>
-            <p>Cada semana pertenece a un solo trimestre para evitar reportes ambiguos.</p>
+            <p>Cada semana pertenece a un solo bimestre para evitar reportes ambiguos.</p>
           </div>
-          <button className="secondary-button" type="button" onClick={addTerm}>
-            <Plus size={16} /> Agregar trimestre
+          <button className="secondary-button" type="button" onClick={addTerm} disabled={terms.length >= 5}>
+            <Plus size={16} /> Agregar bimestre
           </button>
         </div>
         <div className="academic-term-grid">
@@ -2126,7 +2127,7 @@ export function AcademicConfigurationCard({
             <article className="academic-term-card" key={term.id}>
               <header>
                 <label>
-                  Nombre del trimestre
+                  Nombre del bimestre
                   <input
                     value={term.label}
                     onChange={(event) =>
@@ -2176,14 +2177,14 @@ export function AcademicConfigurationCard({
             </article>
           ))}
         </div>
-        {weekPagination("Paginación de semanas para los trimestres")}
+        {weekPagination("Paginación de semanas para los bimestres")}
       </div>
 
       <div className={`academic-integrity-note ${validationMessage ? "has-error" : "is-ready"}`}>
         {validationMessage ? <CircleAlert size={17} /> : <ShieldCheck size={17} />}
         <span>
           {validationMessage ||
-            "Calendario consistente: todas las semanas tienen un trimestre y no hay traslapes."}
+            "Calendario consistente: todas las semanas tienen un bimestre y no hay traslapes."}
         </span>
       </div>
 

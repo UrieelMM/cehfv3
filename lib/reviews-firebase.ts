@@ -344,7 +344,7 @@ export async function createWeeklyReview(
   const week = calendar.weeks.find((item) => item.id === input.weekId);
   const term = calendar.terms.find((item) => item.weekIds.includes(input.weekId));
   if (!week || !term) {
-    throw new Error("Selecciona una semana configurada dentro de un trimestre.");
+    throw new Error("Selecciona una semana configurada dentro de un bimestre.");
   }
   if (input.questions.length < 1 || input.questions.length > 30) {
     throw new Error("Agrega entre 1 y 30 preguntas.");

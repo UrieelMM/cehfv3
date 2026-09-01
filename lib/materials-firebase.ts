@@ -235,7 +235,7 @@ export async function createLearningMaterial(
   const week = calendar.weeks.find((item) => item.id === input.weekId);
   const term = calendar.terms.find((item) => item.weekIds.includes(input.weekId));
   if (!week || !term) {
-    throw new Error("Selecciona una semana configurada dentro de un trimestre.");
+    throw new Error("Selecciona una semana configurada dentro de un bimestre.");
   }
   if (!input.links.some((link) => link.url.trim()) && input.files.length === 0) {
     throw new Error("Agrega al menos un enlace o archivo.");
