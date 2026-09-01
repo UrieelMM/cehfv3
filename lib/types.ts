@@ -236,6 +236,19 @@ export type AcademicCalendarInput = {
   terms: Array<Pick<AcademicTerm, "id" | "label" | "weekIds">>;
 };
 
+export type AcademicCalendarImage = {
+  institutionId: string;
+  imagePath: string;
+  imageUrl: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  published: boolean;
+  updatedBy: string;
+  updatedByName: string;
+  updatedAt: string;
+};
+
 export type GradingCriterion =
   | "classWork"
   | "homework"
@@ -299,6 +312,24 @@ export type TaskAttachment = {
   storagePath: string;
   contentType: string;
   size: number;
+  downloadUrl?: string;
+};
+
+export type TaskResource =
+  | { kind: "attachment"; attachment: TaskAttachment }
+  | { kind: "link"; link: TaskLink };
+
+export type TaskResourceView = {
+  institutionId: string;
+  taskId: string;
+  resourceId: string;
+  resourceKind: "attachment" | "link";
+  resourceLabel: string;
+  studentId: string;
+  studentName: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  viewCount: number;
 };
 
 export type TaskAssignment = {
@@ -922,7 +953,6 @@ export type SectionKey =
   | "tasks"
   | "weekly-progress"
   | "reports"
-  | "weekly-materials"
   | "wall-newspaper"
   | "forum"
   | "workshops"

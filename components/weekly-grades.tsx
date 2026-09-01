@@ -1601,7 +1601,7 @@ export function WeeklyGradesPanel({
           <span className="eyebrow">Centro de resultados</span>
           <h2>
             {profile.role === "director"
-              ? "Panorama académico"
+              ? "Historial académico"
               : profile.role === "teacher"
                 ? "Calificaciones semanales"
                 : "Tus calificaciones de la semana"}

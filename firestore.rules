@@ -448,9 +448,57 @@ service cloud.firestore {
         }
       }
 
+      function validVisualCalendar(data) {
+        return data.keys().hasAll([
+            "institutionId", "imagePath", "fileName", "contentType", "size",
+            "published", "updatedBy", "updatedByName", "updatedAt"
+          ])
+          && data.keys().hasOnly([
+            "institutionId", "imagePath", "fileName", "contentType", "size",
+            "published", "updatedBy", "updatedByName", "updatedAt"
+          ])
+          && data.institutionId == institutionId
+          && data.imagePath is string
+          && data.fileName is string
+          && data.fileName.size() <= 160
+          && data.contentType is string
+          && data.size is int
+          && data.size >= 0
+          && data.size <= 10 * 1024 * 1024
+          && data.published is bool
+          && data.updatedBy == request.auth.uid
+          && data.updatedByName is string
+          && data.updatedByName.size() > 0
+          && data.updatedAt is timestamp
+          && (
+            (
+              data.published == true
+              && data.imagePath.matches(
+                "institutions/" + institutionId + "/academic-calendar/[^/]+"
+              )
+              && data.contentType.matches("image/(jpeg|jpg|pjpeg|png|webp)")
+              && data.size > 0
+            ) || (
+              data.published == false
+              && data.imagePath == ""
+              && data.fileName == ""
+              && data.contentType == ""
+              && data.size == 0
+            )
+          );
+      }
+
+      match /configuracion/calendarioVisual {
+        allow read: if isActive() && profile().institutionId == institutionId;
+        allow create, update: if isDirector()
+          && profile().institutionId == institutionId
+          && validVisualCalendar(request.resource.data);
+        allow delete: if false;
+      }
+
       match /configuracion/{documentId} {
         allow read: if isActive() && profile().institutionId == institutionId;
-        allow create, update: if !(documentId in ["academica", "whatsapp"])
+        allow create, update: if !(documentId in ["academica", "whatsapp", "calendarioVisual"])
           && isDirector()
           && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;
@@ -745,6 +793,61 @@ service cloud.firestore {
             && request.resource.data.institutionId == institutionId
             && request.resource.data.studentId == studentId
             && request.resource.data.dueAt > request.time;
+          allow delete: if false;
+        }
+
+        match /resourceViews/{resourceId}/students/{studentId} {
+          function validResourceView(data) {
+            return data.keys().hasAll([
+                "institutionId", "taskId", "resourceId", "resourceKind",
+                "resourceLabel", "studentId", "studentName",
+                "firstOpenedAt", "lastOpenedAt", "viewCount"
+              ])
+              && data.keys().hasOnly([
+                "institutionId", "taskId", "resourceId", "resourceKind",
+                "resourceLabel", "studentId", "studentName",
+                "firstOpenedAt", "lastOpenedAt", "viewCount"
+              ])
+              && data.institutionId == institutionId
+              && data.taskId == taskId
+              && data.resourceId == resourceId
+              && data.resourceKind in ["attachment", "link"]
+              && data.resourceLabel is string
+              && data.resourceLabel.size() > 0
+              && data.studentId == studentId
+              && data.studentName is string
+              && data.studentName.size() > 0
+              && data.firstOpenedAt is timestamp
+              && data.lastOpenedAt is timestamp
+              && data.viewCount is int
+              && data.viewCount > 0;
+          }
+
+          allow read: if taskBelongsToInstitution(parentTask()) && (
+            isTaskStaff(parentTask()) || request.auth.uid == studentId
+          );
+          allow create: if taskBelongsToInstitution(parentTask())
+            && isAssignedStudent(parentTask())
+            && parentTask().status in ["published", "closed"]
+            && request.auth.uid == studentId
+            && validResourceView(request.resource.data)
+            && request.resource.data.viewCount == 1;
+          allow update: if taskBelongsToInstitution(parentTask())
+            && isAssignedStudent(parentTask())
+            && parentTask().status in ["published", "closed"]
+            && request.auth.uid == studentId
+            && validResourceView(request.resource.data)
+            && request.resource.data.institutionId == resource.data.institutionId
+            && request.resource.data.taskId == resource.data.taskId
+            && request.resource.data.resourceId == resource.data.resourceId
+            && request.resource.data.resourceKind == resource.data.resourceKind
+            && request.resource.data.resourceLabel == resource.data.resourceLabel
+            && request.resource.data.studentId == resource.data.studentId
+            && request.resource.data.studentName == resource.data.studentName
+            && request.resource.data.firstOpenedAt == resource.data.firstOpenedAt
+            && request.resource.data.viewCount == resource.data.viewCount + 1
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["lastOpenedAt", "viewCount"]);
           allow delete: if false;
         }
 

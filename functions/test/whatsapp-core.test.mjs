@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildStudentSummaryLine,
+  buildDailyReportTemplateParameters,
   buildTemplateParameters,
   dailyOutboxId,
   isOptOutMessage,
@@ -32,6 +33,7 @@ test("calcula fecha y hora escolar en America/Mexico_City", () => {
 test("genera un resumen sin calificaciones ni nombres de materias", () => {
   const summary = {
     studentId: "student-1",
+    studentName: "Mateo Hernández",
     firstName: "Mateo",
     submitted: 3,
     total: 4,
@@ -42,14 +44,39 @@ test("genera un resumen sin calificaciones ni nombres de materias", () => {
     "Mateo: 3 de 4 entregadas; 1 pendiente.",
   );
   const parameters = buildTemplateParameters("2026-08-19", [summary]);
-  assert.match(parameters[0], /miércoles,? 19 de agosto/i);
+  assert.match(parameters[0], /miércoles,? 19 de agosto de 2026/i);
   assert.equal(parameters[1], "Mateo: 3 de 4 entregadas; 1 pendiente.");
+});
+
+test("genera los seis parámetros del reporte diario con emojis", () => {
+  assert.deepEqual(
+    buildDailyReportTemplateParameters({
+      guardianName: "María Hernández",
+      studentName: "Mateo Hernández",
+      businessDate: "2026-08-19",
+      attendance: "present",
+      participation: "neutral",
+      homework: { total: 2, pending: 1 },
+    }),
+    [
+      "María",
+      "Mateo Hernández",
+      "miércoles, 19 de agosto de 2026",
+      "✅",
+      "😐",
+      "❌",
+    ],
+  );
 });
 
 test("la clave diaria evita duplicados por contacto y fecha", () => {
   assert.equal(
     dailyOutboxId("2026-08-19", "guardian_123"),
     "daily_2026-08-19_guardian_123",
+  );
+  assert.equal(
+    dailyOutboxId("2026-08-19", "guardian_123", "student_456"),
+    "daily_2026-08-19_guardian_123_student_456",
   );
 });
 

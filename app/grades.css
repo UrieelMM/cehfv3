@@ -84,27 +84,32 @@
 
 .grade-week-selector {
   display: grid;
-  min-width: 338px;
+  min-width: 292px;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 5px;
+  gap: 4px;
+  padding: 4px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 13px;
   background: var(--surface-soft);
 }
 
 .grade-week-selector button {
   display: flex;
-  min-height: 52px;
+  min-height: 43px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 8px 11px;
+  gap: 6px;
+  padding: 6px 8px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: transparent;
   color: var(--muted);
   transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease, color 180ms ease;
+}
+
+.grade-week-selector button > svg {
+  width: 15px;
+  height: 15px;
 }
 
 .grade-week-selector button:not(:disabled):hover {
@@ -125,15 +130,15 @@
 }
 
 .grade-week-selector button small {
-  font-size: calc(0.68rem + 0.125rem);
-  font-weight: 700;
+  font-size: 0.56rem;
+  font-weight: 740;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .grade-week-selector button strong {
-  margin-top: 2px;
-  font-size: calc(0.88rem + 0.125rem);
+  margin-top: 1px;
+  font-size: 0.72rem;
 }
 
 .teacher-grades-workspace,
@@ -1459,20 +1464,25 @@
 
 .grade-export-button {
   display: inline-flex;
-  min-height: 46px;
+  min-height: 39px;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 0 15px;
+  gap: 6px;
+  padding: 0 12px;
   border: 1px solid color-mix(in srgb, var(--violet) 28%, var(--border));
-  border-radius: 13px;
+  border-radius: 10px;
   background: var(--surface);
   color: var(--violet);
-  font-size: calc(0.76rem + 0.125rem);
-  font-weight: 850;
+  font-size: var(--font-button);
+  font-weight: 800;
   white-space: nowrap;
   box-shadow: var(--shadow-sm);
   transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.grade-export-button > svg {
+  width: 15px;
+  height: 15px;
 }
 
 .grade-export-button:hover:not(:disabled) {
@@ -2080,14 +2090,14 @@
 
 .grade-export-modal > footer button {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 39px;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 0 15px;
-  border-radius: 11px;
-  font-size: calc(0.73rem + 0.125rem);
-  font-weight: 850;
+  padding: 0 13px;
+  border-radius: 10px;
+  font-size: var(--font-button);
+  font-weight: 800;
 }
 
 .grade-export-cancel {
@@ -2501,7 +2511,7 @@
   }
 
   .grade-week-selector button strong {
-    font-size: calc(0.78rem + 0.125rem);
+    font-size: 0.68rem;
   }
 
   .student-grade-breakdown,

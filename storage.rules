@@ -80,6 +80,21 @@ service firebase.storage {
         );
     }
 
+    function taskResourceSafeUpload() {
+      return request.resource.size < 100 * 1024 * 1024
+        && request.resource.contentType.matches(
+          "(application/pdf|application/octet-stream|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-(excel|powerpoint)|image/.*|audio/.*|video/.*|text/(plain|csv))"
+        );
+    }
+
+    function academicCalendarImageUpload() {
+      return request.resource.size > 0
+        && request.resource.size <= 10 * 1024 * 1024
+        && request.resource.contentType.matches(
+          "image/(jpeg|jpg|pjpeg|png|webp)"
+        );
+    }
+
     function learningMaterial(institutionId, materialId) {
       return firestore.get(
         /databases/(default)/documents/institutions/$(institutionId)/materials/$(materialId)
@@ -265,7 +280,7 @@ service firebase.storage {
       );
       allow create: if isStaff()
         && sameInstitution(institutionId)
-        && safeUpload();
+        && taskResourceSafeUpload();
       allow update: if false;
       allow delete: if isDirector() && sameInstitution(institutionId);
     }
@@ -288,7 +303,7 @@ service firebase.storage {
       allow read: if sameInstitution(institutionId);
       allow create, update: if isStaff()
         && sameInstitution(institutionId)
-        && safeUpload();
+        && taskResourceSafeUpload();
       allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
@@ -379,6 +394,14 @@ service firebase.storage {
         && request.resource.size < 4 * 1024 * 1024
         && request.resource.contentType.matches("image/(jpeg|jpg|pjpeg|png|webp)");
       allow delete: if canManageProfilePhoto(institutionId, userId);
+    }
+
+    match /institutions/{institutionId}/academic-calendar/{assetId} {
+      allow read: if sameInstitution(institutionId);
+      allow create, update: if isDirector()
+        && sameInstitution(institutionId)
+        && academicCalendarImageUpload();
+      allow delete: if isDirector() && sameInstitution(institutionId);
     }
 
     match /{allPaths=**} {

@@ -183,6 +183,31 @@
 .task-resource-list strong, .task-resource-list small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-resource-list strong { font-size: calc(.65rem + 0.125rem); }
 .task-resource-list small { max-width: 380px; margin-top: 3px; color: var(--muted); font-size: calc(.55rem + 0.125rem); }
+.task-resource-list > :is(a, button):hover { border-color: color-mix(in srgb, var(--violet) 28%, var(--border)); background: color-mix(in srgb, var(--violet-soft) 25%, var(--surface)); transform: translateY(-1px); }
+.task-resource-viewed { display: inline-flex; align-items: center; gap: 3px; padding: 4px 6px; border-radius: 999px; background: var(--mint-soft); color: var(--mint); font-size: .58rem; font-weight: 820; white-space: nowrap; }
+.task-resource-viewer-backdrop { z-index: 320; }
+.task-resource-viewer .task-resource-open-action { display: inline-flex; width: fit-content; margin-top: 14px; color: white; text-decoration: none; }
+.task-resource-loading { --task-resource-accent: var(--violet); --task-resource-accent-soft: var(--violet-soft); position: relative; display: grid; min-height: 430px; overflow: hidden; align-content: center; justify-items: center; padding: 36px; border: 1px solid var(--border); border-radius: 15px; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--task-resource-accent-soft) 70%, transparent), transparent 43%), var(--surface-soft); text-align: center; }
+.task-resource-loading.is-audio { --task-resource-accent: var(--mint); --task-resource-accent-soft: var(--mint-soft); }
+.task-resource-loading.is-video { --task-resource-accent: var(--coral); --task-resource-accent-soft: var(--coral-soft); }
+.task-resource-loading.is-image { --task-resource-accent: var(--gold); --task-resource-accent-soft: var(--gold-soft); }
+.task-resource-loading.is-link { --task-resource-accent: var(--blue); --task-resource-accent-soft: var(--blue-soft); }
+.task-resource-loading::after { position: absolute; width: 380px; height: 380px; border: 1px solid color-mix(in srgb, var(--task-resource-accent) 9%, transparent); border-radius: 50%; content: ""; pointer-events: none; transform: translateY(-36%); }
+.task-resource-loading-preview { position: relative; z-index: 1; display: grid; width: 104px; height: 130px; align-content: start; gap: 10px; padding: 16px 14px; border: 1px solid color-mix(in srgb, var(--task-resource-accent) 18%, var(--border)); border-radius: 13px; background: var(--surface); box-shadow: 0 18px 45px rgb(24 35 68 / .13); transform: rotate(-2deg); }
+.task-resource-loading-preview::after { position: absolute; top: 0; right: 0; width: 27px; height: 27px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); background: var(--surface-soft); clip-path: polygon(100% 0, 100% 100%, 0 0); content: ""; }
+.task-resource-loading-preview > span { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 11px; background: var(--task-resource-accent-soft); color: var(--task-resource-accent); }
+.task-resource-loading-preview > i { display: block; width: 100%; height: 6px; overflow: hidden; border-radius: 999px; background: var(--border); }
+.task-resource-loading-preview > i:nth-of-type(2) { width: 78%; }
+.task-resource-loading-preview > i:nth-of-type(3) { width: 56%; }
+.task-resource-loading-preview > i::after { display: block; width: 52%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--task-resource-accent) 26%, transparent), transparent); animation: task-resource-line 1.35s ease-in-out infinite; content: ""; transform: translateX(-120%); }
+.task-resource-loading-copy { position: relative; z-index: 1; margin-top: 22px; }
+.task-resource-loading-copy small { display: block; color: var(--task-resource-accent); font-size: .58rem; font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
+.task-resource-loading-copy strong { display: block; margin-top: 6px; color: var(--foreground); font-family: var(--font-display); font-size: 1.16rem; }
+.task-resource-loading-copy p { margin: 6px 0 0; color: var(--muted); font-size: .68rem; }
+.task-resource-loading-track { position: relative; z-index: 1; display: block; width: min(270px, 78%); height: 4px; margin-top: 18px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--task-resource-accent) 10%, var(--border)); }
+.task-resource-loading-track > i { position: absolute; width: 42%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--task-resource-accent), color-mix(in srgb, var(--task-resource-accent) 45%, var(--mint))); animation: task-resource-progress 1.25s cubic-bezier(.4, 0, .2, 1) infinite; inset: 0 auto 0 0; }
+@keyframes task-resource-line { 55%, 100% { transform: translateX(220%); } }
+@keyframes task-resource-progress { 0% { transform: translateX(-110%); } 55%, 100% { transform: translateX(250%); } }
 .task-flow-grid { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 15px; }
 .task-flow-grid.student-flow { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); }
 .task-response-panel, .task-review-panel, .task-timeline-panel { min-width: 0; }
@@ -332,6 +357,12 @@
   .task-link-row .plain-icon { grid-column: 2; grid-row: 1 / 3; }
   .task-detail-header { grid-template-columns: auto minmax(0, 1fr) auto; padding: 9px 12px; }
   .task-detail-header > .task-status-badge { display: none; }
+  .task-resource-loading { min-height: 310px; padding: 28px 18px; }
+  .task-resource-loading-preview { width: 88px; height: 110px; gap: 8px; padding: 13px 12px; }
+  .task-resource-loading-preview > span { width: 34px; height: 34px; border-radius: 9px; }
+  .task-resource-loading-copy { margin-top: 18px; }
+  .task-resource-loading-copy strong { font-size: 1rem; }
+  .task-resource-loading-copy p { max-width: 280px; line-height: 1.45; }
   .task-detail-hero { padding: 20px; }
   .task-detail-hero aside { grid-template-columns: 1fr; }
   .task-control-actions > span { width: 100%; margin-left: 0; }
@@ -349,4 +380,7 @@
   .task-administration-history > div:last-child > span { grid-template-columns: auto 1fr; }
   .task-administration-history small { grid-column: 2; }
 }
-@media (prefers-reduced-motion: reduce) { .task-loading-grid > span { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .task-loading-grid > span, .task-resource-loading-preview > i::after, .task-resource-loading-track > i { animation: none; }
+  .task-resource-loading-track > i { width: 100%; }
+}

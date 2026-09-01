@@ -336,7 +336,7 @@ export function WhatsAppAdminPanel({
           <div className="whatsapp-template-preview">
             <strong>Plantilla requerida en Meta: {configuration.templateName}</strong>
             <code>
-              {"CEHF Primaria — resumen diario del {{1}}:\n{{2}}\nEste aviso no incluye calificaciones. Responde BAJA para dejar de recibirlo."}
+              {"Hola {{1}}, te enviamos el reporte de {{2}} del día {{3}}.\n\nAsistencia: {{4}}\nParticipación: {{5}}\nTarea: {{6}}\n\nCentro Educativo Héroes de la Fe\nEste es un mensaje informativo. Favor de no responder."}
             </code>
           </div>
 

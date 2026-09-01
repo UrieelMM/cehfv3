@@ -31,16 +31,17 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TaskResourceViewer } from "@/components/task-resource-viewer";
 import {
   closeTaskAssignment,
   extendTaskForGroup,
-  getTaskAttachmentUrl,
   grantIndividualTaskExtension,
   isFirebaseTaskAssignment,
   isTaskSubmissionOpen,
+  loadViewedTaskResourceIds,
   markTaskSubmissionReviewed,
   publishTaskNow,
   sendTaskFeedback,
@@ -57,17 +58,17 @@ import type {
   ManagedAccount,
   Role,
   TaskAssignment,
-  TaskAttachment,
   TaskCreateInput,
   TaskExtension,
   TaskHistoryEvent,
+  TaskResource,
   TaskSubmission,
   UserProfile,
 } from "@/lib/types";
 
 const TASK_PAGE_SIZE = 6;
 const acceptedTaskFiles =
-  ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.txt";
+  ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.txt,.csv,audio/*,video/*";
 
 const subjectOptions = [
   "Español",
@@ -422,8 +423,8 @@ export function TaskCreateModal({
 
   function selectFile(index: number, file?: File) {
     if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error("Cada archivo debe pesar menos de 20 MB.");
+    if (file.size >= 100 * 1024 * 1024) {
+      toast.error("Cada recurso debe pesar menos de 100 MB.");
       return;
     }
     setFiles((current) =>
@@ -652,7 +653,7 @@ export function TaskCreateModal({
                   <UploadCloud size={20} />
                   <span>
                     <strong>{file?.name ?? `Seleccionar archivo ${index + 1}`}</strong>
-                    <small>{file ? formatBytes(file.size) : "PDF, Office o imagen · máx. 20 MB"}</small>
+                    <small>{file ? formatBytes(file.size) : "PDF, Office, imagen, audio o vídeo · máx. 100 MB"}</small>
                   </span>
                   <input
                     type="file"
@@ -826,6 +827,8 @@ export function TaskDetailModal({
     !liveFirebaseTask && staff ? demoHistory(demoSubmission(profile)) : [],
   );
   const [taskHistory, setTaskHistory] = useState<TaskHistoryEvent[]>([]);
+  const [selectedResource, setSelectedResource] = useState<TaskResource | null>(null);
+  const [viewedResourceIds, setViewedResourceIds] = useState<Set<string>>(new Set());
   const [extension, setExtension] = useState<TaskExtension | null>(null);
   const [response, setResponse] = useState("");
   const [responseFiles, setResponseFiles] = useState<File[]>([]);
@@ -864,13 +867,17 @@ export function TaskDetailModal({
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (selectedResource) setSelectedResource(null);
+      else onClose();
+    };
     window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, selectedResource]);
 
   useEffect(() => {
     if (!liveFirebaseTask) return;
@@ -885,6 +892,23 @@ export function TaskDetailModal({
       toast.error(error.message),
     );
   }, [activeSelectedStudentId, liveFirebaseTask, task]);
+
+  useEffect(() => {
+    if (profile.role !== "student" || !liveFirebaseTask) return;
+    let active = true;
+    void loadViewedTaskResourceIds(task, profile)
+      .then((ids) => {
+        if (active) setViewedResourceIds(ids);
+      })
+      .catch((error) => {
+        if (active) toast.error("No pudimos cargar tus recursos vistos", {
+          description: error instanceof Error ? error.message : undefined,
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [liveFirebaseTask, profile, task]);
 
   useEffect(() => {
     if (!liveFirebaseTask || !staff) return;
@@ -910,17 +934,12 @@ export function TaskDetailModal({
     }
   }
 
-  async function openAttachment(attachment: TaskAttachment) {
-    if (!liveFirebaseTask) {
-      toast.info("Este archivo es parte de la demostración.");
-      return;
-    }
-    try {
-      const url = await getTaskAttachmentUrl(attachment);
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      toast.error("No pudimos abrir el archivo.");
-    }
+  function openResource(resource: TaskResource) {
+    const id = resource.kind === "attachment"
+      ? resource.attachment.id
+      : resource.link.id;
+    setViewedResourceIds((current) => new Set(current).add(id));
+    setSelectedResource(resource);
   }
 
   async function submitResponse() {
@@ -1083,12 +1102,16 @@ export function TaskDetailModal({
                 </span>
                 <div>
                   <h3>Recursos de la actividad</h3>
-                  <p>Material preparado por el docente.</p>
+                  <p>Recursos preparados por el docente.</p>
                 </div>
               </div>
               <div className="task-resource-list">
                 {task.links.map((link) => (
-                  <a href={link.url} target="_blank" rel="noreferrer" key={link.id}>
+                  <button
+                    type="button"
+                    onClick={() => openResource({ kind: "link", link })}
+                    key={link.id}
+                  >
                     <span className="task-resource-icon link">
                       <Link2 size={18} />
                     </span>
@@ -1096,11 +1119,19 @@ export function TaskDetailModal({
                       <strong>{link.label}</strong>
                       <small>{link.url}</small>
                     </span>
-                    <ExternalLink size={16} />
-                  </a>
+                    {viewedResourceIds.has(link.id) && profile.role === "student" ? (
+                      <span className="task-resource-viewed"><Check size={12} /> Visto</span>
+                    ) : (
+                      <ExternalLink size={16} />
+                    )}
+                  </button>
                 ))}
                 {task.attachments.map((attachment) => (
-                  <button onClick={() => void openAttachment(attachment)} key={attachment.id}>
+                  <button
+                    type="button"
+                    onClick={() => openResource({ kind: "attachment", attachment })}
+                    key={attachment.id}
+                  >
                     <span className="task-resource-icon file">
                       <FileText size={18} />
                     </span>
@@ -1108,7 +1139,11 @@ export function TaskDetailModal({
                       <strong>{attachment.name}</strong>
                       <small>{formatBytes(attachment.size)}</small>
                     </span>
-                    <Download size={16} />
+                    {viewedResourceIds.has(attachment.id) && profile.role === "student" ? (
+                      <span className="task-resource-viewed"><Check size={12} /> Visto</span>
+                    ) : (
+                      <Download size={16} />
+                    )}
                   </button>
                 ))}
               </div>
@@ -1156,6 +1191,19 @@ export function TaskDetailModal({
             />
           )}
         </div>
+
+        <AnimatePresence>
+          {selectedResource && (
+            <TaskResourceViewer
+              task={task}
+              resource={selectedResource}
+              profile={profile}
+              accounts={accounts}
+              firebaseReady={liveFirebaseTask}
+              onClose={() => setSelectedResource(null)}
+            />
+          )}
+        </AnimatePresence>
       </motion.section>
     </motion.div>
   );

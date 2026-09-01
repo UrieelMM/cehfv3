@@ -1,14 +1,30 @@
-export const WHATSAPP_DAILY_TEMPLATE = "cehf_resumen_tareas_diario_v1";
+export const WHATSAPP_DAILY_TEMPLATE = "cehf_reporte_diario_alumno_v1";
 export const WHATSAPP_TEMPLATE_LANGUAGE = "es_MX";
 export const WHATSAPP_TIMEZONE = "America/Mexico_City";
 export const WHATSAPP_CONSENT_VERSION = "2026-08-19";
 
 export type DailyStudentSummary = {
   studentId: string;
+  studentName: string;
   firstName: string;
   submitted: number;
   total: number;
   pending: number;
+};
+
+export type DailyAttendanceStatus = "present" | "absent";
+export type DailyParticipationStatus =
+  | "positive"
+  | "neutral"
+  | "needs_support";
+
+export type DailyReportTemplateInput = {
+  guardianName: string;
+  studentName: string;
+  businessDate: string;
+  attendance: DailyAttendanceStatus;
+  participation: DailyParticipationStatus;
+  homework: Pick<DailyStudentSummary, "total" | "pending">;
 };
 
 function digits(value: string) {
@@ -103,6 +119,7 @@ export function formatBusinessDateSpanish(dateKey: string) {
     weekday: "long",
     day: "numeric",
     month: "long",
+    year: "numeric",
     timeZone: "UTC",
   }).format(date);
 }
@@ -132,10 +149,44 @@ export function buildTemplateParameters(
   ];
 }
 
-export function dailyOutboxId(businessDate: string, contactId: string) {
+export function attendanceEmoji(status: DailyAttendanceStatus) {
+  return status === "present" ? "✅" : "❌";
+}
+
+export function participationEmoji(status: DailyParticipationStatus) {
+  if (status === "positive") return "😊";
+  if (status === "neutral") return "😐";
+  return "😟";
+}
+
+export function homeworkEmoji(
+  summary: Pick<DailyStudentSummary, "total" | "pending">,
+) {
+  return summary.pending === 0 ? "✅" : "❌";
+}
+
+export function buildDailyReportTemplateParameters(
+  report: DailyReportTemplateInput,
+) {
+  return [
+    firstName(report.guardianName),
+    String(report.studentName).trim() || "Alumno",
+    formatBusinessDateSpanish(report.businessDate),
+    attendanceEmoji(report.attendance),
+    participationEmoji(report.participation),
+    homeworkEmoji(report.homework),
+  ];
+}
+
+export function dailyOutboxId(
+  businessDate: string,
+  contactId: string,
+  studentId?: string,
+) {
   const safeDate = businessDate.replace(/[^0-9-]/g, "");
   const safeContact = contactId.replace(/[^A-Za-z0-9_-]/g, "_");
-  return `daily_${safeDate}_${safeContact}`;
+  const safeStudent = studentId?.replace(/[^A-Za-z0-9_-]/g, "_");
+  return `daily_${safeDate}_${safeContact}${safeStudent ? `_${safeStudent}` : ""}`;
 }
 
 export function isOptOutMessage(value: unknown) {

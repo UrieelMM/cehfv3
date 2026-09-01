@@ -26,7 +26,7 @@ export const defaultWhatsAppConfiguration: WhatsAppConfiguration = {
   sendTime: "18:00",
   sendOnNoTaskDays: true,
   timeZone: "America/Mexico_City",
-  templateName: "cehf_resumen_tareas_diario_v1",
+  templateName: "cehf_reporte_diario_alumno_v1",
   templateLanguage: "es_MX",
   graphApiVersion: "v23.0",
 };
@@ -82,6 +82,7 @@ function configurationFromData(
   institutionId: string,
   data?: DocumentData,
 ): WhatsAppConfiguration {
+  const storedTemplateName = String(data?.templateName ?? "");
   return {
     ...defaultWhatsAppConfiguration,
     ...data,
@@ -91,9 +92,10 @@ function configurationFromData(
     sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
     sendTime: String(data?.sendTime ?? "18:00"),
     timeZone: String(data?.timeZone ?? "America/Mexico_City"),
-    templateName: String(
-      data?.templateName ?? defaultWhatsAppConfiguration.templateName,
-    ),
+    templateName:
+      storedTemplateName === "cehf_resumen_tareas_diario_v1"
+        ? defaultWhatsAppConfiguration.templateName
+        : storedTemplateName || defaultWhatsAppConfiguration.templateName,
     templateLanguage: String(data?.templateLanguage ?? "es_MX"),
     graphApiVersion: String(data?.graphApiVersion ?? "v23.0"),
     lastSuccessfulSendAt: data?.lastSuccessfulSendAt

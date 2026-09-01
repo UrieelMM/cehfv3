@@ -14,9 +14,13 @@ import {
   Clock3,
   Heart,
   LoaderCircle,
+  Maximize2,
   Palette,
   Newspaper,
+  Pause,
   Pencil,
+  Play,
+  Quote,
   RotateCcw,
   Search,
   Settings2,
@@ -242,6 +246,155 @@ function MuralEditionCover({
         )}
       </div>
     </section>
+  );
+}
+
+function MuralImmersiveView({
+  edition,
+  stories,
+  onClose,
+  onReadStory,
+}: {
+  edition: MuralEdition;
+  stories: WallPost[];
+  onClose: () => void;
+  onReadStory: (story: WallPost) => void;
+}) {
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const slideCount = stories.length + 1;
+  const cover = edition.cover;
+  const immersiveStyle = {
+    "--mural-cover-bg": cover.backgroundColor,
+    "--mural-cover-accent": cover.accentColor,
+    "--mural-cover-text": cover.textColor,
+  } as CSSProperties;
+
+  const move = useCallback((delta: number) => {
+    setActiveSlide((current) => (current + delta + slideCount) % slideCount);
+  }, [slideCount]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+        event.preventDefault();
+        move(1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        move(-1);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [move, onClose]);
+
+  useEffect(() => {
+    if (!playing || reduceMotion) return;
+    const timer = window.setInterval(() => move(1), 7000);
+    return () => window.clearInterval(timer);
+  }, [move, playing, reduceMotion]);
+
+  useEffect(() => {
+    let enteredNativeFullscreen = Boolean(document.fullscreenElement);
+    const onFullscreenChange = () => {
+      if (document.fullscreenElement) enteredNativeFullscreen = true;
+      else if (enteredNativeFullscreen) onClose();
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, [onClose]);
+
+  const activeStory = activeSlide > 0 ? stories[activeSlide - 1] : undefined;
+  const closeImmersive = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+    onClose();
+  };
+
+  return (
+    <motion.section
+      className="mural-immersive-shell"
+      style={immersiveStyle}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Presentación inmersiva del Periódico mural · ${edition.periodLabel}`}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      transition={{ duration: reduceMotion ? 0 : 0.28 }}
+    >
+      <div className="mural-immersive-ambient" aria-hidden="true"><i /><i /><i /></div>
+      <header className="mural-immersive-header">
+        <div className="mural-immersive-brand"><span>CE</span><i /><div><strong>Entre líneas</strong><small>{edition.periodLabel} · {edition.group}</small></div></div>
+        <div className="mural-immersive-progress"><span>{activeSlide + 1} / {slideCount}</span><div><i style={{ width: `${((activeSlide + 1) / slideCount) * 100}%` }} /></div></div>
+        <div className="mural-immersive-header-actions">
+          <button type="button" className={playing ? "active" : ""} onClick={() => setPlaying((current) => !current)} disabled={Boolean(reduceMotion)} aria-label={playing ? "Pausar presentación" : "Reproducir presentación automáticamente"}>
+            {playing ? <Pause size={16} /> : <Play size={16} />}{playing ? "Pausar" : "Reproducir"}
+          </button>
+          <button type="button" onClick={closeImmersive} aria-label="Salir del modo inmersivo"><X size={18} />Salir</button>
+        </div>
+      </header>
+
+      <main className="mural-immersive-stage" aria-live="polite">
+        <AnimatePresence mode="wait" initial={false}>
+          {activeSlide === 0 ? (
+            <motion.div
+              className="mural-immersive-cover-wrap"
+              key="immersive-cover"
+              initial={{ opacity: 0, x: reduceMotion ? 0 : 36 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: reduceMotion ? 0 : -36 }}
+              transition={{ duration: reduceMotion ? 0 : 0.38, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <MuralEditionCover edition={edition} onExplore={() => move(1)} />
+            </motion.div>
+          ) : activeStory ? (
+            <motion.article
+              className={`mural-immersive-story story-${activeStory.accent}`}
+              key={activeStory.id}
+              initial={{ opacity: 0, x: reduceMotion ? 0 : 44, scale: reduceMotion ? 1 : 0.985 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: reduceMotion ? 0 : -44, scale: reduceMotion ? 1 : 0.985 }}
+              transition={{ duration: reduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <div className="mural-immersive-story-copy">
+                <div className="mural-immersive-story-index"><span>{String(activeSlide).padStart(2, "0")}</span><i /><small>{activeStory.category}</small></div>
+                <span className="mural-immersive-section">{activeStory.section ?? activeStory.category}</span>
+                <h2>{activeStory.title}</h2>
+                <p>{activeStory.lead ?? activeStory.excerpt}</p>
+                {activeStory.quote && <blockquote><Quote size={18} />{activeStory.quote}</blockquote>}
+                <div className="mural-immersive-byline"><span>Por <strong>{activeStory.author}</strong></span><i /><span>{activeStory.group}</span><i /><span>{activeStory.readingTime}</span></div>
+                <button type="button" onClick={() => onReadStory(activeStory)}>Abrir historia completa <ArrowRight size={17} /></button>
+              </div>
+              <div className="mural-immersive-story-visual" aria-hidden="true">
+                <div className={`mural-cover-motif motif-${edition.cover.motif}`}>{Array.from({ length: MURAL_GRAPHIC_PARTS }, (_, index) => <i key={index} />)}</div>
+                <span>PERIÓDICO<br />MURAL</span>
+                <Newspaper size={88} strokeWidth={1.2} />
+                <strong>{edition.periodLabel.slice(0, 3).toLocaleUpperCase("es-MX")}</strong>
+              </div>
+            </motion.article>
+          ) : null}
+        </AnimatePresence>
+      </main>
+
+      <footer className="mural-immersive-controls">
+        <button type="button" onClick={() => move(-1)} aria-label="Diapositiva anterior"><ChevronLeft size={19} />Anterior</button>
+        <nav aria-label="Diapositivas del mural">
+          {Array.from({ length: slideCount }, (_, index) => (
+            <button type="button" key={index} className={activeSlide === index ? "active" : ""} onClick={() => setActiveSlide(index)} aria-label={index === 0 ? "Ver portada" : `Ver historia ${index}`} aria-current={activeSlide === index ? "true" : undefined}><i /></button>
+          ))}
+        </nav>
+        <button type="button" onClick={() => move(1)}>Siguiente<ChevronRight size={19} /></button>
+      </footer>
+      <span className="mural-immersive-keyhint"><kbd>←</kbd><kbd>→</kbd> navegar <i /><kbd>ESC</kbd> salir</span>
+    </motion.section>
   );
 }
 
@@ -836,6 +989,7 @@ export function WallNewspaperPage({
   const [editionConfigured, setEditionConfigured] = useState(!firebaseReady);
   const [editionLoading, setEditionLoading] = useState(firebaseReady);
   const [editionEditorOpen, setEditionEditorOpen] = useState(false);
+  const [immersiveOpen, setImmersiveOpen] = useState(false);
   const [editionSaving, setEditionSaving] = useState(false);
   const [loading, setLoading] = useState(firebaseReady);
   const [readerPost, setReaderPost] = useState<WallPost | null>(null);
@@ -886,6 +1040,10 @@ export function WallNewspaperPage({
     const realIds = new Set(workspace.published.map((story) => story.id));
     return [...workspace.published, ...curatedPublished.filter((story) => !realIds.has(story.id))];
   }, [curatedPublished, workspace.published]);
+  const immersiveStories = useMemo(() => {
+    const currentEditionStories = publishedStories.filter((story) => story.editionId === edition.id);
+    return currentEditionStories.length ? currentEditionStories : publishedStories;
+  }, [edition.id, publishedStories]);
   const mine = firebaseReady
     ? workspace.mine
     : state.wallPosts.filter((story) => story.authorId === profile.uid && story.status !== "published");
@@ -953,6 +1111,20 @@ export function WallNewspaperPage({
     }
     setEditionEditorOpen(true);
   };
+
+  const openImmersive = useCallback(() => {
+    setImmersiveOpen(true);
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+    }
+  }, []);
+
+  const closeImmersive = useCallback(() => {
+    setImmersiveOpen(false);
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  }, []);
 
   const toggleFavorite = (postId: string) => {
     const apply = (story: WallPost) => story.id === postId ? { ...story, favorite: !story.favorite } : story;
@@ -1116,7 +1288,10 @@ export function WallNewspaperPage({
           <div><span>{editionLoading ? "ACTUALIZANDO EDICIÓN" : editionConfigured ? "EDICIÓN EN PORTADA" : "CONFIGURACIÓN INICIAL"}</span><strong>{edition.periodLabel}</strong></div>
         </div>
         <div className="mural-edition-team"><span>Grupo responsable<strong>{edition.group}</strong></span><i /><span>Edición y revisión<strong>{edition.teacherName}</strong></span></div>
-        {canManageEdition && <button className="primary-button" onClick={openEditionEditor}><Brush size={15} />{profile.role === "director" ? "Configurar edición" : "Diseñar portada"}</button>}
+        <div className="mural-edition-actions">
+          <button className="secondary-button" onClick={openImmersive}><Maximize2 size={15} />Modo inmersivo</button>
+          {canManageEdition && <button className="primary-button" onClick={openEditionEditor}><Brush size={15} />{profile.role === "director" ? "Configurar edición" : "Diseñar portada"}</button>}
+        </div>
         {profile.role === "director" && !editionConfigured && <span className="mural-edition-alert"><AlertCircle size={15} />Falta publicar la primera asignación</span>}
       </section>
 
@@ -1208,6 +1383,7 @@ export function WallNewspaperPage({
         <div className="proposal-note"><Sparkles size={21} /><div><strong>¿Tienes una historia para compartir?</strong><p>Envíala al equipo editorial. {edition.teacherName} o Dirección la revisará antes de publicarla.</p></div><button className="secondary-button" onClick={() => { setEditingStory(null); setSubmissionOpen(true); }}>Proponer historia</button></div>
       )}
 
+      <AnimatePresence>{immersiveOpen && <MuralImmersiveView edition={edition} stories={immersiveStories} onClose={closeImmersive} onReadStory={(story) => { closeImmersive(); setReaderPost(story); }} />}</AnimatePresence>
       <AnimatePresence>{readerPost && <WallStoryReader post={readerPost} onClose={() => setReaderPost(null)} onFavorite={() => toggleFavorite(readerPost.id)} />}</AnimatePresence>
       <AnimatePresence>{submissionOpen && <MuralSubmissionModal story={editingStory} busy={saving} onClose={() => { if (!saving) { setSubmissionOpen(false); setEditingStory(null); } }} onSubmit={submitStory} />}</AnimatePresence>
       <AnimatePresence>{changesStory && <ReviewRequestModal story={changesStory} busy={reviewBusy === changesStory.id} onClose={() => { if (!reviewBusy) setChangesStory(null); }} onSubmit={(note) => reviewStory(changesStory, "request_changes", note)} />}</AnimatePresence>

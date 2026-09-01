@@ -32,7 +32,12 @@
   --radius-sm: 10px;
   --radius-md: 16px;
   --radius-lg: 24px;
-  --sidebar-width: 256px;
+  --sidebar-width: 264px;
+  --sidebar-collapsed-width: 84px;
+  --font-page-title: 2.5rem;
+  --font-teacher-hero-title: 2.8rem;
+  --font-sidebar-item: 0.82rem;
+  --font-button: 0.66rem;
   --font-display: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
 }
 
@@ -207,17 +212,33 @@ code {
   display: flex;
   width: var(--sidebar-width);
   flex-direction: column;
-  padding: 25px 16px 18px;
+  padding: 18px 14px 14px;
   border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
-  backdrop-filter: blur(18px);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--violet-soft) 20%, transparent), transparent 180px),
+    color-mix(in srgb, var(--surface) 97%, transparent);
+  box-shadow: 8px 0 30px rgb(16 40 65 / 0.035);
+  backdrop-filter: blur(20px);
+  transition:
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 280ms ease,
+    border-color 280ms ease;
+}
+
+.sidebar-header {
+  position: relative;
+  display: flex;
+  min-height: 45px;
+  align-items: center;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 0 8px;
+  min-width: 0;
+  padding: 0 6px;
 }
 
 .brand-mark {
@@ -254,9 +275,12 @@ code {
   letter-spacing: -0.04em;
 }
 
-.brand > div:last-child {
+.brand-copy {
   display: flex;
+  min-width: 0;
   flex-direction: column;
+  opacity: 1;
+  transition: opacity 140ms ease;
 }
 
 .brand strong {
@@ -266,7 +290,7 @@ code {
   letter-spacing: -0.02em;
 }
 
-.brand > div:last-child span {
+.brand-copy > span {
   margin-top: 2px;
   color: var(--muted);
   font-size: calc(0.74rem + 0.125rem);
@@ -275,44 +299,124 @@ code {
   text-transform: uppercase;
 }
 
+.sidebar-toggle,
+.sidebar-mobile-close {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  box-shadow: var(--shadow-sm);
+  transition: color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  z-index: 2;
+  top: 7px;
+  right: -29px;
+}
+
+.sidebar-toggle:hover,
+.sidebar-mobile-close:hover {
+  border-color: color-mix(in srgb, var(--violet) 35%, var(--border));
+  color: var(--violet);
+  transform: translateX(1px);
+}
+
+.sidebar-mobile-close {
+  display: none;
+  margin-left: auto;
+}
+
 .week-switcher {
   display: flex;
+  width: 100%;
   align-items: center;
-  justify-content: space-between;
-  margin: 26px 0 20px;
-  padding: 11px 12px;
+  margin: 13px 0 15px;
+  padding: 9px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface-soft);
+  gap: 9px;
+  overflow: hidden;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition:
+    width 180ms ease,
+    padding 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 
-.week-switcher div {
+.week-switcher:hover {
+  border-color: color-mix(in srgb, var(--violet) 38%, var(--border));
+  background: color-mix(in srgb, var(--violet) 7%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 6%, transparent);
+  transform: translateY(-1px);
+}
+
+.week-switcher:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--violet) 24%, transparent);
+  outline-offset: 2px;
+}
+
+.week-switcher-copy {
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
-.week-switcher span {
+.week-switcher-action {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+  color: var(--violet);
+  font-size: 0.58rem;
+  font-weight: 820;
+  letter-spacing: 0.02em;
+}
+
+.week-switcher-copy > span {
   color: var(--muted);
-  font-size: calc(0.69rem + 0.125rem);
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-size: calc(0.52rem + 0.125rem);
+  font-weight: 780;
+  letter-spacing: 0.075em;
   text-transform: uppercase;
 }
 
 .week-switcher strong {
-  font-size: calc(0.88rem + 0.125rem);
+  overflow: hidden;
+  font-size: calc(0.72rem + 0.125rem);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .week-switcher small {
-  margin-top: 2px;
   color: var(--muted);
-  font-size: calc(0.61rem + 0.125rem);
-  line-height: 1.3;
+  font-size: calc(0.52rem + 0.125rem);
+  line-height: 1.25;
 }
 
-.week-switcher > svg {
+.week-switcher-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--violet) 10%, var(--surface));
   color: var(--violet);
 }
 
@@ -322,8 +426,9 @@ code {
   background: color-mix(in srgb, var(--gold) 7%, var(--surface));
 }
 
-.week-switcher.is-gap > svg,
-.week-switcher.is-unconfigured > svg {
+.week-switcher.is-gap .week-switcher-icon,
+.week-switcher.is-unconfigured .week-switcher-icon {
+  background: color-mix(in srgb, var(--gold) 12%, var(--surface));
   color: var(--gold);
 }
 
@@ -342,6 +447,8 @@ code {
   flex-direction: column;
   gap: 3px;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .nav-kicker {
@@ -356,6 +463,7 @@ code {
 
 .sidebar-nav button,
 .sidebar-footer > button {
+  position: relative;
   display: flex;
   width: 100%;
   min-height: 43px;
@@ -366,25 +474,33 @@ code {
   border-radius: 10px;
   background: transparent;
   color: var(--muted-strong);
-  font-size: calc(0.86rem + 0.125rem);
+  font-size: var(--font-sidebar-item);
   font-weight: 570;
   text-align: left;
   transition:
     background 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.sidebar-nav button > svg,
+.sidebar-footer > button > svg {
+  flex: 0 0 auto;
 }
 
 .sidebar-nav button:hover,
 .sidebar-footer > button:hover {
   background: var(--surface-soft);
   color: var(--foreground);
+  transform: translateX(2px);
 }
 
 .sidebar-nav button.active,
 .sidebar-footer > button.active {
-  background: var(--violet-soft);
+  background: linear-gradient(90deg, var(--violet-soft), color-mix(in srgb, var(--violet-soft) 45%, var(--surface)));
   color: var(--violet-dark);
   font-weight: 700;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 10%, transparent);
 }
 
 .sidebar-nav button.active::before {
@@ -447,6 +563,72 @@ code {
 .main-column {
   min-height: 100vh;
   margin-left: var(--sidebar-width);
+  transition: margin-left 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sidebar.is-collapsed {
+  width: var(--sidebar-collapsed-width);
+  padding-right: 12px;
+  padding-left: 12px;
+}
+
+.sidebar.is-collapsed .brand-copy,
+.sidebar.is-collapsed .week-switcher-copy,
+.sidebar.is-collapsed .week-switcher-action,
+.sidebar.is-collapsed .nav-kicker,
+.sidebar.is-collapsed .sidebar-nav button > span:not(.nav-count),
+.sidebar.is-collapsed .sidebar-footer > button > span,
+.sidebar.is-collapsed .demo-switcher {
+  display: none;
+}
+
+.sidebar.is-collapsed .brand {
+  padding: 0 3px;
+}
+
+.sidebar.is-collapsed .week-switcher {
+  width: 48px;
+  height: 48px;
+  justify-content: center;
+  margin: 13px auto 15px;
+  padding: 7px;
+}
+
+.sidebar.is-collapsed .sidebar-nav,
+.sidebar.is-collapsed .sidebar-footer {
+  align-items: center;
+}
+
+.sidebar.is-collapsed .sidebar-nav button,
+.sidebar.is-collapsed .sidebar-footer > button {
+  width: 48px;
+  min-height: 46px;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+}
+
+.sidebar.is-collapsed .sidebar-nav button:hover,
+.sidebar.is-collapsed .sidebar-footer > button:hover {
+  transform: translateY(-1px);
+}
+
+.sidebar.is-collapsed .sidebar-nav button.active::before {
+  left: -12px;
+}
+
+.sidebar.is-collapsed .nav-count {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 16px;
+  height: 16px;
+  margin: 0;
+  font-size: calc(0.47rem + 0.125rem);
+}
+
+.app-shell.sidebar-is-collapsed .main-column {
+  margin-left: var(--sidebar-collapsed-width);
 }
 
 .topbar {
@@ -728,7 +910,7 @@ code {
 .page-heading h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: calc(clamp(2rem, 3.2vw, 2.8rem) + 0.125rem);
+  font-size: clamp(2rem, 3.2vw, var(--font-page-title));
   font-weight: 650;
   line-height: 1.08;
   letter-spacing: -0.035em;
@@ -780,13 +962,13 @@ code {
 .secondary-button,
 .light-button {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 39px;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 9px 15px;
-  border-radius: 11px;
-  font-size: calc(0.79rem + 0.125rem);
+  padding: 8px 13px;
+  border-radius: 10px;
+  font-size: var(--font-button);
   font-weight: 750;
   transition:
     background 160ms ease,
@@ -838,7 +1020,7 @@ code {
   border: 0;
   background: transparent;
   color: var(--violet);
-  font-size: calc(0.75rem + 0.125rem);
+  font-size: var(--font-button);
   font-weight: 750;
 }
 
@@ -977,14 +1159,14 @@ code {
 }
 
 .teacher-hero .hero-copy h2 {
-  font-size: calc(clamp(1.9rem, 3.2vw, 3rem) + 0.125rem);
+  font-size: var(--font-teacher-hero-title);
 }
 
 .hero-copy p {
   max-width: 630px;
   margin-bottom: 25px;
   color: rgb(255 255 255 / 0.78);
-  font-size: calc(0.96rem + 0.125rem);
+  font-size: 0.9rem;
   line-height: 1.65;
 }
 
@@ -2638,6 +2820,10 @@ code {
   gap: 11px;
 }
 
+.mural-edition-identity > div > strong {
+  margin-left: 4px;
+}
+
 .mural-edition-icon {
   display: grid;
   width: 43px;
@@ -2696,6 +2882,17 @@ code {
   color: var(--coral);
   letter-spacing: 0;
   text-transform: none;
+}
+
+.mural-edition-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mural-edition-actions button {
+  white-space: nowrap;
 }
 
 .mural-cover {
@@ -3340,6 +3537,515 @@ code {
   opacity: 0.36;
   background: repeating-radial-gradient(circle at 84% 46%, transparent 0 18px, var(--mural-cover-accent) 19px 21px, transparent 22px 35px);
   mask-image: radial-gradient(circle at 84% 46%, black, transparent 70%);
+}
+
+.mural-immersive-shell {
+  --immersive-story-accent: var(--mural-cover-accent);
+  position: fixed;
+  z-index: 240;
+  display: grid;
+  overflow: hidden;
+  padding: clamp(14px, 2vw, 28px);
+  background:
+    radial-gradient(circle at 8% 5%, color-mix(in srgb, var(--mural-cover-accent) 20%, transparent), transparent 31%),
+    radial-gradient(circle at 94% 82%, color-mix(in srgb, var(--mural-cover-text) 10%, transparent), transparent 34%),
+    var(--mural-cover-bg);
+  color: var(--mural-cover-text);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inset: 0;
+  isolation: isolate;
+}
+
+.mural-immersive-shell::before {
+  position: absolute;
+  z-index: -1;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-text) 9%, transparent);
+  content: "";
+  inset: clamp(7px, 1vw, 14px);
+  pointer-events: none;
+}
+
+.mural-immersive-ambient,
+.mural-immersive-ambient i {
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.mural-immersive-ambient {
+  inset: 0;
+}
+
+.mural-immersive-ambient i {
+  border: 1px solid color-mix(in srgb, var(--mural-cover-accent) 22%, transparent);
+  border-radius: 50%;
+}
+
+.mural-immersive-ambient i:nth-child(1) {
+  top: -20vw;
+  right: -8vw;
+  width: 48vw;
+  height: 48vw;
+}
+
+.mural-immersive-ambient i:nth-child(2) {
+  right: 21vw;
+  bottom: -30vw;
+  width: 42vw;
+  height: 42vw;
+  border-width: 7vw;
+  opacity: 0.42;
+}
+
+.mural-immersive-ambient i:nth-child(3) {
+  top: 18%;
+  left: 3%;
+  width: 7px;
+  height: 7px;
+  border: 0;
+  background: var(--mural-cover-accent);
+  box-shadow: 22px 18px 0 color-mix(in srgb, var(--mural-cover-text) 35%, transparent), 49px -12px 0 var(--mural-cover-accent);
+}
+
+.mural-immersive-header {
+  position: relative;
+  z-index: 6;
+  display: grid;
+  min-height: 52px;
+  align-items: center;
+  gap: clamp(16px, 3vw, 42px);
+  grid-template-columns: minmax(200px, 1fr) minmax(180px, 0.65fr) minmax(260px, 1fr);
+}
+
+.mural-immersive-brand,
+.mural-immersive-brand > div,
+.mural-immersive-progress,
+.mural-immersive-header-actions,
+.mural-immersive-header-actions button {
+  display: flex;
+  align-items: center;
+}
+
+.mural-immersive-brand {
+  gap: 11px;
+}
+
+.mural-immersive-brand > span {
+  font-family: var(--font-display);
+  font-size: calc(1.45rem + 0.125rem);
+  line-height: 1;
+  letter-spacing: -0.08em;
+}
+
+.mural-immersive-brand > i {
+  width: 1px;
+  height: 29px;
+  background: color-mix(in srgb, var(--mural-cover-text) 23%, transparent);
+}
+
+.mural-immersive-brand > div {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mural-immersive-brand strong {
+  font-size: calc(0.68rem + 0.125rem);
+  letter-spacing: 0.02em;
+}
+
+.mural-immersive-brand small {
+  color: color-mix(in srgb, var(--mural-cover-text) 58%, transparent);
+  font-size: calc(0.52rem + 0.125rem);
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mural-immersive-progress {
+  justify-content: center;
+  gap: 11px;
+}
+
+.mural-immersive-progress > span {
+  min-width: 32px;
+  color: color-mix(in srgb, var(--mural-cover-text) 65%, transparent);
+  font-size: calc(0.57rem + 0.125rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.mural-immersive-progress > div {
+  position: relative;
+  width: min(190px, 18vw);
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mural-cover-text) 16%, transparent);
+}
+
+.mural-immersive-progress > div > i {
+  position: absolute;
+  background: var(--mural-cover-accent);
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  inset: 0 auto 0 0;
+}
+
+.mural-immersive-header-actions {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mural-immersive-header-actions button,
+.mural-immersive-controls > button {
+  min-height: 38px;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-text) 17%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--mural-cover-text) 6%, transparent);
+  color: inherit;
+  font-size: calc(0.59rem + 0.125rem);
+  font-weight: 800;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.mural-immersive-header-actions button:hover,
+.mural-immersive-controls > button:hover {
+  border-color: color-mix(in srgb, var(--mural-cover-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--mural-cover-accent) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.mural-immersive-header-actions button.active {
+  border-color: var(--mural-cover-accent);
+  color: var(--mural-cover-accent);
+}
+
+.mural-immersive-header-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.mural-immersive-stage {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  min-height: 0;
+  place-items: center;
+  padding: clamp(14px, 2.5vh, 26px) 0;
+}
+
+.mural-immersive-cover-wrap {
+  display: grid;
+  width: min(1500px, calc(100vw - clamp(40px, 7vw, 120px)));
+  height: 100%;
+  max-height: 820px;
+  place-items: stretch;
+}
+
+.mural-immersive-cover-wrap .mural-cover {
+  width: 100%;
+  min-height: 100%;
+  border-color: color-mix(in srgb, var(--mural-cover-text) 16%, transparent);
+  border-radius: clamp(18px, 2vw, 30px);
+  box-shadow: 0 34px 100px rgb(0 0 0 / 0.32);
+}
+
+.mural-immersive-cover-wrap .mural-cover-copy,
+.mural-immersive-cover-wrap .mural-cover-immersive .mural-cover-copy {
+  min-height: 100%;
+}
+
+.mural-immersive-cover-wrap .mural-cover h1 {
+  font-size: calc(clamp(3.6rem, 7.1vw, 8.5rem) + 0.125rem);
+}
+
+.mural-immersive-cover-wrap .mural-cover-copy > p {
+  font-size: calc(clamp(0.82rem, 1.18vw, 1.12rem) + 0.125rem);
+}
+
+.mural-immersive-story {
+  --immersive-story-accent: #a78bfa;
+  display: grid;
+  width: min(1420px, calc(100vw - clamp(40px, 8vw, 140px)));
+  height: min(760px, calc(100dvh - 190px));
+  min-height: 440px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-text) 14%, transparent);
+  border-radius: clamp(20px, 2.4vw, 34px);
+  background: color-mix(in srgb, var(--mural-cover-text) 5%, var(--mural-cover-bg));
+  box-shadow: 0 35px 110px rgb(0 0 0 / 0.25);
+  grid-template-columns: minmax(0, 1.15fr) minmax(350px, 0.85fr);
+}
+
+.mural-immersive-story.story-coral { --immersive-story-accent: #fb7185; }
+.mural-immersive-story.story-mint { --immersive-story-accent: #6ee7b7; }
+.mural-immersive-story.story-gold { --immersive-story-accent: #f6c453; }
+
+.mural-immersive-story-copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(34px, 5.7vw, 90px);
+  flex-direction: column;
+}
+
+.mural-immersive-story-index {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: clamp(24px, 5vh, 54px);
+}
+
+.mural-immersive-story-index span {
+  color: var(--immersive-story-accent);
+  font-family: var(--font-display);
+  font-size: calc(1.25rem + 0.125rem);
+}
+
+.mural-immersive-story-index i {
+  width: 38px;
+  height: 1px;
+  background: color-mix(in srgb, var(--mural-cover-text) 24%, transparent);
+}
+
+.mural-immersive-story-index small,
+.mural-immersive-section {
+  color: color-mix(in srgb, var(--mural-cover-text) 60%, transparent);
+  font-size: calc(0.58rem + 0.125rem);
+  font-weight: 850;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.mural-immersive-section {
+  margin-bottom: 13px;
+  color: var(--immersive-story-accent);
+}
+
+.mural-immersive-story h2 {
+  max-width: 920px;
+  margin: 0;
+  color: inherit;
+  font-family: var(--font-display);
+  font-size: calc(clamp(2.7rem, 5.1vw, 6.3rem) + 0.125rem);
+  font-weight: 550;
+  line-height: 0.95;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+}
+
+.mural-immersive-story-copy > p {
+  max-width: 760px;
+  margin: clamp(19px, 2.8vh, 30px) 0 0;
+  color: color-mix(in srgb, var(--mural-cover-text) 73%, transparent);
+  font-size: calc(clamp(0.78rem, 1.2vw, 1.03rem) + 0.125rem);
+  line-height: 1.65;
+}
+
+.mural-immersive-story blockquote {
+  display: flex;
+  max-width: 680px;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 24px 0 0;
+  padding: 12px 15px;
+  border-left: 2px solid var(--immersive-story-accent);
+  background: color-mix(in srgb, var(--mural-cover-text) 5%, transparent);
+  color: color-mix(in srgb, var(--mural-cover-text) 74%, transparent);
+  font-family: var(--font-display);
+  font-size: calc(clamp(0.75rem, 1vw, 0.92rem) + 0.125rem);
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.mural-immersive-story blockquote svg {
+  flex: 0 0 auto;
+  color: var(--immersive-story-accent);
+}
+
+.mural-immersive-byline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  margin-top: clamp(20px, 3.5vh, 34px);
+  color: color-mix(in srgb, var(--mural-cover-text) 60%, transparent);
+  font-size: calc(0.61rem + 0.125rem);
+}
+
+.mural-immersive-byline i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--immersive-story-accent);
+}
+
+.mural-immersive-byline strong {
+  color: var(--mural-cover-text);
+}
+
+.mural-immersive-story-copy > button {
+  display: flex;
+  min-height: 45px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+  padding: 0 17px;
+  border-radius: 10px;
+  background: var(--immersive-story-accent);
+  color: #172033;
+  font-size: calc(0.64rem + 0.125rem);
+  font-weight: 850;
+  transition: box-shadow 180ms ease, transform 180ms ease;
+}
+
+.mural-immersive-story-copy > button:hover {
+  box-shadow: 0 14px 38px color-mix(in srgb, var(--immersive-story-accent) 30%, transparent);
+  transform: translateY(-2px);
+}
+
+.mural-immersive-story-visual {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  place-items: center;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--immersive-story-accent) 28%, transparent), transparent 62%),
+    color-mix(in srgb, var(--mural-cover-text) 5%, transparent);
+}
+
+.mural-immersive-story-visual::before {
+  position: absolute;
+  width: min(28vw, 420px);
+  height: min(28vw, 420px);
+  border: clamp(40px, 5vw, 75px) solid color-mix(in srgb, var(--immersive-story-accent) 19%, transparent);
+  border-radius: 50%;
+  content: "";
+}
+
+.mural-immersive-story-visual > span,
+.mural-immersive-story-visual > strong,
+.mural-immersive-story-visual > svg {
+  position: absolute;
+  z-index: 4;
+}
+
+.mural-immersive-story-visual > span {
+  top: 35px;
+  right: 37px;
+  padding-left: 13px;
+  border-left: 3px solid var(--immersive-story-accent);
+  font-size: calc(0.6rem + 0.125rem);
+  font-weight: 900;
+  line-height: 1.45;
+  letter-spacing: 0.11em;
+  text-align: left;
+}
+
+.mural-immersive-story-visual > svg {
+  color: color-mix(in srgb, var(--mural-cover-text) 76%, transparent);
+}
+
+.mural-immersive-story-visual > strong {
+  right: 37px;
+  bottom: 31px;
+  color: var(--immersive-story-accent);
+  font-family: var(--font-display);
+  font-size: calc(clamp(4rem, 8vw, 8rem) + 0.125rem);
+  font-weight: 500;
+  letter-spacing: -0.08em;
+  line-height: 0.7;
+  opacity: 0.4;
+}
+
+.mural-immersive-controls {
+  position: relative;
+  z-index: 6;
+  display: grid;
+  min-height: 48px;
+  align-items: center;
+  gap: 18px;
+  grid-template-columns: 1fr minmax(120px, auto) 1fr;
+}
+
+.mural-immersive-controls > button {
+  justify-self: start;
+}
+
+.mural-immersive-controls > button:last-child {
+  justify-self: end;
+}
+
+.mural-immersive-controls nav {
+  display: flex;
+  max-width: min(52vw, 620px);
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mural-immersive-controls nav::-webkit-scrollbar {
+  display: none;
+}
+
+.mural-immersive-controls nav button {
+  display: grid;
+  width: 22px;
+  height: 27px;
+  flex: 0 0 auto;
+  place-items: center;
+}
+
+.mural-immersive-controls nav button i {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mural-cover-text) 34%, transparent);
+  transition: width 180ms ease, background 180ms ease;
+}
+
+.mural-immersive-controls nav button.active i {
+  width: 20px;
+  background: var(--mural-cover-accent);
+}
+
+.mural-immersive-keyhint {
+  position: absolute;
+  z-index: 5;
+  right: clamp(14px, 2vw, 28px);
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: color-mix(in srgb, var(--mural-cover-text) 42%, transparent);
+  font-size: calc(0.48rem + 0.125rem);
+  pointer-events: none;
+}
+
+.mural-immersive-keyhint kbd {
+  min-width: 20px;
+  padding: 3px 5px;
+  border: 1px solid color-mix(in srgb, var(--mural-cover-text) 14%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--mural-cover-text) 6%, transparent);
+  color: color-mix(in srgb, var(--mural-cover-text) 66%, transparent);
+  font: inherit;
+  text-align: center;
+}
+
+.mural-immersive-keyhint > i {
+  width: 1px;
+  height: 11px;
+  margin: 0 3px;
+  background: color-mix(in srgb, var(--mural-cover-text) 13%, transparent);
 }
 
 .mural-not-assigned {
@@ -5500,6 +6206,42 @@ code {
   }
 }
 
+@media (max-height: 700px) {
+  .mural-immersive-shell {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .mural-immersive-header,
+  .mural-immersive-controls {
+    min-height: 42px;
+  }
+
+  .mural-immersive-stage {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .mural-immersive-story,
+  .mural-immersive-cover-wrap {
+    height: calc(100dvh - 110px);
+    min-height: 360px;
+  }
+
+  .mural-immersive-story-index {
+    margin-bottom: 16px;
+  }
+
+  .mural-immersive-story blockquote {
+    display: none;
+  }
+
+  .mural-immersive-byline,
+  .mural-immersive-story-copy > button {
+    margin-top: 16px;
+  }
+}
+
 /* WhatsApp administration */
 .whatsapp-admin-panel {
   display: grid;
@@ -5926,7 +6668,7 @@ code {
 
 @media (max-width: 720px) {
   .settings-tabs {
-    grid-auto-columns: minmax(158px, 72vw);
+    grid-auto-columns: minmax(140px, 68vw);
     scroll-snap-type: inline proximity;
   }
 
@@ -6534,10 +7276,14 @@ code {
   border: 1px solid var(--danger);
   border-radius: 10px;
   background: var(--danger);
-  color: white;
+  color: white !important;
   font-size: calc(0.69rem + 0.125rem);
   font-weight: 780;
 }
+.danger-button * {
+  color: white !important;
+}
+
 .danger-button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -7598,12 +8344,12 @@ code {
 
 .settings-tabs {
   display: grid;
-  gap: 6px;
-  grid-auto-columns: minmax(160px, 1fr);
+  gap: 4px;
+  grid-auto-columns: minmax(140px, 1fr);
   grid-auto-flow: column;
   min-width: 0;
   overflow-x: auto;
-  padding: 6px;
+  padding: 4px;
   scrollbar-width: thin;
 }
 
@@ -7611,14 +8357,14 @@ code {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 10px;
   color: var(--muted-strong);
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: auto minmax(0, 1fr);
-  min-height: 58px;
+  min-height: 48px;
   min-width: 0;
-  padding: 10px 13px;
+  padding: 7px 9px;
   text-align: left;
   transition:
     background 160ms ease,
@@ -7647,11 +8393,11 @@ code {
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
   display: inline-flex;
-  height: 36px;
+  height: 30px;
   justify-content: center;
-  width: 36px;
+  width: 30px;
 }
 
 .settings-tabs > button.active .settings-tab-icon {
@@ -7673,12 +8419,12 @@ code {
 }
 
 .settings-tabs strong {
-  font-size: calc(0.76rem + 0.125rem);
+  font-size: 0.7rem;
 }
 
 .settings-tabs small {
   color: var(--muted);
-  font-size: calc(0.59rem + 0.125rem);
+  font-size: 0.56rem;
 }
 
 .settings-tab-content,
@@ -8726,6 +9472,300 @@ code {
   backdrop-filter: blur(5px);
 }
 
+.academic-calendar-backdrop {
+  position: fixed;
+  z-index: 180;
+  display: grid;
+  padding: 24px;
+  background: rgb(15 19 31 / 0.62);
+  backdrop-filter: blur(9px);
+  inset: 0;
+  place-items: center;
+}
+
+.academic-calendar-modal {
+  display: grid;
+  width: min(940px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--violet) 16%, var(--border));
+  border-radius: 22px;
+  background: var(--surface-raised);
+  box-shadow: 0 30px 90px rgb(10 18 38 / 0.3);
+  grid-template-rows: auto minmax(240px, 1fr) auto auto;
+}
+
+.academic-calendar-modal-header {
+  display: grid;
+  align-items: start;
+  gap: 13px;
+  padding: 20px 22px 17px;
+  border-bottom: 1px solid var(--border);
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.academic-calendar-modal-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  place-items: center;
+}
+
+.academic-calendar-modal-header h2 {
+  margin: 2px 0 2px;
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 1.08;
+}
+
+.academic-calendar-modal-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.academic-calendar-viewer {
+  position: relative;
+  display: grid;
+  min-height: 260px;
+  overflow: auto;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--violet-soft) 52%, transparent), transparent 50%),
+    var(--surface-soft);
+  place-items: center;
+}
+
+.academic-calendar-viewer.has-image img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: min(62dvh, 720px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 18px 55px rgb(21 31 58 / 0.16);
+  object-fit: contain;
+}
+
+.academic-calendar-empty,
+.academic-calendar-loading {
+  display: flex;
+  max-width: 430px;
+  align-items: center;
+  color: var(--muted);
+  text-align: center;
+  flex-direction: column;
+}
+
+.academic-calendar-empty > span {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  margin-bottom: 14px;
+  border: 1px dashed color-mix(in srgb, var(--violet) 34%, var(--border));
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--violet);
+  place-items: center;
+}
+
+.academic-calendar-empty strong,
+.academic-calendar-loading strong {
+  color: var(--foreground);
+  font-size: 0.9rem;
+}
+
+.academic-calendar-empty p {
+  margin: 7px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.academic-calendar-loading {
+  gap: 12px;
+}
+
+.academic-calendar-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.academic-calendar-meta > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.academic-calendar-meta strong {
+  font-size: 0.68rem;
+}
+
+.academic-calendar-meta small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.academic-calendar-meta a {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--violet);
+  font-size: var(--font-button);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.academic-calendar-manager {
+  display: grid;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--violet-soft) 28%, var(--surface));
+  grid-template-columns: minmax(190px, 1fr) auto;
+}
+
+.academic-calendar-manager > div:first-of-type {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.academic-calendar-manager > div:first-of-type strong,
+.academic-calendar-manager > div:first-of-type small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.academic-calendar-manager > div:first-of-type strong {
+  font-size: 0.7rem;
+}
+
+.academic-calendar-manager > div:first-of-type small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.academic-calendar-manager > div:first-of-type p {
+  margin: 4px 0 0;
+  color: var(--danger);
+  font-size: 0.62rem;
+}
+
+.academic-calendar-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.academic-calendar-manager-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.academic-calendar-remove {
+  display: inline-flex;
+  min-height: 39px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--danger);
+  font-size: var(--font-button);
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  .academic-calendar-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .academic-calendar-modal {
+    width: 100%;
+    max-height: calc(100dvh - 18px);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 22px 22px 0 0;
+    grid-template-rows: auto minmax(210px, 1fr) auto auto;
+  }
+
+  .academic-calendar-modal-header {
+    gap: 10px;
+    padding: 17px 16px 14px;
+  }
+
+  .academic-calendar-modal-icon {
+    width: 37px;
+    height: 37px;
+    border-radius: 11px;
+  }
+
+  .academic-calendar-modal-header h2 {
+    font-size: 1.48rem;
+  }
+
+  .academic-calendar-modal-header p {
+    font-size: 0.68rem;
+    line-height: 1.4;
+  }
+
+  .academic-calendar-viewer {
+    min-height: 230px;
+    padding: 12px;
+  }
+
+  .academic-calendar-viewer.has-image img {
+    max-height: 52dvh;
+  }
+
+  .academic-calendar-meta {
+    padding: 10px 16px;
+  }
+
+  .academic-calendar-manager {
+    padding: 12px 16px 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .academic-calendar-manager-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .academic-calendar-manager-actions > button {
+    justify-content: center;
+  }
+
+  .academic-calendar-manager-actions > .primary-button:last-child:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}
+
 .modal {
   display: flex;
   width: min(500px, 100%);
@@ -9325,7 +10365,7 @@ code {
 
 @media (max-width: 1180px) {
   :root {
-    --sidebar-width: 232px;
+    --sidebar-width: 238px;
   }
 
   .focus-grid,
@@ -9353,6 +10393,7 @@ code {
   }
 
   .sidebar {
+    width: var(--sidebar-width);
     transform: translateX(-100%);
     box-shadow: var(--shadow-lg);
     transition: transform 200ms ease;
@@ -9360,6 +10401,68 @@ code {
 
   .sidebar.is-open {
     transform: translateX(0);
+  }
+
+  .sidebar.is-collapsed {
+    width: var(--sidebar-width);
+    padding: 18px 14px 14px;
+  }
+
+  .sidebar.is-collapsed .brand-copy,
+  .sidebar.is-collapsed .week-switcher-copy,
+  .sidebar.is-collapsed .week-switcher-action,
+  .sidebar.is-collapsed .nav-kicker,
+  .sidebar.is-collapsed .sidebar-nav button > span:not(.nav-count),
+  .sidebar.is-collapsed .sidebar-footer > button > span,
+  .sidebar.is-collapsed .demo-switcher {
+    display: flex;
+  }
+
+  .sidebar.is-collapsed .nav-kicker,
+  .sidebar.is-collapsed .demo-switcher {
+    display: block;
+  }
+
+  .sidebar.is-collapsed .brand {
+    padding: 0 6px;
+  }
+
+  .sidebar.is-collapsed .week-switcher {
+    width: auto;
+    height: auto;
+    justify-content: flex-start;
+    margin: 13px 0 15px;
+    padding: 9px;
+  }
+
+  .sidebar.is-collapsed .sidebar-nav,
+  .sidebar.is-collapsed .sidebar-footer {
+    align-items: stretch;
+  }
+
+  .sidebar.is-collapsed .sidebar-nav button,
+  .sidebar.is-collapsed .sidebar-footer > button {
+    width: 100%;
+    min-height: 43px;
+    justify-content: flex-start;
+    gap: 11px;
+    padding: 9px 11px;
+  }
+
+  .sidebar.is-collapsed .nav-count {
+    position: static;
+    min-width: 20px;
+    height: 20px;
+    margin-left: auto;
+    font-size: calc(0.67rem + 0.125rem);
+  }
+
+  .sidebar-toggle {
+    display: none;
+  }
+
+  .sidebar-mobile-close {
+    display: grid;
   }
 
   .sidebar-backdrop {
@@ -9375,6 +10478,14 @@ code {
 
   .main-column {
     margin-left: 0;
+  }
+
+  .app-shell.sidebar-is-collapsed .main-column {
+    margin-left: 0;
+  }
+
+  .sidebar.is-collapsed .sidebar-nav button.active::before {
+    left: 0;
   }
 
   .menu-button {
@@ -9463,7 +10574,7 @@ code {
   }
 
   .page-heading h1 {
-    font-size: calc(2rem + 0.125rem);
+    font-size: 2rem;
   }
 
   .page-heading-actions > .primary-button {
@@ -9508,7 +10619,7 @@ code {
 
   .hero-copy h2,
   .teacher-hero .hero-copy h2 {
-    font-size: calc(2.1rem + 0.125rem);
+    font-size: 2.1rem;
   }
 
   .hero-metric {
@@ -12217,11 +13328,11 @@ code {
 /* Readability pass: larger type while preserving the existing hierarchy */
 .sidebar-nav button,
 .sidebar-footer > button {
-  font-size: calc(0.92rem + 0.125rem);
+  font-size: var(--font-sidebar-item);
 }
 
 .week-switcher strong {
-  font-size: calc(0.94rem + 0.125rem);
+  font-size: calc(0.72rem + 0.125rem);
 }
 
 .search input,
@@ -12248,7 +13359,7 @@ code {
 .primary-button,
 .secondary-button,
 .light-button {
-  font-size: calc(0.86rem + 0.125rem);
+  font-size: var(--font-button);
 }
 
 .forum-page {
@@ -12397,6 +13508,10 @@ code {
     grid-template-columns: 1fr auto;
   }
 
+  .mural-edition-actions {
+    flex-wrap: wrap;
+  }
+
   .mural-edition-team {
     display: none;
   }
@@ -12413,6 +13528,18 @@ code {
     padding: 16px;
   }
 
+  .mural-immersive-header {
+    grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.55fr) auto;
+  }
+
+  .mural-immersive-story {
+    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr);
+  }
+
+  .mural-immersive-keyhint {
+    display: none;
+  }
+
   .mural-discovery {
     grid-template-columns: minmax(240px, 1fr) minmax(150px, 0.55fr);
   }
@@ -12425,7 +13552,13 @@ code {
     padding: 14px;
   }
 
-  .mural-edition-bar > button {
+  .mural-edition-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .mural-edition-actions button {
+    flex: 1;
     justify-content: center;
   }
 
@@ -12491,6 +13624,177 @@ code {
   .mural-cover-featured {
     right: 14px;
     bottom: 14px;
+  }
+
+  .mural-immersive-shell {
+    padding: 10px;
+  }
+
+  .mural-immersive-shell::before {
+    inset: 5px;
+  }
+
+  .mural-immersive-header {
+    min-height: 52px;
+    gap: 8px;
+    grid-template-columns: minmax(100px, 1fr) auto;
+  }
+
+  .mural-immersive-brand > div {
+    display: none;
+  }
+
+  .mural-immersive-brand > i {
+    height: 22px;
+  }
+
+  .mural-immersive-progress {
+    position: absolute;
+    right: 0;
+    bottom: -8px;
+    left: 0;
+  }
+
+  .mural-immersive-progress > div {
+    width: 90px;
+  }
+
+  .mural-immersive-header-actions button {
+    min-height: 36px;
+    padding: 0 9px;
+    font-size: 0;
+  }
+
+  .mural-immersive-header-actions button svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .mural-immersive-stage {
+    padding: 15px 0 10px;
+  }
+
+  .mural-immersive-cover-wrap {
+    width: calc(100vw - 20px);
+    height: calc(100dvh - 130px);
+    min-height: 440px;
+  }
+
+  .mural-immersive-cover-wrap .mural-cover {
+    min-height: 100%;
+    border-radius: 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .mural-immersive-cover-wrap .mural-cover-copy,
+  .mural-immersive-cover-wrap .mural-cover-editorial .mural-cover-copy,
+  .mural-immersive-cover-wrap .mural-cover-immersive .mural-cover-copy {
+    z-index: 4;
+    width: auto;
+    min-height: 100%;
+    padding: 30px 25px;
+  }
+
+  .mural-immersive-cover-wrap .mural-cover-visual,
+  .mural-immersive-cover-wrap .mural-cover-split .mural-cover-visual,
+  .mural-immersive-cover-wrap .mural-cover-editorial .mural-cover-visual {
+    position: absolute;
+    min-height: 100%;
+    margin: 0;
+    border-radius: 0;
+    inset: 0;
+  }
+
+  .mural-immersive-cover-wrap .mural-cover-visual::after {
+    background: linear-gradient(90deg, rgb(0 0 0 / calc(var(--mural-cover-overlay) + 0.32)), rgb(0 0 0 / var(--mural-cover-overlay)));
+  }
+
+  .mural-immersive-cover-wrap .mural-cover h1 {
+    font-size: calc(clamp(2.7rem, 14vw, 4.6rem) + 0.125rem);
+  }
+
+  .mural-immersive-cover-wrap .mural-cover-copy > p {
+    font-size: calc(0.77rem + 0.125rem);
+  }
+
+  .mural-immersive-cover-wrap .mural-cover-featured {
+    display: none;
+  }
+
+  .mural-immersive-story {
+    position: relative;
+    width: calc(100vw - 20px);
+    height: calc(100dvh - 130px);
+    min-height: 440px;
+    border-radius: 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .mural-immersive-story-copy {
+    z-index: 3;
+    justify-content: center;
+    padding: clamp(25px, 8vw, 44px);
+  }
+
+  .mural-immersive-story-index {
+    margin-bottom: 22px;
+  }
+
+  .mural-immersive-story h2 {
+    font-size: calc(clamp(2.35rem, 11vw, 4.2rem) + 0.125rem);
+  }
+
+  .mural-immersive-story-copy > p {
+    font-size: calc(0.74rem + 0.125rem);
+    line-height: 1.55;
+  }
+
+  .mural-immersive-story blockquote {
+    margin-top: 18px;
+    font-size: calc(0.69rem + 0.125rem);
+  }
+
+  .mural-immersive-story-visual {
+    position: absolute;
+    opacity: 0.25;
+    inset: 0;
+  }
+
+  .mural-immersive-story-visual::after {
+    position: absolute;
+    z-index: 2;
+    background: linear-gradient(90deg, var(--mural-cover-bg) 4%, transparent 90%);
+    content: "";
+    inset: 0;
+  }
+
+  .mural-immersive-story-visual > span,
+  .mural-immersive-story-visual > strong {
+    display: none;
+  }
+
+  .mural-immersive-controls {
+    min-height: 47px;
+    gap: 6px;
+    grid-template-columns: auto minmax(72px, 1fr) auto;
+  }
+
+  .mural-immersive-controls > button {
+    width: 38px;
+    min-height: 38px;
+    overflow: hidden;
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .mural-immersive-controls > button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .mural-immersive-controls nav {
+    max-width: calc(100vw - 110px);
   }
 
   .mural-studio-backdrop {

@@ -71,6 +71,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     usersSource,
     taskSource,
     taskUiSource,
+    taskResourceViewerSource,
     functionsSource,
     taskCss,
     workshopSource,
@@ -82,6 +83,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     gradesUiSource,
     gradesCss,
     gradeReportPdfSource,
+    reviewFirebaseSource,
+    calendarImageSource,
+    calendarModalSource,
   ] =
     await Promise.all([
       readFile(new URL(".env.example", projectRoot), "utf8"),
@@ -95,6 +99,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("components/users-page.tsx", projectRoot), "utf8"),
       readFile(new URL("lib/tasks-firebase.ts", projectRoot), "utf8"),
       readFile(new URL("components/tasks-workflow.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/task-resource-viewer.tsx", projectRoot), "utf8"),
       readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
       readFile(new URL("app/tasks.css", projectRoot), "utf8"),
       readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
@@ -106,6 +111,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("components/weekly-grades.tsx", projectRoot), "utf8"),
       readFile(new URL("app/grades.css", projectRoot), "utf8"),
       readFile(new URL("lib/grade-report-pdf.ts", projectRoot), "utf8"),
+      readFile(new URL("lib/reviews-firebase.ts", projectRoot), "utf8"),
+      readFile(new URL("lib/academic-calendar-image-firebase.ts", projectRoot), "utf8"),
+      readFile(new URL("components/academic-calendar-modal.tsx", projectRoot), "utf8"),
     ]);
 
   for (const key of [
@@ -236,6 +244,36 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(taskUiSource, /Agregar trimestre/);
   assert.match(taskUiSource, /ACADEMIC_WEEKS_PAGE_SIZE = 5/);
   assert.match(taskUiSource, /academic-week-pagination/);
+  assert.doesNotMatch(appSource, /key: "weekly-materials", label: "Materiales"/);
+  assert.match(appSource, /name === "weekly-materials"\) return "tasks"/);
+  assert.match(taskUiSource, /TaskResourceViewer/);
+  assert.match(taskUiSource, /PDF, Office, imagen, audio o vídeo/);
+  assert.match(taskResourceViewerSource, /Registro de aperturas/);
+  assert.match(taskResourceViewerSource, /material-pdf-frame/);
+  assert.match(taskResourceViewerSource, /material-audio-player/);
+  assert.match(taskResourceViewerSource, /material-video-player/);
+  assert.match(taskResourceViewerSource, /task-resource-loading/);
+  assert.match(taskResourceViewerSource, /Cargando las páginas del documento/);
+  assert.match(taskCss, /\.task-resource-loading\s*\{/);
+  assert.match(taskSource, /markTaskResourceViewed/);
+  assert.match(taskSource, /watchTaskResourceViews/);
+  assert.match(taskSource, /loadViewedTaskResourceIds/);
+  assert.match(firestoreRules, /match \/resourceViews\/\{resourceId\}\/students\/\{studentId\}/);
+  assert.match(storageRules, /function taskResourceSafeUpload\(\)/);
+  assert.match(appSource, /setAcademicCalendarOpen\(true\)/);
+  assert.match(appSource, /AcademicCalendarModal/);
+  assert.match(appSource, /publishAcademicCalendarImage/);
+  assert.match(calendarImageSource, /watchAcademicCalendarImage/);
+  assert.match(calendarImageSource, /MAX_ACADEMIC_CALENDAR_IMAGE_SIZE/);
+  assert.match(calendarImageSource, /academic-calendar\/\$\{crypto\.randomUUID\(\)\}/);
+  assert.match(calendarModalSource, /Sólo Dirección puede publicar|Publica la imagen/);
+  assert.match(calendarModalSource, /Seleccionar imagen del calendario/);
+  assert.match(css, /\.academic-calendar-modal\s*\{/);
+  assert.match(css, /\.week-switcher:hover\s*\{/);
+  assert.match(firestoreRules, /match \/configuracion\/calendarioVisual/);
+  assert.match(firestoreRules, /function validVisualCalendar\(data\)/);
+  assert.match(storageRules, /function academicCalendarImageUpload\(\)/);
+  assert.match(storageRules, /academic-calendar\/\{assetId\}/);
   assert.match(functionsSource, /publishScheduledTasks/);
   assert.match(functionsSource, /onTaskConversationEvent/);
   assert.match(functionsSource, /export const saveAcademicCalendar/);
@@ -263,7 +301,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firestoreRules, /roleIs\("student"\)[\s\S]*resource\.data\.role == "director"/);
   assert.match(functionsSource, /export const listStudentMaterials/);
   assert.match(functionsSource, /export const listStaffMaterials/);
+  assert.match(functionsSource, /export const listStudentWeeklyReviews/);
   assert.match(functionsSource, /export const listStaffWeeklyReviews/);
+  assert.match(reviewFirebaseSource, /profile\.role === "student"[\s\S]*"listStudentWeeklyReviews"/);
   assert.match(functionsSource, /notificationRecipients\(data\.managerIds\)\.includes\(actor\.uid\)/);
   assert.match(firestoreRules, /function canReadMaterial\(data\)/);
   assert.match(firestoreRules, /request\.auth\.uid in data\.audienceStudentIds/);
@@ -305,7 +345,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesUiSource, /profile\.guardianName/);
   assert.match(gradesUiSource, /reportDirectorNames/);
   assert.match(gradesUiSource, /GradeSummaryDashboard/);
-  assert.match(gradesUiSource, /Panorama académico/);
+  assert.match(gradesUiSource, /Historial académico/);
   assert.match(gradesUiSource, /Promedio por materia/);
   assert.match(gradesUiSource, /Tendencia semanal/);
   assert.match(gradesCss, /\.grade-week-selector/);

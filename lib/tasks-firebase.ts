@@ -6,11 +6,14 @@ import {
   deleteField,
   doc,
   getDoc,
+  increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
+  updateDoc,
   where,
   writeBatch,
   type DocumentData,
@@ -34,6 +37,8 @@ import type {
   TaskExtension,
   TaskHistoryEvent,
   TaskHistoryEventType,
+  TaskResource,
+  TaskResourceView,
   TaskSubmission,
   UserProfile,
 } from "./types";
@@ -168,6 +173,22 @@ function attachmentFromData(value: unknown): TaskAttachment | null {
     storagePath: String(data.storagePath),
     contentType: String(data.contentType ?? "application/octet-stream"),
     size: Number(data.size ?? 0),
+    downloadUrl: data.downloadUrl ? String(data.downloadUrl) : undefined,
+  };
+}
+
+function resourceViewFromData(data: DocumentData): TaskResourceView {
+  return {
+    institutionId: String(data.institutionId ?? ""),
+    taskId: String(data.taskId ?? ""),
+    resourceId: String(data.resourceId ?? ""),
+    resourceKind: data.resourceKind === "link" ? "link" : "attachment",
+    resourceLabel: String(data.resourceLabel ?? "Recurso"),
+    studentId: String(data.studentId ?? ""),
+    studentName: String(data.studentName ?? "Alumno"),
+    firstOpenedAt: asIso(data.firstOpenedAt),
+    lastOpenedAt: asIso(data.lastOpenedAt),
+    viewCount: Math.max(1, Number(data.viewCount ?? 1)),
   };
 }
 
@@ -963,8 +984,115 @@ export async function grantIndividualTaskExtension(
 }
 
 export async function getTaskAttachmentUrl(attachment: TaskAttachment) {
+  if (attachment.downloadUrl) return attachment.downloadUrl;
   const { storage } = requireFirebase();
   return getDownloadURL(ref(storage, attachment.storagePath));
+}
+
+function resourceDetails(resource: TaskResource) {
+  return resource.kind === "attachment"
+    ? {
+        id: resource.attachment.id,
+        label: resource.attachment.name,
+        kind: resource.kind,
+      }
+    : { id: resource.link.id, label: resource.link.label, kind: resource.kind };
+}
+
+export async function markTaskResourceViewed(
+  task: TaskAssignment,
+  resource: TaskResource,
+  profile: UserProfile,
+) {
+  if (profile.role !== "student" || !isFirebaseTaskAssignment(task)) return;
+  const { db } = requireFirebase();
+  const details = resourceDetails(resource);
+  const viewReference = doc(
+    db,
+    task.firestorePath,
+    "resourceViews",
+    details.id,
+    "students",
+    profile.uid,
+  );
+  const snapshot = await getDoc(viewReference);
+  if (snapshot.exists()) {
+    await updateDoc(viewReference, {
+      lastOpenedAt: serverTimestamp(),
+      viewCount: increment(1),
+    });
+    return;
+  }
+  await setDoc(viewReference, {
+    institutionId: task.institutionId,
+    taskId: task.id,
+    resourceId: details.id,
+    resourceKind: details.kind,
+    resourceLabel: details.label,
+    studentId: profile.uid,
+    studentName: profile.name,
+    firstOpenedAt: serverTimestamp(),
+    lastOpenedAt: serverTimestamp(),
+    viewCount: 1,
+  });
+}
+
+export function watchTaskResourceViews(
+  task: TaskAssignment,
+  resourceId: string,
+  callback: (views: TaskResourceView[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db || !isFirebaseTaskAssignment(task)) {
+    callback([]);
+    return () => undefined;
+  }
+  return onSnapshot(
+    collection(
+      firebase.db,
+      task.firestorePath,
+      "resourceViews",
+      resourceId,
+      "students",
+    ),
+    (snapshot) => callback(
+      snapshot.docs
+        .map((entry) => resourceViewFromData(entry.data()))
+        .sort((first, second) =>
+          second.lastOpenedAt.localeCompare(first.lastOpenedAt),
+        ),
+    ),
+    (error) => onError?.(error),
+  );
+}
+
+export async function loadViewedTaskResourceIds(
+  task: TaskAssignment,
+  profile: UserProfile,
+) {
+  if (!firebase.db || profile.role !== "student" || !isFirebaseTaskAssignment(task)) {
+    return new Set<string>();
+  }
+  const resourceIds = [
+    ...task.links.map((link) => link.id),
+    ...task.attachments.map((attachment) => attachment.id),
+  ];
+  const entries = await Promise.all(
+    resourceIds.map(async (resourceId) => ({
+      resourceId,
+      viewed: (
+        await getDoc(doc(
+          firebase.db!,
+          task.firestorePath,
+          "resourceViews",
+          resourceId,
+          "students",
+          profile.uid,
+        ))
+      ).exists(),
+    })),
+  );
+  return new Set(entries.filter((entry) => entry.viewed).map((entry) => entry.resourceId));
 }
 
 function notificationDate(value: unknown) {
@@ -1034,7 +1162,9 @@ export function legacyTasksToAssignments(
   profile: UserProfile,
 ) {
   const baseDue = Date.now() + 24 * 60 * 60 * 1000;
-  const targetGroup = `${profile.grade ?? "5.º"} ${profile.group ?? "A"}`.trim();
+  const targetGroup = profile.role === "student"
+    ? `${profile.grade ?? "5.º"} ${profile.group ?? "A"}`.trim()
+    : profile.group?.trim() || "5.º A";
   return tasks.map((task, index): TaskAssignment => {
     const originalDue = new Date(task.dueAt).getTime();
     const dueAt = new Date(
@@ -1061,7 +1191,16 @@ export function legacyTasksToAssignments(
       publicationMode: "now",
       targetGroup,
       links: [],
-      attachments: [],
+      attachments: index === 0
+        ? [{
+            id: "demo-resource-guide",
+            name: "Guía visual del tema.png",
+            storagePath: "demo/task-resources/guide.png",
+            contentType: "image/png",
+            size: 248_000,
+            downloadUrl: "/og-campus.png",
+          }]
+        : [],
       createdBy: "demo-teacher",
       teacherName: "Mariana López",
       createdAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
@@ -1114,6 +1253,7 @@ export function createDemoTask(
       storagePath: `demo/${file.name}`,
       contentType: file.type,
       size: file.size,
+      downloadUrl: URL.createObjectURL(file),
     })),
     createdBy: profile.uid,
     teacherName: profile.name,

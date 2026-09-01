@@ -28,7 +28,7 @@ import {
   WHATSAPP_DAILY_TEMPLATE,
   WHATSAPP_TEMPLATE_LANGUAGE,
   WHATSAPP_TIMEZONE,
-  buildTemplateParameters,
+  buildDailyReportTemplateParameters,
   dailyOutboxId,
   firstName,
   isOptOutMessage,
@@ -40,6 +40,8 @@ import {
   retryDelayMinutes,
   shouldRunDailySummary,
   type DailyStudentSummary,
+  type DailyAttendanceStatus,
+  type DailyParticipationStatus,
 } from "./whatsapp-core.js";
 
 initializeApp();
@@ -1501,6 +1503,23 @@ export const listStaffWeeklyReviews = onCall(async (request) => {
       const data = document.data();
       return actor.role === "director"
         || notificationRecipients(data.managerIds).includes(actor.uid);
+    })
+    .map(serializeWeeklyReview)
+    .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  return { reviews };
+});
+
+export const listStudentWeeklyReviews = onCall(async (request) => {
+  const student = await requireReviewStudent(request.auth);
+  const snapshot = await db
+    .collection("weeklyReviews")
+    .where("audienceStudentIds", "array-contains", student.uid)
+    .get();
+  const reviews = snapshot.docs
+    .filter((document) => {
+      const data = document.data();
+      return data.institutionId === student.institutionId
+        && ["published", "closed"].includes(String(data.status ?? ""));
     })
     .map(serializeWeeklyReview)
     .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
@@ -3444,6 +3463,11 @@ type SummaryStudent = {
   groupKey: string;
 };
 
+type DailyStudentReport = {
+  attendance: DailyAttendanceStatus;
+  participation: DailyParticipationStatus;
+};
+
 const DEFAULT_WHATSAPP_CONFIGURATION: WhatsAppConfiguration = {
   institutionId: "cehf-primaria",
   enabled: false,
@@ -3505,6 +3529,7 @@ function whatsappConfigFromData(
   institutionId: string,
   data?: DocumentData,
 ): WhatsAppConfiguration {
+  const storedTemplateName = String(data?.templateName ?? "");
   return {
     ...DEFAULT_WHATSAPP_CONFIGURATION,
     institutionId,
@@ -3512,9 +3537,12 @@ function whatsappConfigFromData(
     dailySummaryEnabled: data?.dailySummaryEnabled !== false,
     sendTime: isValidSendTime(data?.sendTime) ? String(data?.sendTime) : "18:00",
     sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
-    templateName: /^[a-z0-9_]{1,512}$/.test(String(data?.templateName ?? ""))
-      ? String(data?.templateName)
-      : WHATSAPP_DAILY_TEMPLATE,
+    templateName:
+      storedTemplateName === "cehf_resumen_tareas_diario_v1"
+        ? WHATSAPP_DAILY_TEMPLATE
+        : /^[a-z0-9_]{1,512}$/.test(storedTemplateName)
+          ? storedTemplateName
+          : WHATSAPP_DAILY_TEMPLATE,
     templateLanguage: /^[A-Za-z_]{2,10}$/.test(
       String(data?.templateLanguage ?? ""),
     )
@@ -3720,7 +3748,12 @@ export const saveWhatsAppConfiguration = onCall(async (request) => {
   ) {
     throw new HttpsError("invalid-argument", "La configuración no es válida.");
   }
-  const templateName = String(input.templateName ?? WHATSAPP_DAILY_TEMPLATE);
+  const requestedTemplateName = String(
+    input.templateName ?? WHATSAPP_DAILY_TEMPLATE,
+  );
+  const templateName = requestedTemplateName === "cehf_resumen_tareas_diario_v1"
+    ? WHATSAPP_DAILY_TEMPLATE
+    : requestedTemplateName;
   if (!/^[a-z0-9_]{1,512}$/.test(templateName)) {
     throw new HttpsError("invalid-argument", "El nombre de la plantilla no es válido.");
   }
@@ -3862,6 +3895,7 @@ async function buildStudentSummaries(
   students.forEach((student) => {
     const summary: DailyStudentSummary = {
       studentId: student.uid,
+      studentName: student.name,
       firstName: firstName(student.name),
       submitted: 0,
       total: 0,
@@ -3904,6 +3938,44 @@ async function buildStudentSummaries(
   return summaries;
 }
 
+function dailyAttendanceStatus(value: unknown): DailyAttendanceStatus | null {
+  return value === "present" || value === "absent" ? value : null;
+}
+
+function dailyParticipationStatus(
+  value: unknown,
+): DailyParticipationStatus | null {
+  return ["positive", "neutral", "needs_support"].includes(String(value))
+    ? (value as DailyParticipationStatus)
+    : null;
+}
+
+async function loadDailyStudentReports(
+  institutionId: string,
+  businessDate: string,
+  studentIds: string[],
+) {
+  if (!studentIds.length) return new Map<string, DailyStudentReport>();
+  const snapshots = await db.getAll(
+    ...studentIds.map((studentId) =>
+      db.doc(
+        `institutions/${institutionId}/dailyReports/${businessDate}/students/${studentId}`,
+      ),
+    ),
+  );
+  return new Map(
+    snapshots.flatMap((snapshot) => {
+      const attendance = dailyAttendanceStatus(snapshot.data()?.attendance);
+      const participation = dailyParticipationStatus(
+        snapshot.data()?.participation,
+      );
+      return snapshot.exists && attendance && participation
+        ? [[snapshot.id, { attendance, participation } satisfies DailyStudentReport]]
+        : [];
+    }),
+  );
+}
+
 async function createDailySummaryOutbox(
   institutionId: string,
   businessDate: string,
@@ -3941,6 +4013,11 @@ async function createDailySummaryOutbox(
     configuration.timeZone,
   );
   const summaries = await buildStudentSummaries(students, tasks);
+  const dailyReports = await loadDailyStudentReports(
+    institutionId,
+    businessDate,
+    [...students.keys()],
+  );
   let queued = 0;
   let skipped = 0;
   const outboxIds: string[] = [];
@@ -3949,51 +4026,77 @@ async function createDailySummaryOutbox(
     const contactSummaries = notificationRecipients(contact.studentIds)
       .map((studentId) => summaries.get(studentId))
       .filter((summary): summary is DailyStudentSummary => Boolean(summary));
-    if (
-      !contactSummaries.length ||
-      (!configuration.sendOnNoTaskDays &&
-        contactSummaries.every((summary) => summary.total === 0) &&
-        options.test !== true)
-    ) {
+    if (!contactSummaries.length) {
       skipped += 1;
       continue;
     }
-    const outboxId = options.test
-      ? `test_${Date.now()}_${contactSnapshot.id}`
-      : dailyOutboxId(businessDate, contactSnapshot.id);
-    const parameters = buildTemplateParameters(businessDate, contactSummaries);
-    const now = Timestamp.now();
-    try {
-      await db.doc(`messageOutbox/${outboxId}`).create({
-        institutionId,
-        guardianContactId: contactSnapshot.id,
-        recipientName: String(contact.name ?? "Familia CEHF"),
-        to: String(contact.phoneE164),
-        toMasked: String(contact.phoneMasked ?? maskPhone(String(contact.phoneE164))),
-        messageKind: options.test ? "daily_task_summary_test" : "daily_task_summary",
+    for (const summary of contactSummaries) {
+      if (
+        !configuration.sendOnNoTaskDays &&
+        summary.total === 0 &&
+        options.test !== true
+      ) {
+        skipped += 1;
+        continue;
+      }
+      const recordedReport = dailyReports.get(summary.studentId);
+      if (!recordedReport && options.test !== true) {
+        skipped += 1;
+        continue;
+      }
+      const report = recordedReport ?? {
+        attendance: "present" as const,
+        participation: "positive" as const,
+      };
+      const outboxId = options.test
+        ? `test_${Date.now()}_${contactSnapshot.id}_${summary.studentId}`
+        : dailyOutboxId(businessDate, contactSnapshot.id, summary.studentId);
+      const parameters = buildDailyReportTemplateParameters({
+        guardianName: String(contact.name ?? "Familia CEHF"),
+        studentName: summary.studentName,
         businessDate,
-        studentIds: contactSummaries.map((summary) => summary.studentId),
-        studentSummaries: contactSummaries,
-        templateName: configuration.templateName,
-        templateLanguage: configuration.templateLanguage,
-        templateParameters: parameters,
-        graphApiVersion: configuration.graphApiVersion,
-        status: "queued",
-        attemptCount: 0,
-        nextAttemptAt: now,
-        createdAt: now,
-        updatedAt: now,
-        test: options.test === true,
+        attendance: report.attendance,
+        participation: report.participation,
+        homework: summary,
       });
-      queued += 1;
-      outboxIds.push(outboxId);
-    } catch (error) {
-      const code =
-        typeof error === "object" && error && "code" in error
-          ? String(error.code)
-          : "";
-      if (!["6", "already-exists"].includes(code)) throw error;
-      skipped += 1;
+      const now = Timestamp.now();
+      try {
+        await db.doc(`messageOutbox/${outboxId}`).create({
+          institutionId,
+          guardianContactId: contactSnapshot.id,
+          recipientName: String(contact.name ?? "Familia CEHF"),
+          to: String(contact.phoneE164),
+          toMasked: String(
+            contact.phoneMasked ?? maskPhone(String(contact.phoneE164)),
+          ),
+          messageKind: options.test
+            ? "daily_task_summary_test"
+            : "daily_task_summary",
+          businessDate,
+          studentIds: [summary.studentId],
+          studentSummaries: [summary],
+          dailyIndicators: report,
+          templateName: configuration.templateName,
+          templateLanguage: configuration.templateLanguage,
+          templateParameters: parameters,
+          graphApiVersion: configuration.graphApiVersion,
+          status: "queued",
+          attemptCount: 0,
+          nextAttemptAt: now,
+          createdAt: now,
+          updatedAt: now,
+          test: options.test === true,
+        });
+        queued += 1;
+        outboxIds.push(outboxId);
+      } catch (error) {
+        const code =
+          typeof error === "object" && error && "code" in error
+            ? String(error.code)
+            : "";
+        if (!["6", "already-exists"].includes(code)) throw error;
+        skipped += 1;
+      }
     }
   }
   return { queued, skipped, outboxIds, businessDate };

@@ -8,7 +8,6 @@ import {
   Timestamp,
   where,
   type DocumentData,
-  type QueryConstraint,
   type Unsubscribe,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -206,7 +205,7 @@ export function watchWeeklyReviews(
     callback([]);
     return () => undefined;
   }
-  if (profile.role === "teacher") {
+  if (profile.role !== "director") {
     if (!firebase.functions) {
       onError?.(new Error("Firebase Functions no está configurado para Repasos."));
       return () => undefined;
@@ -215,97 +214,100 @@ export function watchWeeklyReviews(
     const callable = httpsCallable<
       Record<string, never>,
       { reviews: Array<Record<string, unknown>> }
-    >(firebase.functions, "listStaffWeeklyReviews");
+    >(
+      firebase.functions,
+      profile.role === "student"
+        ? "listStudentWeeklyReviews"
+        : "listStaffWeeklyReviews",
+    );
+    const attemptStops = new Map<string, Unsubscribe>();
+    const attempts = new Map<string, WeeklyReviewAttempt>();
+    let reviews: WeeklyReview[] = [];
+    const emit = () =>
+      callback(
+        reviews.map((review) => ({
+          ...review,
+          myAttempt:
+            profile.role === "student" ? attempts.get(review.id) : undefined,
+        })),
+      );
     void callable({})
       .then(({ data }) => {
         if (!active) return;
-        callback(
-          data.reviews.map((review) =>
-            reviewFromData(
-              String(review.id ?? ""),
-              String(review.firestorePath ?? ""),
-              review,
-            ),
+        reviews = data.reviews.map((review) =>
+          reviewFromData(
+            String(review.id ?? ""),
+            String(review.firestorePath ?? ""),
+            review,
           ),
         );
+        if (profile.role === "student") {
+          reviews.forEach((review) => {
+            attemptStops.set(
+              review.id,
+              onSnapshot(
+                doc(
+                  firebase.db!,
+                  "weeklyReviews",
+                  review.id,
+                  "attempts",
+                  profile.uid,
+                ),
+                (attemptSnapshot) => {
+                  if (attemptSnapshot.exists()) {
+                    attempts.set(
+                      review.id,
+                      attemptFromData(
+                        attemptSnapshot.id,
+                        attemptSnapshot.data(),
+                      ),
+                    );
+                  } else {
+                    attempts.delete(review.id);
+                  }
+                  emit();
+                },
+                (error) => onError?.(error),
+              ),
+            );
+          });
+        }
+        emit();
       })
       .catch((error: unknown) => {
         if (!active) return;
         onError?.(
           error instanceof Error
             ? error
-            : new Error("No pudimos cargar los repasos del maestro."),
+            : new Error("No pudimos cargar los repasos."),
         );
       });
     return () => {
       active = false;
+      attemptStops.forEach((stop) => stop());
     };
   }
-  const constraints: QueryConstraint[] = [
-    where("institutionId", "==", profile.institutionId),
-  ];
-  if (profile.role === "student") {
-    constraints.push(where("audienceStudentIds", "array-contains", profile.uid));
-    constraints.push(where("status", "in", ["published", "closed"]));
-  }
-
-  let reviews: WeeklyReview[] = [];
-  const attempts = new Map<string, WeeklyReviewAttempt>();
-  const attemptStops = new Map<string, Unsubscribe>();
-  const emit = () =>
-    callback(
-      reviews.map((review) => ({
-        ...review,
-        myAttempt:
-          profile.role === "student" ? attempts.get(review.id) : undefined,
-      })),
-    );
-
   const stopReviews = onSnapshot(
-    query(collection(firebase.db, "weeklyReviews"), ...constraints),
+    query(
+      collection(firebase.db, "weeklyReviews"),
+      where("institutionId", "==", profile.institutionId),
+    ),
     (snapshot) => {
-      reviews = snapshot.docs
-        .map((entry) => reviewFromData(entry.id, entry.ref.path, entry.data()))
-        .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
-      if (profile.role === "student") {
-        const activeIds = new Set(reviews.map((review) => review.id));
-        attemptStops.forEach((stop, reviewId) => {
-          if (!activeIds.has(reviewId)) {
-            stop();
-            attemptStops.delete(reviewId);
-            attempts.delete(reviewId);
-          }
-        });
-        reviews.forEach((review) => {
-          if (attemptStops.has(review.id)) return;
-          attemptStops.set(
-            review.id,
-            onSnapshot(
-              doc(firebase.db!, "weeklyReviews", review.id, "attempts", profile.uid),
-              (attemptSnapshot) => {
-                if (attemptSnapshot.exists()) {
-                  attempts.set(
-                    review.id,
-                    attemptFromData(attemptSnapshot.id, attemptSnapshot.data()),
-                  );
-                } else {
-                  attempts.delete(review.id);
-                }
-                emit();
-              },
-              (error) => onError?.(error),
-            ),
-          );
-        });
-      }
-      emit();
+      callback(
+        snapshot.docs
+          .map((entry) =>
+            reviewFromData(entry.id, entry.ref.path, entry.data()),
+          )
+          .sort((first, second) =>
+            second.createdAt.localeCompare(first.createdAt),
+          ),
+      );
     },
     (error) => onError?.(error),
   );
 
   return () => {
     stopReviews();
-    attemptStops.forEach((stop) => stop());
   };
 }
 

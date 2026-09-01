@@ -9,6 +9,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   CircleHelp,
   ClipboardCheck,
   Clock3,
@@ -20,7 +21,6 @@ import {
   Eye,
   EyeOff,
   LayoutDashboard,
-  Library,
   LockKeyhole,
   LogIn,
   LogOut,
@@ -30,6 +30,9 @@ import {
   Moon,
   MoreHorizontal,
   Newspaper,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Paperclip,
   Pencil,
   Plus,
   Quote,
@@ -50,6 +53,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
+import { AcademicCalendarModal } from "@/components/academic-calendar-modal";
 import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
@@ -62,10 +66,6 @@ import {
   ReviewCreateModal,
   ReviewsPage,
 } from "@/components/reviews-page";
-import {
-  MaterialCreateModal,
-  MaterialsPage,
-} from "@/components/materials-page";
 import {
   AcademicConfigurationCard,
   TaskCreateModal,
@@ -106,13 +106,6 @@ import {
   watchTaskNotifications,
 } from "@/lib/tasks-firebase";
 import {
-  createDemoLearningMaterial,
-  createLearningMaterial,
-  legacyMaterialsToLearningMaterials,
-  loadViewedLearningMaterialIds,
-  watchLearningMaterials,
-} from "@/lib/materials-firebase";
-import {
   createDemoWeeklyReview,
   createWeeklyReview,
   legacyReviewsToWeeklyReviews,
@@ -129,15 +122,19 @@ import {
   watchForumWorkspace,
 } from "@/lib/forum-firebase";
 import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
+import {
+  publishAcademicCalendarImage,
+  unpublishAcademicCalendarImage,
+  watchAcademicCalendarImage,
+} from "@/lib/academic-calendar-image-firebase";
 import type {
   AcademicCalendar,
+  AcademicCalendarImage,
   AcademicCalendarInput,
   ForumTopic,
   ForumTopicKind,
   ManagedAccount,
   AcademicConfig,
-  LearningMaterial,
-  LearningMaterialCreateInput,
   PortalState,
   PortalSettings,
   ProgressLevel,
@@ -194,7 +191,6 @@ const routes: Record<SectionKey, string> = {
   tasks: "/tasks",
   "weekly-progress": "/weekly-progress",
   reports: "/reports",
-  "weekly-materials": "/weekly-materials",
   "wall-newspaper": "/wall-newspaper",
   forum: "/forum",
   workshops: "/workshops",
@@ -204,9 +200,14 @@ const routes: Record<SectionKey, string> = {
 };
 
 const sectionFromPath = (path: string): SectionKey => {
-  const name = path.split("/").filter(Boolean)[0] as SectionKey | "qualifications" | undefined;
+  const name = path.split("/").filter(Boolean)[0] as
+    | SectionKey
+    | "qualifications"
+    | "weekly-materials"
+    | undefined;
   if (!name || name === ("login" as SectionKey)) return "dashboard";
   if (name === "qualifications" || name === "my-week") return "my-week";
+  if (name === "weekly-materials") return "tasks";
   return name in routes ? name : "dashboard";
 };
 
@@ -269,7 +270,6 @@ const navigation: Array<{
   { key: "tasks", label: "Tareas", icon: ClipboardCheck },
   { key: "weekly-progress", label: "Mi avance", icon: Target },
   { key: "reports", label: "Reportes", icon: FileBarChart },
-  { key: "weekly-materials", label: "Materiales", icon: Library },
   { key: "wall-newspaper", label: "Periódico mural", icon: Newspaper },
   { key: "forum", label: "Foro", icon: MessageCircle },
   { key: "workshops", label: "Talleres", icon: Sparkles },
@@ -282,7 +282,7 @@ const navigation: Array<{
 ];
 
 const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
-  dashboard: { eyebrow: "Panorama académico", title: "Buenos días" },
+  dashboard: { eyebrow: "Historial académico", title: "Buenos días" },
   "my-week": { eyebrow: "Resultados y seguimiento", title: "Calificaciones" },
   "weekly-review": { eyebrow: "Práctica breve", title: "Repasos" },
   tasks: { eyebrow: "Actividades y entregas", title: "Tareas" },
@@ -291,10 +291,6 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
     title: "Avance semanal",
   },
   reports: { eyebrow: "Seguimiento con contexto", title: "Reportes" },
-  "weekly-materials": {
-    eyebrow: "Recursos organizados",
-    title: "Materiales de la semana",
-  },
   "wall-newspaper": {
     eyebrow: "Historias de nuestra comunidad",
     title: "Periódico mural",
@@ -343,6 +339,7 @@ export function CEHFApp() {
   const [demoStarted, setDemoStarted] = useState(false);
   const [state, setState] = useState<PortalState>(createDemoState);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationWrapRef = useOutsidePointerDismiss<HTMLDivElement>(
     notificationsOpen,
@@ -358,6 +355,12 @@ export function CEHFApp() {
   const [academicCalendar, setAcademicCalendar] = useState<AcademicCalendar>(
     defaultAcademicCalendar,
   );
+  const [academicCalendarImage, setAcademicCalendarImage] =
+    useState<AcademicCalendarImage | null>(null);
+  const [academicCalendarImageLoading, setAcademicCalendarImageLoading] =
+    useState(false);
+  const [academicCalendarOpen, setAcademicCalendarOpen] = useState(false);
+  const [academicCalendarSaving, setAcademicCalendarSaving] = useState(false);
   const [taskRecords, setTaskRecords] = useState<TaskAssignment[]>(() =>
     legacyTasksToAssignments(
       createDemoState().tasks,
@@ -376,24 +379,6 @@ export function CEHFApp() {
   );
   const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
   const [reviewRecordsRevision, setReviewRecordsRevision] = useState(0);
-  const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>(() =>
-    legacyMaterialsToLearningMaterials(
-      createDemoState().materials,
-      demoProfiles.student,
-      defaultAcademicConfig,
-      demoManagedAccounts,
-    ),
-  );
-  const [materialRecordsLoading, setMaterialRecordsLoading] = useState(false);
-  const [materialRecordsRevision, setMaterialRecordsRevision] = useState(0);
-  const [viewedMaterialIds, setViewedMaterialIds] = useState<Set<string>>(
-    () =>
-      new Set(
-        createDemoState().materials
-          .filter((material) => material.reviewed)
-          .map((material) => material.id),
-      ),
-  );
   const [mobileMore, setMobileMore] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>(
@@ -507,6 +492,25 @@ export function CEHFApp() {
   }, [firebaseUser, profile, storedAcademicConfig]);
 
   useEffect(() => {
+    if (!firebaseUser || !profile) {
+      queueMicrotask(() => setAcademicCalendarImageLoading(false));
+      return;
+    }
+    queueMicrotask(() => setAcademicCalendarImageLoading(true));
+    return watchAcademicCalendarImage(
+      profile.institutionId,
+      (calendar) => {
+        setAcademicCalendarImage(calendar);
+        setAcademicCalendarImageLoading(false);
+      },
+      (error) => {
+        setAcademicCalendarImageLoading(false);
+        reportFirebaseError("cargar calendario visual", error);
+      },
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
     if (!firebaseUser || !profile) return;
     queueMicrotask(() => {
       setTaskRecords([]);
@@ -575,72 +579,6 @@ export function CEHFApp() {
       setReviewRecordsLoading(false);
     });
   }, [academicConfig, currentProfile, demoRole, firebaseUser, managedAccounts, state.reviews]);
-
-  useEffect(() => {
-    if (!firebaseUser || !profile) return;
-    if (profile.role === "student" && activeSection !== "weekly-materials") {
-      queueMicrotask(() => {
-        setMaterialRecords([]);
-        setMaterialRecordsLoading(false);
-      });
-      return;
-    }
-    queueMicrotask(() => {
-      setMaterialRecords([]);
-      setMaterialRecordsLoading(true);
-    });
-    return watchLearningMaterials(
-      profile,
-      (materials) => {
-        setMaterialRecords(materials);
-        setMaterialRecordsLoading(false);
-      },
-      (error) => {
-        setMaterialRecordsLoading(false);
-        reportFirebaseError("cargar materiales", error);
-      },
-    );
-  }, [activeSection, firebaseUser, materialRecordsRevision, profile]);
-
-  useEffect(() => {
-    if (firebaseUser) return;
-    queueMicrotask(() => {
-      setMaterialRecords(
-        legacyMaterialsToLearningMaterials(
-          state.materials,
-          currentProfile,
-          academicConfig,
-          managedAccounts,
-        ),
-      );
-      setMaterialRecordsLoading(false);
-      setViewedMaterialIds(
-        new Set(
-          state.materials
-            .filter((material) => material.reviewed)
-            .map((material) => material.id),
-        ),
-      );
-    });
-  }, [academicConfig, currentProfile, firebaseUser, managedAccounts, state.materials]);
-
-  useEffect(() => {
-    if (!firebaseUser || !profile || profile.role !== "student") {
-      if (profile?.role !== "student") queueMicrotask(() => setViewedMaterialIds(new Set()));
-      return;
-    }
-    let active = true;
-    void loadViewedLearningMaterialIds(materialRecords, profile)
-      .then((ids) => {
-        if (active) setViewedMaterialIds(ids);
-      })
-      .catch((error) => {
-        if (active) reportFirebaseError("cargar lecturas de materiales", error);
-      });
-    return () => {
-      active = false;
-    };
-  }, [firebaseUser, materialRecords, profile]);
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
@@ -898,25 +836,71 @@ export function CEHFApp() {
       : title.eyebrow;
 
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}
+    >
       <Toaster position="top-center" richColors closeButton />
       <div
         className={`sidebar-backdrop ${sidebarOpen ? "is-open" : ""}`}
         onClick={() => setSidebarOpen(false)}
         aria-hidden="true"
       />
-      <aside className={`sidebar ${sidebarOpen ? "is-open" : ""}`}>
-        <div className="brand">
-          <div className="brand-mark" aria-hidden="true">
-            <span>CE</span>
+      <aside
+        className={`sidebar ${sidebarOpen ? "is-open" : ""} ${sidebarCollapsed ? "is-collapsed" : ""}`}
+        aria-label="Menú principal"
+      >
+        <div className="sidebar-header">
+          <div className="brand">
+            <div className="brand-mark" aria-hidden="true">
+              <span>CE</span>
+            </div>
+            <div className="brand-copy">
+              <strong>CEHF</strong>
+              <span>Campus</span>
+            </div>
           </div>
-          <div>
-            <strong>CEHF</strong>
-            <span>Campus</span>
-          </div>
+          <button
+            className="sidebar-toggle"
+            type="button"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            aria-label={sidebarCollapsed ? "Expandir menú" : "Contraer menú"}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? "Expandir menú" : "Contraer menú"}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen size={16} aria-hidden="true" />
+            ) : (
+              <PanelLeftClose size={16} aria-hidden="true" />
+            )}
+          </button>
+          <button
+            className="sidebar-mobile-close"
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Cerrar menú"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
         </div>
-        <div className={`week-switcher is-${academicConfig.calendarStatus}`}>
-          <div>
+        <button
+          type="button"
+          className={`week-switcher is-${academicConfig.calendarStatus}`}
+          onClick={() => {
+            setAcademicCalendarOpen(true);
+            setSidebarOpen(false);
+          }}
+          aria-haspopup="dialog"
+          aria-label={`Abrir calendario académico. ${academicConfig.weekLabel}`}
+          title={`Abrir calendario académico. ${academicConfig.weekLabel}. ${
+            academicConfig.calendarStatus === "active"
+              ? `${currentWeekRange}, ${academicConfig.termLabel}`
+              : "Dirección debe configurarlo"
+          }`}
+        >
+          <span className="week-switcher-icon" aria-hidden="true">
+            <CalendarDays size={16} />
+          </span>
+          <div className="week-switcher-copy">
             <span>
               {academicConfig.calendarStatus === "active"
                 ? "Semana actual"
@@ -931,8 +915,11 @@ export function CEHFApp() {
                   : "Dirección debe configurarlo"}
             </small>
           </div>
-          <CalendarDays size={17} aria-hidden="true" />
-        </div>
+          <span className="week-switcher-action" aria-hidden="true">
+            <span>Ver</span>
+            <ChevronRight size={14} />
+          </span>
+        </button>
         <nav className="sidebar-nav" aria-label="Navegación principal">
           <span className="nav-kicker">Tu portal</span>
           {visibleNavigation.map((item) => (
@@ -940,6 +927,7 @@ export function CEHFApp() {
               className={activeSection === item.key ? "active" : ""}
               key={item.key}
               onClick={() => navigate(item.key)}
+              title={sidebarCollapsed ? item.label : undefined}
             >
               <item.icon size={19} aria-hidden="true" />
               <span>{item.label}</span>
@@ -961,16 +949,18 @@ export function CEHFApp() {
           <button
             className={activeSection === "settings" ? "active" : ""}
             onClick={() => navigate("settings")}
+            title={sidebarCollapsed ? "Configuración" : undefined}
           >
             <Settings size={19} aria-hidden="true" />
-            Configuración
+            <span>Configuración</span>
           </button>
           <button
             className={activeSection === "profile" ? "active" : ""}
             onClick={() => navigate("profile")}
+            title={sidebarCollapsed ? "Perfil" : undefined}
           >
             <UserRound size={19} aria-hidden="true" />
-            Perfil
+            <span>Perfil</span>
           </button>
           {usingDemo && (
             <div className="demo-switcher">
@@ -1007,7 +997,7 @@ export function CEHFApp() {
             <Search size={18} aria-hidden="true" />
             <input
               aria-label="Buscar en el portal"
-              placeholder="Buscar tareas, materiales o temas…"
+              placeholder="Buscar tareas, recursos o temas…"
             />
             <kbd>⌘ K</kbd>
           </div>
@@ -1137,7 +1127,6 @@ export function CEHFApp() {
                 [
                   "weekly-review",
                   "tasks",
-                  "weekly-materials",
                   "forum",
                   "users",
                 ].includes(activeSection) && (
@@ -1146,8 +1135,6 @@ export function CEHFApp() {
                     disabled={
                       (activeSection === "tasks" &&
                         academicConfig.calendarStatus !== "active") ||
-                      (activeSection === "weekly-materials" &&
-                        academicCalendar.weeks.length === 0) ||
                       (activeSection === "weekly-review" &&
                         academicCalendar.weeks.length === 0)
                     }
@@ -1155,9 +1142,6 @@ export function CEHFApp() {
                       activeSection === "tasks" &&
                       academicConfig.calendarStatus !== "active"
                         ? "Dirección debe configurar una semana activa"
-                        : activeSection === "weekly-materials" &&
-                            academicCalendar.weeks.length === 0
-                          ? "Dirección debe configurar las semanas académicas"
                         : activeSection === "weekly-review" &&
                             academicCalendar.weeks.length === 0
                           ? "Dirección debe configurar las semanas académicas"
@@ -1198,12 +1182,6 @@ export function CEHFApp() {
                   ),
                 )
               }
-              materialRecords={materialRecords}
-              materialRecordsLoading={materialRecordsLoading}
-              viewedMaterialIds={viewedMaterialIds}
-              onMaterialViewed={(materialId) =>
-                setViewedMaterialIds((current) => new Set(current).add(materialId))
-              }
               academicConfig={academicConfig}
               academicCalendar={academicCalendar}
               saveAcademicCalendarConfiguration={async (input) => {
@@ -1236,6 +1214,73 @@ export function CEHFApp() {
       />
 
       <AnimatePresence>
+        {academicCalendarOpen && (
+          <AcademicCalendarModal
+            calendar={academicCalendarImage}
+            loading={academicCalendarImageLoading}
+            saving={academicCalendarSaving}
+            role={role}
+            onClose={() => setAcademicCalendarOpen(false)}
+            onPublish={async (file) => {
+              setAcademicCalendarSaving(true);
+              try {
+                if (firebaseUser && profile) {
+                  const publishedCalendar = await publishAcademicCalendarImage(
+                    file,
+                    profile,
+                    academicCalendarImage,
+                  );
+                  setAcademicCalendarImage(publishedCalendar);
+                } else {
+                  const imageUrl = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(String(reader.result ?? ""));
+                    reader.onerror = () => reject(new Error("No pudimos leer la imagen."));
+                    reader.readAsDataURL(file);
+                  });
+                  setAcademicCalendarImage({
+                    institutionId: currentProfile.institutionId,
+                    imagePath: "demo/academic-calendar",
+                    imageUrl,
+                    fileName: file.name,
+                    contentType: file.type,
+                    size: file.size,
+                    published: true,
+                    updatedBy: currentProfile.uid,
+                    updatedByName: currentProfile.name,
+                    updatedAt: new Date().toISOString(),
+                  });
+                }
+                toast.success("Calendario académico publicado", {
+                  description: "Alumnos y maestros ya pueden consultarlo desde el sidebar.",
+                });
+                return true;
+              } catch (error) {
+                reportFirebaseError("publicar calendario académico", error);
+                return false;
+              } finally {
+                setAcademicCalendarSaving(false);
+              }
+            }}
+            onRemove={async () => {
+              if (!academicCalendarImage) return;
+              setAcademicCalendarSaving(true);
+              try {
+                if (firebaseUser && profile) {
+                  await unpublishAcademicCalendarImage(profile, academicCalendarImage);
+                }
+                setAcademicCalendarImage(null);
+                toast.success("Calendario retirado", {
+                  description: "Puedes publicar una nueva imagen cuando esté lista.",
+                });
+              } catch (error) {
+                reportFirebaseError("retirar calendario académico", error);
+              } finally {
+                setAcademicCalendarSaving(false);
+              }
+            }}
+          />
+        )}
         {mobileMore && (
           <MobileMore
             navigation={visibleNavigation}
@@ -1287,40 +1332,6 @@ export function CEHFApp() {
                     description: `${review.audienceCount} destinatarios preparados.`,
                   },
                 );
-              }
-            }}
-          />
-        ) : createOpen && activeSection === "weekly-materials" ? (
-          <MaterialCreateModal
-            profile={currentProfile}
-            config={academicConfig}
-            calendar={academicCalendar}
-            accounts={managedAccounts}
-            onClose={() => setCreateOpen(false)}
-            onCreate={async (input: LearningMaterialCreateInput) => {
-              if (firebaseUser && profile) {
-                const result = await createLearningMaterial(
-                  input,
-                  profile,
-                  academicConfig,
-                  academicCalendar,
-                );
-                setMaterialRecordsRevision((current) => current + 1);
-                toast.success("Material publicado", {
-                  description: `${result.recipientCount} ${result.recipientCount === 1 ? "alumno fue notificado" : "alumnos fueron notificados"}.`,
-                });
-              } else {
-                const material = createDemoLearningMaterial(
-                  input,
-                  currentProfile,
-                  academicConfig,
-                  academicCalendar,
-                  managedAccounts,
-                );
-                setMaterialRecords((previous) => [material, ...previous]);
-                toast.success("Material publicado en la demostración", {
-                  description: `${material.audienceStudentIds.length} destinatarios preparados.`,
-                });
               }
             }}
           />
@@ -1409,24 +1420,6 @@ export function CEHFApp() {
                         objective: previous.week.objectives[0],
                       },
                       ...previous.tasks,
-                    ],
-                  };
-                }
-                if (activeSection === "weekly-materials") {
-                  return {
-                    ...previous,
-                    materials: [
-                      {
-                        id,
-                        title: titleValue,
-                        subject,
-                        description: "Recurso listo para completar y programar.",
-                        type: "Enlace",
-                        day: "Viernes",
-                        required: false,
-                        reviewed: false,
-                      },
-                      ...previous.materials,
                     ],
                   };
                 }
@@ -1812,10 +1805,6 @@ function SectionContent({
   reviewRecords,
   reviewRecordsLoading,
   onDemoReviewChange,
-  materialRecords,
-  materialRecordsLoading,
-  viewedMaterialIds,
-  onMaterialViewed,
   academicConfig,
   academicCalendar,
   saveAcademicCalendarConfiguration,
@@ -1844,10 +1833,6 @@ function SectionContent({
   reviewRecords: WeeklyReview[];
   reviewRecordsLoading: boolean;
   onDemoReviewChange: (review: WeeklyReview) => void;
-  materialRecords: LearningMaterial[];
-  materialRecordsLoading: boolean;
-  viewedMaterialIds: Set<string>;
-  onMaterialViewed: (materialId: string) => void;
   academicConfig: AcademicConfig;
   academicCalendar: AcademicCalendar;
   saveAcademicCalendarConfiguration: (
@@ -1915,18 +1900,6 @@ function SectionContent({
           role={role}
           state={state}
           updateState={updateState}
-        />
-      );
-    case "weekly-materials":
-      return (
-        <MaterialsPage
-          materials={materialRecords}
-          loading={materialRecordsLoading}
-          profile={profile}
-          accounts={managedAccounts}
-          viewedIds={viewedMaterialIds}
-          onViewed={onMaterialViewed}
-          firebaseReady={firebaseReady}
         />
       );
     case "wall-newspaper":
@@ -2247,21 +2220,21 @@ function Dashboard({
           <article className="focus-card mint-card">
             <div className="focus-card-top">
               <span className="subject-icon">
-                <Library size={20} />
+                <Paperclip size={20} />
               </span>
               <span className="soft-tag">Matemáticas</span>
             </div>
-            <span className="card-kicker">Material nuevo</span>
-            <h3>Fracciones en la cocina</h3>
-            <p>Video de 4 minutos · Tiene transcripción.</p>
+            <span className="card-kicker">Recurso de tarea</span>
+            <h3>Guía visual del tema</h3>
+            <p>Consulta el vídeo desde los recursos de tu actividad.</p>
             <div className="due-line">
               <CheckCircle2 size={16} /> Recurso obligatorio
             </div>
             <button
               className="card-action"
-              onClick={() => navigate("weekly-materials")}
+              onClick={() => navigate("tasks")}
             >
-              Ver material <ArrowRight size={17} />
+              Ver recursos <ArrowRight size={17} />
             </button>
           </article>
         </div>
@@ -2923,7 +2896,7 @@ function SettingsPage({
             <div className="setting-row">
               <div>
                 <strong>Avisos internos</strong>
-                <span>Tareas, repasos, materiales y reportes.</span>
+                <span>Tareas, recursos, repasos y reportes.</span>
               </div>
               <Toggle checked label="Avisos internos" onChange={() => undefined} />
             </div>
@@ -4279,7 +4252,6 @@ function createLabel(section: SectionKey) {
   const labels: Partial<Record<SectionKey, string>> = {
     "weekly-review": "Nuevo repaso",
     tasks: "Nueva tarea",
-    "weekly-materials": "Nuevo material",
     forum: "Nuevo tema",
     users: "Registrar cuenta",
   };
