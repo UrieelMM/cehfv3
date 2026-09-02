@@ -248,6 +248,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(taskUiSource, /Calendario académico/);
   assert.match(taskUiSource, /Agregar semana/);
   assert.match(taskUiSource, /Agregar bimestre/);
+  assert.match(taskUiSource, /Días no laborales/);
+  assert.match(taskUiSource, /academicScopeForDate/);
+  assert.match(taskUiSource, /workingDayCountForWeek/);
   assert.match(taskUiSource, /ACADEMIC_WEEKS_PAGE_SIZE = 5/);
   assert.match(taskUiSource, /academic-week-pagination/);
   assert.doesNotMatch(appSource, /key: "weekly-materials", label: "Materiales"/);
@@ -288,6 +291,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /setCustomUserClaims/);
   assert.match(functionsSource, /claimsChanged: changed/);
   assert.match(functionsSource, /Cada semana sólo puede pertenecer a un bimestre/);
+  assert.match(functionsSource, /diasNoLaborales/);
+  assert.match(functionsSource, /no pertenece a ninguna semana configurada/);
   assert.match(appSource, /WhatsApp del padre o tutor/);
   assert.match(appSource, /Nombre del padre o tutor/);
   assert.match(appSource, /guardianName/);
@@ -323,11 +328,13 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesSource, /saveTeacherGradingConfig/);
   assert.match(gradesSource, /saveDailyGrade/);
   assert.match(gradesSource, /aggregateDailyGradesByWeek/);
+  assert.match(gradesSource, /workingDatesForWeek/);
   assert.match(gradesSource, /buildGradePeriodSummaries/);
   assert.match(appSource, /"my-week": "\/qualifications"/);
   assert.match(appSource, /label: "Calificaciones", icon: GraduationCap/);
   assert.doesNotMatch(appSource, /"my-week": "\/my-week"/);
   assert.match(gradesUiSource, /Día de captura/);
+  assert.match(gradesUiSource, /días hábiles esperados/);
   assert.match(gradesUiSource, /Diarias/);
   assert.match(gradesUiSource, /Semanales/);
   assert.match(gradesUiSource, /Bimestrales/);
@@ -349,6 +356,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(reportsFirebaseSource, /saveStudentWeeklyReport/);
   assert.match(reportsCss, /\.report-field-grid/);
   assert.match(firestoreRules, /match \/dailyGrades\/\{gradeId\}/);
+  assert.match(firestoreRules, /match \/diasNoLaborales\/\{dayId\}/);
+  assert.match(firestoreRules, /calendarNonWorkingDayPath/);
   assert.match(firestoreRules, /match \/studentWeeklyReports\/\{reportId\}/);
   assert.match(appSource, /className="qualifications-page"/);
   assert.match(gradesCss, /\.academic-metrics/);

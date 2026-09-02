@@ -221,10 +221,22 @@ export type AcademicTerm = {
   active: boolean;
 };
 
+export type AcademicNonWorkingDay = {
+  id: string;
+  date: string;
+  label: string;
+  weekId: string;
+  weekLabel: string;
+  termId: string;
+  termLabel: string;
+  active: boolean;
+};
+
 export type AcademicCalendar = {
   schoolYearId: string;
   weeks: AcademicWeek[];
   terms: AcademicTerm[];
+  nonWorkingDays: AcademicNonWorkingDay[];
   configured: boolean;
 };
 
@@ -234,6 +246,7 @@ export type AcademicCalendarInput = {
   timezone: string;
   weeks: Array<Pick<AcademicWeek, "id" | "label" | "startDate" | "endDate">>;
   terms: Array<Pick<AcademicTerm, "id" | "label" | "weekIds">>;
+  nonWorkingDays: Array<Pick<AcademicNonWorkingDay, "date" | "label">>;
 };
 
 export type AcademicCalendarImage = {
@@ -315,6 +328,8 @@ export type WeeklyGradeRecord = {
   weights: GradingWeights;
   weightedScore: number;
   dayCount?: number;
+  workingDayCount?: number;
+  missingDayCount?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -344,6 +359,7 @@ export type GradePeriodSummary = {
   scores: WeeklyGradeScores;
   weightedScore: number;
   evidenceCount: number;
+  expectedEvidenceCount?: number;
 };
 
 export type StudentWeeklyReport = {
@@ -368,6 +384,7 @@ export type StudentWeeklyReport = {
   nextStep: string;
   weeklyScore: number;
   gradedDays: number;
+  workingDays: number;
   status: "draft" | "published";
   createdAt: string;
   updatedAt: string;

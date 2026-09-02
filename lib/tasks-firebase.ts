@@ -27,6 +27,7 @@ import type {
   AcademicCalendar,
   AcademicCalendarInput,
   AcademicConfig,
+  AcademicNonWorkingDay,
   AcademicTerm,
   AcademicWeek,
   AppNotification,
@@ -85,6 +86,7 @@ export const defaultAcademicCalendar: AcademicCalendar = {
       active: true,
     },
   ],
+  nonWorkingDays: [],
 };
 
 export const emptyAcademicCalendar: AcademicCalendar = {
@@ -92,6 +94,7 @@ export const emptyAcademicCalendar: AcademicCalendar = {
   configured: false,
   weeks: [],
   terms: [],
+  nonWorkingDays: [],
 };
 
 function requireFirebase() {
@@ -330,6 +333,19 @@ function termFromData(id: string, data: DocumentData): AcademicTerm {
   };
 }
 
+function nonWorkingDayFromData(id: string, data: DocumentData): AcademicNonWorkingDay {
+  return {
+    id,
+    date: String(data.date ?? id),
+    label: String(data.label ?? "Día no laboral"),
+    weekId: String(data.weekId ?? ""),
+    weekLabel: String(data.weekLabel ?? "Semana"),
+    termId: String(data.termId ?? ""),
+    termLabel: String(data.termLabel ?? "Bimestre"),
+    active: data.active !== false,
+  };
+}
+
 export function watchAcademicCalendar(
   config: AcademicConfig,
   callback: (calendar: AcademicCalendar) => void,
@@ -341,14 +357,17 @@ export function watchAcademicCalendar(
   }
   let weeks: AcademicWeek[] = [];
   let terms: AcademicTerm[] = [];
+  let nonWorkingDays: AcademicNonWorkingDay[] = [];
   let weeksReady = false;
   let termsReady = false;
+  let nonWorkingDaysReady = false;
   const emit = () => {
-    if (!weeksReady || !termsReady) return;
+    if (!weeksReady || !termsReady || !nonWorkingDaysReady) return;
     callback({
       schoolYearId: config.schoolYearId,
       weeks,
       terms,
+      nonWorkingDays,
       configured: weeks.length > 0 && terms.length > 0,
     });
   };
@@ -394,9 +413,29 @@ export function watchAcademicCalendar(
     },
     (error) => onError?.(error),
   );
+  const stopNonWorkingDays = onSnapshot(
+    collection(
+      firebase.db,
+      "institutions",
+      config.institutionId,
+      "ciclosEscolares",
+      config.schoolYearId,
+      "diasNoLaborales",
+    ),
+    (snapshot) => {
+      nonWorkingDays = snapshot.docs
+        .map((entry) => nonWorkingDayFromData(entry.id, entry.data()))
+        .filter((day) => day.active)
+        .sort((first, second) => first.date.localeCompare(second.date));
+      nonWorkingDaysReady = true;
+      emit();
+    },
+    (error) => onError?.(error),
+  );
   return () => {
     stopWeeks();
     stopTerms();
+    stopNonWorkingDays();
   };
 }
 

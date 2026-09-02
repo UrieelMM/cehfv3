@@ -56,6 +56,7 @@ function fromData(id: string, data: DocumentData): StudentWeeklyReport {
     nextStep: String(data.nextStep ?? ""),
     weeklyScore: Math.min(100, Math.max(0, Number(data.weeklyScore) || 0)),
     gradedDays: Math.max(0, Number(data.gradedDays) || 0),
+    workingDays: Math.max(0, Number(data.workingDays) || Number(data.gradedDays) || 0),
     status: data.status === "published" ? "published" : "draft",
     createdAt: asIso(data.createdAt),
     updatedAt: asIso(data.updatedAt),
@@ -101,6 +102,7 @@ export type SaveStudentWeeklyReportInput = {
   nextStep: string;
   weeklyScore: number;
   gradedDays: number;
+  workingDays: number;
   status: "draft" | "published";
 };
 
@@ -169,6 +171,7 @@ export async function saveStudentWeeklyReport(
     nextStep,
     weeklyScore: Math.min(100, Math.max(0, input.weeklyScore)),
     gradedDays: Math.max(0, Math.round(input.gradedDays)),
+    workingDays: Math.max(0, Math.round(input.workingDays)),
     status: input.status,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

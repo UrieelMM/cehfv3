@@ -69,6 +69,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId);
     }
 
+    function calendarNonWorkingDayPath(institutionId, schoolYearId, gradeDate) {
+      return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/diasNoLaborales/$(gradeDate);
+    }
+
     function validCalendarScope(data) {
       let weekPath = calendarWeekPath(
         data.institutionId, data.schoolYearId, data.weekId
@@ -619,6 +623,9 @@ service cloud.firestore {
         let weekPath = calendarWeekPath(
           data.institutionId, data.schoolYearId, data.weekId
         );
+        let nonWorkingDayPath = calendarNonWorkingDayPath(
+          data.institutionId, data.schoolYearId, data.gradeDate
+        );
         let calculatedScore = (
           data.scores.classWork * data.weights.classWork
           + data.scores.homework * data.weights.homework
@@ -636,6 +643,10 @@ service cloud.firestore {
           && data.gradeDate is string
           && data.gradeDate >= get(weekPath).data.startDate
           && data.gradeDate <= get(weekPath).data.endDate
+          && (
+            !exists(nonWorkingDayPath)
+            || get(nonWorkingDayPath).data.active != true
+          )
           && data.subjectId is string
           && data.subject is string
           && data.studentName is string
@@ -663,7 +674,7 @@ service cloud.firestore {
             "subjectId", "subject", "teacherId", "teacherName",
             "studentId", "studentName", "studentGrade", "studentGroup",
             "achievement", "supportArea", "nextStep", "weeklyScore",
-            "gradedDays", "status", "createdAt", "updatedAt", "publishedAt"
+            "gradedDays", "workingDays", "status", "createdAt", "updatedAt", "publishedAt"
           ])
           && data.achievement is string
           && data.achievement.size() > 0
@@ -679,6 +690,9 @@ service cloud.firestore {
           && data.weeklyScore <= 100
           && data.gradedDays is int
           && data.gradedDays >= 0
+          && data.workingDays is int
+          && data.workingDays >= 0
+          && data.gradedDays <= data.workingDays
           && data.status in ["draft", "published"]
           && data.createdAt is timestamp
           && data.updatedAt is timestamp
@@ -783,6 +797,11 @@ service cloud.firestore {
         }
 
         match /bimestres/{termId} {
+          allow read: if isActive() && profile().institutionId == institutionId;
+          allow write: if false;
+        }
+
+        match /diasNoLaborales/{dayId} {
           allow read: if isActive() && profile().institutionId == institutionId;
           allow write: if false;
         }

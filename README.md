@@ -46,7 +46,7 @@ Si `.env` no tiene credenciales, la pantalla de acceso permite abrir una demostr
 
 ## Organización académica de tareas
 
-Dirección define desde **Configuración → Calendario académico** las semanas con su rango de fechas y asigna cada una a un bimestre. El servidor valida traslapes, semanas sin bimestre y permisos; además sincroniza automáticamente la semana vigente según `America/Mexico_City`.
+Dirección define desde **Configuración → Calendario académico** las semanas con su rango de fechas, asigna cada una a un bimestre y registra suspensiones o días no laborales. La fecha de cada excepción determina automáticamente su semana y bimestre. El servidor valida traslapes, semanas sin bimestre, fechas duplicadas y permisos; además sincroniza la semana vigente según `America/Mexico_City`.
 
 El catálogo reutilizable queda separado de los datos operativos:
 
@@ -54,6 +54,7 @@ El catálogo reutilizable queda separado de los datos operativos:
 institutions/cehf-primaria/ciclosEscolares/{ciclo}/
   semanas/{semanaId}
   bimestres/{bimestreId}
+  diasNoLaborales/{AAAA-MM-DD}
   calendarioHistorial/{eventoId}
 ```
 
@@ -73,9 +74,11 @@ Cada tarea conserva sus subcolecciones `entregas`, `historial` y `prorrogas`. La
 
 El maestro captura una calificación por alumno, materia y día en
 `institutions/{institutionId}/dailyGrades`. La fecha debe pertenecer a una de
-las semanas configuradas. La aplicación calcula sin recaptura:
+las semanas configuradas y no puede ser fin de semana ni un día no laboral.
+La aplicación calcula sin recaptura:
 
-- el promedio semanal a partir de los días evaluados;
+- el promedio semanal a partir de sus días hábiles (por ejemplo, cuatro si hay
+  una suspensión y cinco en una semana ordinaria);
 - el promedio bimestral a partir de las semanas del bimestre;
 - la calificación final a partir de los bimestres del ciclo.
 

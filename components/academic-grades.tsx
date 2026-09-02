@@ -27,6 +27,7 @@ import {
   saveDailyGrade,
   watchDailyGrades,
   watchTeacherGradingConfig,
+  workingDatesForWeek,
 } from "@/lib/grades-firebase";
 import type {
   AcademicCalendar,
@@ -78,10 +79,11 @@ function currentWeek(calendar: AcademicCalendar, config: AcademicConfig) {
     ?? calendar.weeks[0];
 }
 
-function dateWithinWeek(week: AcademicWeek | undefined, timezone: string) {
+function dateWithinWeek(calendar: AcademicCalendar, week: AcademicWeek | undefined, timezone: string) {
   if (!week) return "";
+  const workingDates = workingDatesForWeek(calendar, week);
   const today = new Date().toLocaleDateString("en-CA", { timeZone: timezone });
-  return today >= week.startDate && today <= week.endDate ? today : week.startDate;
+  return workingDates.includes(today) ? today : workingDates[0] ?? "";
 }
 
 function defaultConfig(profile: UserProfile): TeacherGradingConfig {
@@ -112,11 +114,7 @@ export function demoDailyGrades(
   calendar.weeks.forEach((week, weekIndex) => {
     const term = termForWeek(calendar, week.id);
     if (!term) return;
-    const days = Array.from({ length: 3 }, (_, index) => {
-      const date = new Date(`${week.startDate}T12:00:00`);
-      date.setDate(date.getDate() + index);
-      return date.toISOString().slice(0, 10);
-    }).filter((date) => date <= week.endDate);
+    const days = workingDatesForWeek(calendar, week);
     students.forEach((student, studentIndex) => {
       student.teacherIds.forEach((teacherId) => {
         const account = teachers.find((candidate) => candidate.uid === teacherId);
@@ -256,7 +254,9 @@ function SummaryTable({ records, level }: { records: GradePeriodSummary[]; level
             <td>{record.subject}<small>{record.teacherName}</small></td>
             {GRADING_CRITERIA.map((criterion) => <td key={criterion.key}>{score(record.scores[criterion.key])}</td>)}
             <td><span className={`academic-score-badge is-${record.weightedScore >= 90 ? "high" : record.weightedScore >= 70 ? "mid" : "low"}`}>{score(record.weightedScore)}</span></td>
-            <td>{record.evidenceCount} {level === "weekly" ? (record.evidenceCount === 1 ? "día" : "días") : level === "bimonthly" ? (record.evidenceCount === 1 ? "semana" : "semanas") : (record.evidenceCount === 1 ? "bimestre" : "bimestres")}</td>
+            <td>{level === "weekly"
+              ? `${record.evidenceCount} de ${record.expectedEvidenceCount ?? record.evidenceCount} días hábiles`
+              : `${record.evidenceCount} ${level === "bimonthly" ? (record.evidenceCount === 1 ? "semana" : "semanas") : (record.evidenceCount === 1 ? "bimestre" : "bimestres")}`}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -301,10 +301,11 @@ export function AcademicGradesPanel({
   const [selectedWeekId, setSelectedWeekId] = useState(initialWeek?.id ?? "");
   const selectedWeek = calendar.weeks.find((week) => week.id === selectedWeekId) ?? initialWeek;
   const selectedTerm = termForWeek(calendar, selectedWeek?.id);
-  const [selectedDate, setSelectedDate] = useState(() => dateWithinWeek(initialWeek, academicConfig.timezone));
-  const activeDate = selectedWeek && selectedDate >= selectedWeek.startDate && selectedDate <= selectedWeek.endDate
+  const workingDates = selectedWeek ? workingDatesForWeek(calendar, selectedWeek) : [];
+  const [selectedDate, setSelectedDate] = useState(() => dateWithinWeek(calendar, initialWeek, academicConfig.timezone));
+  const activeDate = workingDates.includes(selectedDate)
     ? selectedDate
-    : dateWithinWeek(selectedWeek, academicConfig.timezone);
+    : dateWithinWeek(calendar, selectedWeek, academicConfig.timezone);
   const [level, setLevel] = useState<GradePeriodLevel>(profile.role === "teacher" ? "daily" : "weekly");
   const [records, setRecords] = useState<DailyGradeRecord[]>([]);
   const [config, setConfig] = useState<TeacherGradingConfig>(() => defaultConfig(profile));
@@ -368,7 +369,7 @@ export function AcademicGradesPanel({
   )).filter((student) => !normalizedSearch || `${student.name} ${student.grade ?? ""} ${student.group ?? ""}`.toLocaleLowerCase("es").includes(normalizedSearch));
   const capturePageStudents = eligibleStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const daySubjectRecords = cycleRecords.filter((record) => record.weekId === selectedWeek?.id && record.gradeDate === activeDate && record.subject === activeSubject && record.teacherId === profile.uid);
-  const weeklyRecords = aggregateDailyGradesByWeek(cycleRecords).filter((record) => record.weekId === selectedWeek?.id && matches(record));
+  const weeklyRecords = aggregateDailyGradesByWeek(cycleRecords, calendar).filter((record) => record.weekId === selectedWeek?.id && matches(record));
   const average = (items: Array<{ weightedScore: number }>) => items.length
     ? Math.round(items.reduce((sum, record) => sum + record.weightedScore, 0) / items.length * 10) / 10
     : 0;
@@ -380,7 +381,7 @@ export function AcademicGradesPanel({
     }
     try {
       if (firebaseReady) {
-        await saveDailyGrade(profile, config, academicConfig, selectedWeek, selectedTerm, activeDate, student, activeSubject, scores);
+        await saveDailyGrade(profile, config, academicConfig, calendar, selectedWeek, selectedTerm, activeDate, student, activeSubject, scores);
       } else {
         const id = [academicConfig.schoolYearId, selectedWeek.id, activeDate, gradeSubjectId(activeSubject), profile.uid, student.uid].join("__");
         const existing = records.find((record) => record.id === id);
@@ -452,13 +453,16 @@ export function AcademicGradesPanel({
         <label><span>Semana</span><select value={selectedWeek?.id ?? ""} onChange={(event) => {
           const nextWeek = calendar.weeks.find((item) => item.id === event.target.value);
           setSelectedWeekId(event.target.value);
-          setSelectedDate(dateWithinWeek(nextWeek, academicConfig.timezone));
+          setSelectedDate(dateWithinWeek(calendar, nextWeek, academicConfig.timezone));
           setPage(1);
         }}>
           {[...calendar.weeks].sort((a, b) => a.order - b.order).map((week) => <option key={week.id} value={week.id}>{week.label} · {formatWeekRange(week)}</option>)}
         </select></label>
         <div className="academic-context-readout"><CalendarDays size={18} /><span><small>Bimestre</small><strong>{selectedTerm?.label ?? "Sin bimestre"}</strong></span></div>
-        {level === "daily" && <label><span>Día de captura</span><input type="date" min={selectedWeek?.startDate} max={selectedWeek?.endDate} value={activeDate} onChange={(event) => { setSelectedDate(event.target.value); setPage(1); }} /></label>}
+        {level === "daily" && <label><span>Día de captura</span><select value={activeDate} disabled={!workingDates.length} onChange={(event) => { setSelectedDate(event.target.value); setPage(1); }}>
+          {!workingDates.length && <option value="">Sin días hábiles</option>}
+          {workingDates.map((date) => <option key={date} value={date}>{dateLabel(date, true)}</option>)}
+        </select></label>}
         <div className="academic-context-readout is-date"><Sparkles size={18} /><span><small>Contexto exacto</small><strong>{level === "daily" ? dateLabel(activeDate, true) : selectedWeek?.label}</strong></span></div>
       </div>
 
@@ -486,7 +490,7 @@ export function AcademicGradesPanel({
       <div className="academic-metrics">
         <article><span>Promedio visible</span><strong>{score(level === "daily" ? average(dailyVisible) : average(summaryVisible))}</strong><small>Escala de 0 a 100</small></article>
         <article><span>{profile.role === "teacher" && level === "daily" ? "Capturados hoy" : "Registros"}</span><strong>{profile.role === "teacher" && level === "daily" ? daySubjectRecords.length : total}</strong><small>{profile.role === "teacher" && level === "daily" ? `de ${eligibleStudents.length} alumnos` : "según filtros"}</small></article>
-        <article><span>Regla de cálculo</span><strong>{level === "daily" ? "Captura" : "Promedio"}</strong><small>{level === "weekly" ? "días de la semana" : level === "bimonthly" ? "semanas del bimestre" : level === "cycle" ? "bimestres del ciclo" : "cinco criterios"}</small></article>
+        <article><span>Regla de cálculo</span><strong>{level === "daily" ? "Captura" : "Promedio"}</strong><small>{level === "weekly" ? `${workingDates.length} días hábiles esperados` : level === "bimonthly" ? "semanas del bimestre" : level === "cycle" ? "bimestres del ciclo" : "cinco criterios"}</small></article>
       </div>
 
       {loading ? <div className="academic-loading"><span /><span /><span /></div> : profile.role === "teacher" && level === "daily" ? (

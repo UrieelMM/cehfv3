@@ -85,7 +85,7 @@ function WeeklyEvidence({ grade }: { grade?: WeeklyGradeRecord }) {
     return <div className="report-no-evidence"><CircleHelp size={20} /><span><strong>Sin calificaciones esta semana</strong><small>El reporte puede guardarse como borrador, pero conviene capturar las calificaciones diarias primero.</small></span></div>;
   }
   return <section className="report-evidence">
-    <div className="report-evidence-score"><span>Promedio semanal</span><strong>{score(grade.weightedScore)}</strong><small>{grade.dayCount} {grade.dayCount === 1 ? "día calificado" : "días calificados"}</small></div>
+    <div className="report-evidence-score"><span>Promedio semanal</span><strong>{score(grade.weightedScore)}</strong><small>{grade.dayCount ?? 0} de {grade.workingDayCount ?? grade.dayCount ?? 0} días hábiles{grade.missingDayCount ? " · provisional" : " · completo"}</small></div>
     <div className="report-evidence-rubrics">{GRADING_CRITERIA.map((criterion) => <span key={criterion.key}><small>{criterion.shortLabel}</small><strong>{score(grade.scores[criterion.key])}</strong></span>)}</div>
   </section>;
 }
@@ -177,6 +177,7 @@ function seedReports(
     nextStep: "Organizar sus ideas en tres pasos y comprobar el resultado antes de entregar.",
     weeklyScore: grade.weightedScore,
     gradedDays: grade.dayCount ?? 0,
+    workingDays: grade.workingDayCount ?? grade.dayCount ?? 0,
     status: index === 0 ? "published" : "draft",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -222,7 +223,7 @@ export function AcademicReportsPage({
           if (saved) demoGrades = JSON.parse(saved) as DailyGradeRecord[];
         } catch { /* ignore demo storage */ }
         setGrades(demoGrades);
-        setReports(seedReports(aggregateDailyGradesByWeek(demoGrades), profile, academicConfig));
+        setReports(seedReports(aggregateDailyGradesByWeek(demoGrades, calendar), profile, academicConfig));
         setLoading(false);
       });
       return;
@@ -235,7 +236,10 @@ export function AcademicReportsPage({
     return () => { stopGrades(); stopReports(); };
   }, [academicConfig, accounts, calendar, firebaseReady, profile]);
 
-  const weeklyGrades = aggregateDailyGradesByWeek(grades.filter((grade) => grade.schoolYearId === academicConfig.schoolYearId));
+  const weeklyGrades = aggregateDailyGradesByWeek(
+    grades.filter((grade) => grade.schoolYearId === academicConfig.schoolYearId),
+    calendar,
+  );
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const matchesSearch = (value: { studentName: string; studentGrade?: string; studentGroup?: string }) => !normalizedSearch || `${value.studentName} ${value.studentGrade ?? ""} ${value.studentGroup ?? ""}`.toLocaleLowerCase("es").includes(normalizedSearch);
   const eligibleStudents = accounts.filter((account) => account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && account.subjects.includes(activeSubject) && matchesSearch({ studentName: account.name, studentGrade: account.grade, studentGroup: account.group }));
@@ -268,6 +272,7 @@ export function AcademicReportsPage({
           ...values,
           weeklyScore: grade?.weightedScore ?? 0,
           gradedDays: grade?.dayCount ?? 0,
+          workingDays: grade?.workingDayCount ?? 0,
         });
       } else {
         const id = [academicConfig.schoolYearId, week.id, grade?.subjectId ?? activeSubject.toLowerCase(), profile.uid, student.uid].join("__");
@@ -292,6 +297,7 @@ export function AcademicReportsPage({
           ...values,
           weeklyScore: grade?.weightedScore ?? 0,
           gradedDays: grade?.dayCount ?? 0,
+          workingDays: grade?.workingDayCount ?? 0,
           createdAt: existing?.createdAt ?? new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           publishedAt: values.status === "published" ? new Date().toISOString() : undefined,

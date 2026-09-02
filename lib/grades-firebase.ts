@@ -107,6 +107,26 @@ function averageScores(items: WeeklyGradeScores[]): WeeklyGradeScores {
   ])) as WeeklyGradeScores;
 }
 
+function nextCalendarDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + 1));
+  return date.toISOString().slice(0, 10);
+}
+
+export function workingDatesForWeek(calendar: AcademicCalendar, week: AcademicWeek) {
+  const excluded = new Set(
+    (calendar.nonWorkingDays ?? [])
+      .filter((day) => day.active && day.date >= week.startDate && day.date <= week.endDate)
+      .map((day) => day.date),
+  );
+  const dates: string[] = [];
+  for (let date = week.startDate; date && date <= week.endDate; date = nextCalendarDate(date)) {
+    const weekday = new Date(`${date}T12:00:00.000Z`).getUTCDay();
+    if (weekday !== 0 && weekday !== 6 && !excluded.has(date)) dates.push(date);
+  }
+  return dates;
+}
+
 function asIso(value: unknown, fallback = new Date().toISOString()) {
   if (value instanceof Timestamp) return value.toDate().toISOString();
   if (value && typeof value === "object" && "toDate" in value && typeof value.toDate === "function") {
@@ -169,9 +189,17 @@ function dailyGradeFromData(id: string, data: DocumentData): DailyGradeRecord {
   };
 }
 
-export function aggregateDailyGradesByWeek(records: DailyGradeRecord[]): WeeklyGradeRecord[] {
+export function aggregateDailyGradesByWeek(
+  records: DailyGradeRecord[],
+  calendar?: AcademicCalendar,
+): WeeklyGradeRecord[] {
+  const workingDatesByWeek = new Map(
+    (calendar?.weeks ?? []).map((week) => [week.id, new Set(workingDatesForWeek(calendar!, week))]),
+  );
   const groups = new Map<string, DailyGradeRecord[]>();
   records.forEach((record) => {
+    const validDates = workingDatesByWeek.get(record.weekId);
+    if (validDates && !validDates.has(record.gradeDate)) return;
     const key = [record.schoolYearId, record.weekId, record.subjectId, record.teacherId, record.studentId].join("__");
     groups.set(key, [...(groups.get(key) ?? []), record]);
   });
@@ -179,6 +207,8 @@ export function aggregateDailyGradesByWeek(records: DailyGradeRecord[]): WeeklyG
     const sorted = [...items].sort((a, b) => a.gradeDate.localeCompare(b.gradeDate));
     const latest = sorted.at(-1)!;
     const scores = averageScores(sorted.map((item) => item.scores));
+    const dayCount = new Set(sorted.map((item) => item.gradeDate)).size;
+    const workingDayCount = workingDatesByWeek.get(latest.weekId)?.size ?? dayCount;
     return {
       id,
       institutionId: latest.institutionId,
@@ -199,7 +229,9 @@ export function aggregateDailyGradesByWeek(records: DailyGradeRecord[]): WeeklyG
       scores,
       weights: latest.weights,
       weightedScore: calculateWeightedGrade(scores, latest.weights),
-      dayCount: sorted.length,
+      dayCount,
+      workingDayCount,
+      missingDayCount: Math.max(0, workingDayCount - dayCount),
       createdAt: sorted[0].createdAt,
       updatedAt: latest.updatedAt,
     };
@@ -230,6 +262,7 @@ function weeklySummary(record: WeeklyGradeRecord): GradePeriodSummary {
     scores: record.scores,
     weightedScore: record.weightedScore,
     evidenceCount: record.dayCount ?? 0,
+    expectedEvidenceCount: record.workingDayCount,
   };
 }
 
@@ -269,7 +302,7 @@ function aggregateSummaries(
 }
 
 export function buildGradePeriodSummaries(records: DailyGradeRecord[], calendar: AcademicCalendar) {
-  const weekly = aggregateDailyGradesByWeek(records).map(weeklySummary);
+  const weekly = aggregateDailyGradesByWeek(records, calendar).map(weeklySummary);
   const bimonthly = aggregateSummaries(weekly, "bimonthly", (record) => ({
     id: record.termId ?? "sin-bimestre",
     label: record.termLabel ?? "Sin bimestre",
@@ -366,6 +399,7 @@ export async function saveDailyGrade(
   profile: UserProfile,
   config: TeacherGradingConfig,
   academicConfig: AcademicConfig,
+  calendar: AcademicCalendar,
   week: AcademicWeek,
   term: AcademicTerm,
   gradeDate: string,
@@ -380,6 +414,9 @@ export async function saveDailyGrade(
   }
   if (gradeDate < week.startDate || gradeDate > week.endDate) {
     throw new Error("La fecha de captura debe estar dentro de la semana seleccionada.");
+  }
+  if (!workingDatesForWeek(calendar, week).includes(gradeDate)) {
+    throw new Error("La fecha seleccionada es fin de semana o está marcada como día no laboral.");
   }
   if (!term.weekIds.includes(week.id)) throw new Error("La semana seleccionada no pertenece a este bimestre.");
   const normalizedScores = normalizeWeeklyGradeScores(scores);
@@ -450,5 +487,25 @@ export async function saveWeeklyGrade(
     timeZone: academicConfig.timezone || "America/Mexico_City",
   });
   const gradeDate = today >= week.startDate && today <= week.endDate ? today : week.startDate;
-  return saveDailyGrade(profile, config, academicConfig, week, term, gradeDate, student, subject, scores);
+  const calendar: AcademicCalendar = {
+    schoolYearId: academicConfig.schoolYearId,
+    weeks: [week],
+    terms: [term],
+    nonWorkingDays: [],
+    configured: true,
+  };
+  const workingDates = workingDatesForWeek(calendar, week);
+  const validGradeDate = workingDates.includes(gradeDate) ? gradeDate : workingDates[0] ?? gradeDate;
+  return saveDailyGrade(
+    profile,
+    config,
+    academicConfig,
+    calendar,
+    week,
+    term,
+    validGradeDate,
+    student,
+    subject,
+    scores,
+  );
 }

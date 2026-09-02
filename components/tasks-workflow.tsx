@@ -1709,7 +1709,9 @@ function TaskTimeline({
 
 type WeekDraft = AcademicCalendarInput["weeks"][number];
 type TermDraft = AcademicCalendarInput["terms"][number];
+type NonWorkingDayDraft = AcademicCalendarInput["nonWorkingDays"][number] & { id: string };
 const ACADEMIC_WEEKS_PAGE_SIZE = 5;
+const ACADEMIC_NONWORKING_PAGE_SIZE = 10;
 
 function dateInputValue(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -1742,6 +1744,29 @@ function academicDateStatus(week: WeekDraft) {
   if (today < week.startDate) return { label: "Próxima", className: "is-upcoming" };
   if (today > week.endDate) return { label: "Finalizada", className: "is-past" };
   return { label: "Actual", className: "is-current" };
+}
+
+function isWeekendInput(value: string) {
+  const day = new Date(`${value}T12:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
+function academicScopeForDate(
+  weeks: WeekDraft[],
+  terms: TermDraft[],
+  date: string,
+) {
+  const week = weeks.find((candidate) => date >= candidate.startDate && date <= candidate.endDate);
+  const term = week ? terms.find((candidate) => candidate.weekIds.includes(week.id)) : undefined;
+  return { week, term };
+}
+
+function workingDayCountForWeek(week: WeekDraft, nonWorkingDays: NonWorkingDayDraft[]) {
+  let count = 0;
+  for (let date = week.startDate; date && date <= week.endDate; date = addDaysToDateInput(date, 1)) {
+    if (!isWeekendInput(date) && !nonWorkingDays.some((day) => day.date === date)) count += 1;
+  }
+  return count;
 }
 
 export function AcademicConfigurationCard({
@@ -1779,6 +1804,12 @@ export function AcademicConfigurationCard({
           },
         ],
   );
+  const [nonWorkingDays, setNonWorkingDays] = useState<NonWorkingDayDraft[]>(() =>
+    (calendar.nonWorkingDays ?? []).map(({ id, date, label }) => ({ id, date, label })),
+  );
+  const [nonWorkingSearch, setNonWorkingSearch] = useState("");
+  const [nonWorkingWeekFilter, setNonWorkingWeekFilter] = useState("all");
+  const [nonWorkingPage, setNonWorkingPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [weekPage, setWeekPage] = useState(() => {
     const currentIndex = weeks.findIndex(
@@ -1796,6 +1827,26 @@ export function AcademicConfigurationCard({
   const visibleWeeks = weeks.slice(
     weekPageStart,
     weekPageStart + ACADEMIC_WEEKS_PAGE_SIZE,
+  );
+  const normalizedNonWorkingSearch = nonWorkingSearch.trim().toLocaleLowerCase("es");
+  const filteredNonWorkingDays = [...nonWorkingDays]
+    .sort((first, second) => first.date.localeCompare(second.date))
+    .filter((day) => {
+      const scope = academicScopeForDate(weeks, terms, day.date);
+      return (nonWorkingWeekFilter === "all" || scope.week?.id === nonWorkingWeekFilter)
+        && (!normalizedNonWorkingSearch
+          || `${day.date} ${day.label} ${scope.week?.label ?? ""} ${scope.term?.label ?? ""}`
+            .toLocaleLowerCase("es")
+            .includes(normalizedNonWorkingSearch));
+    });
+  const totalNonWorkingPages = Math.max(
+    1,
+    Math.ceil(filteredNonWorkingDays.length / ACADEMIC_NONWORKING_PAGE_SIZE),
+  );
+  const activeNonWorkingPage = Math.min(nonWorkingPage, totalNonWorkingPages);
+  const visibleNonWorkingDays = filteredNonWorkingDays.slice(
+    (activeNonWorkingPage - 1) * ACADEMIC_NONWORKING_PAGE_SIZE,
+    activeNonWorkingPage * ACADEMIC_NONWORKING_PAGE_SIZE,
   );
 
   const validationMessage = useMemo(() => {
@@ -1847,8 +1898,26 @@ export function AcademicConfigurationCard({
     if (new Set(assignments).size !== assignments.length) {
       return "Cada semana sólo puede pertenecer a un bimestre.";
     }
+    const configuredDates = new Set<string>();
+    for (const day of nonWorkingDays) {
+      if (!day.date || !day.label.trim()) {
+        return "Completa la fecha y el motivo de todos los días no laborales.";
+      }
+      if (configuredDates.has(day.date)) return `El día no laboral ${day.date} está duplicado.`;
+      configuredDates.add(day.date);
+      if (isWeekendInput(day.date)) {
+        return `${day.date} ya es fin de semana; selecciona un día hábil.`;
+      }
+      const scope = academicScopeForDate(weeks, terms, day.date);
+      if (!scope.week) return `El día no laboral ${day.date} no pertenece a ninguna semana.`;
+      if (!scope.term) return `Asigna ${scope.week.label} a un bimestre para ubicar ${day.date}.`;
+    }
+    const emptyWeek = weeks.find(
+      (week) => workingDayCountForWeek(week, nonWorkingDays) === 0,
+    );
+    if (emptyWeek) return `${emptyWeek.label} debe conservar al menos un día hábil.`;
     return "";
-  }, [schoolYearId, schoolYearLabel, terms, weeks]);
+  }, [nonWorkingDays, schoolYearId, schoolYearLabel, terms, weeks]);
 
   const currentWeek = weeks.find(
     (week) => academicDateStatus(week).className === "is-current",
@@ -1901,6 +1970,35 @@ export function AcademicConfigurationCard({
       ...current,
       { id, label: `Bimestre ${nextNumber}`, weekIds: [] },
     ]);
+  }
+
+  function addNonWorkingDay() {
+    const usedDates = new Set(nonWorkingDays.map((day) => day.date));
+    let availableDate = "";
+    for (const week of [...weeks].sort((first, second) => first.startDate.localeCompare(second.startDate))) {
+      for (let date = week.startDate; date && date <= week.endDate; date = addDaysToDateInput(date, 1)) {
+        if (!isWeekendInput(date) && !usedDates.has(date)) {
+          availableDate = date;
+          break;
+        }
+      }
+      if (availableDate) break;
+    }
+    if (!availableDate) {
+      toast.info("No quedan días hábiles disponibles en las semanas configuradas.");
+      return;
+    }
+    setNonWorkingDays((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        date: availableDate,
+        label: "Suspensión de labores",
+      },
+    ]);
+    setNonWorkingSearch("");
+    setNonWorkingWeekFilter("all");
+    setNonWorkingPage(Math.ceil((nonWorkingDays.length + 1) / ACADEMIC_NONWORKING_PAGE_SIZE));
   }
 
   function assignWeek(termId: string, weekId: string, selected: boolean) {
@@ -2100,6 +2198,9 @@ export function AcademicConfigurationCard({
                         weekIds: term.weekIds.filter((id) => id !== week.id),
                       })),
                     );
+                    setNonWorkingDays((current) => current.filter(
+                      (day) => day.date < week.startDate || day.date > week.endDate,
+                    ));
                   }}
                 >
                   <Trash2 size={16} />
@@ -2109,6 +2210,126 @@ export function AcademicConfigurationCard({
           })}
         </div>
         {weekPagination("Paginación de semanas del ciclo")}
+      </div>
+
+      <div className="academic-calendar-block">
+        <div className="academic-calendar-title">
+          <div>
+            <span className="eyebrow">Excepciones del calendario</span>
+            <h3>Días no laborales</h3>
+            <p>
+              La semana y el bimestre se detectan por fecha. Estos días no aparecen en captura ni
+              cuentan como evidencia esperada para el promedio semanal.
+            </p>
+          </div>
+          <button className="secondary-button" type="button" onClick={addNonWorkingDay}>
+            <Plus size={16} /> Agregar día no laboral
+          </button>
+        </div>
+        {nonWorkingDays.length ? (
+          <>
+            <div className="academic-nonworking-toolbar">
+              <label>
+                <Search size={16} />
+                <input
+                  type="search"
+                  value={nonWorkingSearch}
+                  onChange={(event) => { setNonWorkingSearch(event.target.value); setNonWorkingPage(1); }}
+                  placeholder="Buscar fecha, motivo, semana…"
+                />
+              </label>
+              <select
+                aria-label="Filtrar días no laborales por semana"
+                value={nonWorkingWeekFilter}
+                onChange={(event) => { setNonWorkingWeekFilter(event.target.value); setNonWorkingPage(1); }}
+              >
+                <option value="all">Todas las semanas</option>
+                {[...weeks].sort((first, second) => first.startDate.localeCompare(second.startDate)).map((week) => (
+                  <option key={week.id} value={week.id}>{week.label}</option>
+                ))}
+              </select>
+              <span>{filteredNonWorkingDays.length} {filteredNonWorkingDays.length === 1 ? "resultado" : "resultados"}</span>
+            </div>
+            <div className="academic-nonworking-list">
+            {visibleNonWorkingDays.map((day) => {
+              const scope = academicScopeForDate(weeks, terms, day.date);
+              const workingDays = scope.week
+                ? workingDayCountForWeek(scope.week, nonWorkingDays)
+                : 0;
+              return (
+                <article className="academic-nonworking-row" key={day.id}>
+                  <span className="academic-nonworking-icon" aria-hidden="true">
+                    <CalendarDays size={18} />
+                  </span>
+                  <label>
+                    Fecha
+                    <input
+                      type="date"
+                      value={day.date}
+                      onChange={(event) => setNonWorkingDays((current) => current.map((item) =>
+                        item.id === day.id ? { ...item, date: event.target.value } : item
+                      ))}
+                    />
+                  </label>
+                  <label>
+                    Motivo
+                    <input
+                      value={day.label}
+                      onChange={(event) => setNonWorkingDays((current) => current.map((item) =>
+                        item.id === day.id ? { ...item, label: event.target.value } : item
+                      ))}
+                      placeholder="Consejo técnico, festivo…"
+                    />
+                  </label>
+                  <div className={`academic-nonworking-scope ${scope.week && scope.term ? "is-ready" : "has-error"}`}>
+                    <strong>
+                      {scope.week && scope.term
+                        ? `${scope.week.label} · ${scope.term.label}`
+                        : "Fuera del calendario"}
+                    </strong>
+                    <small>
+                      {scope.week
+                        ? `${workingDays} ${workingDays === 1 ? "día hábil" : "días hábiles"} en esta semana`
+                        : "Selecciona una fecha dentro de una semana"}
+                    </small>
+                  </div>
+                  <button
+                    className="plain-icon academic-remove"
+                    type="button"
+                    aria-label={`Quitar día no laboral ${day.date}`}
+                    onClick={() => setNonWorkingDays((current) => current.filter((item) => item.id !== day.id))}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </article>
+              );
+            })}
+            {!visibleNonWorkingDays.length && (
+              <div className="academic-nonworking-empty">
+                <Search size={18} />
+                <span>No hay días no laborales que coincidan con esta búsqueda.</span>
+              </div>
+            )}
+            </div>
+            {filteredNonWorkingDays.length > ACADEMIC_NONWORKING_PAGE_SIZE && (
+              <nav className="academic-week-pagination" aria-label="Paginación de días no laborales">
+                <span>
+                  Días <strong>{(activeNonWorkingPage - 1) * ACADEMIC_NONWORKING_PAGE_SIZE + 1}–{Math.min(activeNonWorkingPage * ACADEMIC_NONWORKING_PAGE_SIZE, filteredNonWorkingDays.length)}</strong> de {filteredNonWorkingDays.length}
+                </span>
+                <div>
+                  <button className="plain-icon" type="button" disabled={activeNonWorkingPage === 1} aria-label="Ver días no laborales anteriores" onClick={() => setNonWorkingPage((current) => Math.max(1, current - 1))}><ChevronLeft size={17} /></button>
+                  <span>Página <strong>{activeNonWorkingPage}</strong> de {totalNonWorkingPages}</span>
+                  <button className="plain-icon" type="button" disabled={activeNonWorkingPage === totalNonWorkingPages} aria-label="Ver días no laborales siguientes" onClick={() => setNonWorkingPage((current) => Math.min(totalNonWorkingPages, current + 1))}><ChevronRight size={17} /></button>
+                </div>
+              </nav>
+            )}
+          </>
+        ) : (
+          <div className="academic-nonworking-empty">
+            <CalendarDays size={18} />
+            <span>No hay suspensiones registradas; cada semana usa sus días hábiles de lunes a viernes.</span>
+          </div>
+        )}
       </div>
 
       <div className="academic-calendar-block">
@@ -2184,7 +2405,7 @@ export function AcademicConfigurationCard({
         {validationMessage ? <CircleAlert size={17} /> : <ShieldCheck size={17} />}
         <span>
           {validationMessage ||
-            "Calendario consistente: todas las semanas tienen un bimestre y no hay traslapes."}
+            "Calendario consistente: semanas, bimestres y días no laborales están relacionados."}
         </span>
       </div>
 
@@ -2220,6 +2441,9 @@ export function AcademicConfigurationCard({
                     (first, second) => (order.get(first) ?? 0) - (order.get(second) ?? 0),
                   ),
                 })),
+                nonWorkingDays: [...nonWorkingDays]
+                  .sort((first, second) => first.date.localeCompare(second.date))
+                  .map(({ date, label }) => ({ date, label: label.trim() })),
               });
               toast.success("Calendario académico actualizado", {
                 description: currentWeek

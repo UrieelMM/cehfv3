@@ -83,6 +83,16 @@ type CalendarTerm = {
   order: number;
 };
 
+type CalendarNonWorkingDay = {
+  id: string;
+  date: string;
+  label: string;
+  weekId: string;
+  weekLabel: string;
+  termId: string;
+  termLabel: string;
+};
+
 function calendarId(value: unknown, field: string) {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(normalized)) {
@@ -127,6 +137,11 @@ function addCalendarDays(value: string, days: number) {
   const [year, month, day] = value.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day + days));
   return date.toISOString().slice(0, 10);
+}
+
+function isWeekendDate(value: string) {
+  const day = new Date(`${value}T12:00:00.000Z`).getUTCDay();
+  return day === 0 || day === 6;
 }
 
 function zonedMidnight(value: string, timeZone: string) {
@@ -756,14 +771,86 @@ export const saveAcademicCalendar = onCall(async (request) => {
     term.order = index + 1;
   });
 
+  const rawNonWorkingDays = input.nonWorkingDays ?? [];
+  if (!Array.isArray(rawNonWorkingDays) || rawNonWorkingDays.length > 180) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Configura un máximo de 180 días no laborales por ciclo.",
+    );
+  }
+  const nonWorkingDayIds = new Set<string>();
+  const nonWorkingDays = rawNonWorkingDays
+    .map((raw, index) => {
+      const value = raw as Record<string, unknown>;
+      const date = calendarDate(value.date, `La fecha no laboral ${index + 1}`);
+      if (nonWorkingDayIds.has(date)) {
+        throw new HttpsError(
+          "invalid-argument",
+          `El día no laboral ${date} está duplicado.`,
+        );
+      }
+      if (isWeekendDate(date)) {
+        throw new HttpsError(
+          "invalid-argument",
+          `${date} ya es fin de semana; selecciona un día hábil.`,
+        );
+      }
+      const week = weeks.find(
+        (candidate) => date >= candidate.startDate && date <= candidate.endDate,
+      );
+      if (!week) {
+        throw new HttpsError(
+          "invalid-argument",
+          `El día no laboral ${date} no pertenece a ninguna semana configurada.`,
+        );
+      }
+      const term = terms.find((candidate) => candidate.weekIds.includes(week.id));
+      if (!term) {
+        throw new HttpsError(
+          "invalid-argument",
+          `No se pudo determinar el bimestre del día no laboral ${date}.`,
+        );
+      }
+      nonWorkingDayIds.add(date);
+      return {
+        id: date,
+        date,
+        label: calendarLabel(value.label, `El motivo del día no laboral ${date}`),
+        weekId: week.id,
+        weekLabel: week.label,
+        termId: term.id,
+        termLabel: term.label,
+      } satisfies CalendarNonWorkingDay;
+    })
+    .sort((first, second) => first.date.localeCompare(second.date));
+  const excludedDates = new Set(nonWorkingDays.map((day) => day.date));
+  weeks.forEach((week) => {
+    let workingDays = 0;
+    for (
+      let date = week.startDate;
+      date <= week.endDate;
+      date = addCalendarDays(date, 1)
+    ) {
+      if (!isWeekendDate(date) && !excludedDates.has(date)) workingDays += 1;
+    }
+    if (!workingDays) {
+      throw new HttpsError(
+        "invalid-argument",
+        `${week.label} debe conservar al menos un día hábil.`,
+      );
+    }
+  });
+
   const institutionRef = db.doc(`institutions/${director.institutionId}`);
   const cycleRef = institutionRef.collection("ciclosEscolares").doc(schoolYearId);
   const weeksCollection = cycleRef.collection("semanas");
   const termsCollection = cycleRef.collection("bimestres");
+  const nonWorkingDaysCollection = cycleRef.collection("diasNoLaborales");
   const configReference = institutionRef.collection("configuracion").doc("academica");
-  const [existingWeeks, existingTerms, previousConfigSnapshot] = await Promise.all([
+  const [existingWeeks, existingTerms, existingNonWorkingDays, previousConfigSnapshot] = await Promise.all([
     weeksCollection.get(),
     termsCollection.get(),
+    nonWorkingDaysCollection.get(),
     configReference.get(),
   ]);
   const batch = db.batch();
@@ -852,6 +939,35 @@ export const saveAcademicCalendar = onCall(async (request) => {
         { merge: true },
       ),
     );
+  nonWorkingDays.forEach((day) => {
+    batch.set(
+      nonWorkingDaysCollection.doc(day.id),
+      {
+        institutionId: director.institutionId,
+        schoolYearId,
+        date: day.date,
+        label: day.label,
+        weekId: day.weekId,
+        weekLabel: day.weekLabel,
+        termId: day.termId,
+        termLabel: day.termLabel,
+        active: true,
+        archivedAt: FieldValue.delete(),
+        updatedAt: now,
+        updatedBy: director.uid,
+      },
+      { merge: true },
+    );
+  });
+  existingNonWorkingDays.docs
+    .filter((snapshot) => !nonWorkingDayIds.has(snapshot.id))
+    .forEach((snapshot) =>
+      batch.set(
+        snapshot.ref,
+        { active: false, archivedAt: now, updatedAt: now, updatedBy: director.uid },
+        { merge: true },
+      ),
+    );
 
   const context = currentCalendarContext(weeks, terms);
   const calendarStatus = context.currentWeek && context.currentTerm ? "active" : "gap";
@@ -885,6 +1001,7 @@ export const saveAcademicCalendar = onCall(async (request) => {
     authorName: director.name,
     weekIds: weeks.map((week) => week.id),
     termIds: terms.map((term) => term.id),
+    nonWorkingDates: nonWorkingDays.map((day) => day.date),
     createdAt: now,
   });
   await batch.commit();
@@ -893,6 +1010,7 @@ export const saveAcademicCalendar = onCall(async (request) => {
     schoolYearId,
     weeks: weeks.length,
     terms: terms.length,
+    nonWorkingDays: nonWorkingDays.length,
   });
   return { calendarStatus };
 });

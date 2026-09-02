@@ -239,17 +239,35 @@ function demoCalendarFromInput(input: AcademicCalendarInput): AcademicCalendar {
         active: true,
       };
     });
+  const terms = input.terms.map((term, index) => {
+    const selected = weeks.filter((week) => term.weekIds.includes(week.id));
+    return {
+      ...term,
+      startDate: selected[0]?.startDate ?? "",
+      endDate: selected.at(-1)?.endDate ?? "",
+      order: index + 1,
+      active: true,
+    };
+  });
   return {
     schoolYearId: input.schoolYearId,
     configured: true,
     weeks,
-    terms: input.terms.map((term, index) => {
-      const selected = weeks.filter((week) => term.weekIds.includes(week.id));
+    terms,
+    nonWorkingDays: (input.nonWorkingDays ?? []).map((day) => {
+      const week = weeks.find(
+        (candidate) => day.date >= candidate.startDate && day.date <= candidate.endDate,
+      );
+      const term = week
+        ? terms.find((candidate) => candidate.weekIds.includes(week.id))
+        : undefined;
       return {
-        ...term,
-        startDate: selected[0]?.startDate ?? "",
-        endDate: selected.at(-1)?.endDate ?? "",
-        order: index + 1,
+        id: day.date,
+        ...day,
+        weekId: week?.id ?? "",
+        weekLabel: week?.label ?? "Semana",
+        termId: term?.id ?? "",
+        termLabel: term?.label ?? "Bimestre",
         active: true,
       };
     }),
