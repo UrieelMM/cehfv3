@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "studentWeeklyReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "studentId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "tareas",
       "queryScope": "COLLECTION_GROUP",
       "fields": [

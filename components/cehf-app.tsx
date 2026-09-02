@@ -14,14 +14,15 @@ import {
   ClipboardCheck,
   Clock3,
   Copy,
+  Database,
   FileBarChart,
-  FileText,
   GraduationCap,
   Home,
   Eye,
   EyeOff,
   LayoutDashboard,
   LockKeyhole,
+  LoaderCircle,
   LogIn,
   LogOut,
   Mail,
@@ -58,10 +59,14 @@ import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { WorkshopsPage } from "@/components/workshops-page";
+import { GradingWeightsCard } from "@/components/weekly-grades";
 import {
-  GradingWeightsCard,
-  WeeklyGradesPanel,
-} from "@/components/weekly-grades";
+  clearInstitutionDemoData,
+  loadInstitutionDemoData,
+  type DemoSeedCounts,
+} from "@/lib/demo-seed-firebase";
+import { AcademicGradesPanel } from "@/components/academic-grades";
+import { AcademicReportsPage } from "@/components/academic-reports";
 import {
   ReviewCreateModal,
   ReviewsPage,
@@ -241,17 +246,35 @@ function demoCalendarFromInput(input: AcademicCalendarInput): AcademicCalendar {
         active: true,
       };
     });
+  const terms = input.terms.map((term, index) => {
+    const selected = weeks.filter((week) => term.weekIds.includes(week.id));
+    return {
+      ...term,
+      startDate: selected[0]?.startDate ?? "",
+      endDate: selected.at(-1)?.endDate ?? "",
+      order: index + 1,
+      active: true,
+    };
+  });
   return {
     schoolYearId: input.schoolYearId,
     configured: true,
     weeks,
-    terms: input.terms.map((term, index) => {
-      const selected = weeks.filter((week) => term.weekIds.includes(week.id));
+    terms,
+    nonWorkingDays: (input.nonWorkingDays ?? []).map((day) => {
+      const week = weeks.find(
+        (candidate) => day.date >= candidate.startDate && day.date <= candidate.endDate,
+      );
+      const term = week
+        ? terms.find((candidate) => candidate.weekIds.includes(week.id))
+        : undefined;
       return {
-        ...term,
-        startDate: selected[0]?.startDate ?? "",
-        endDate: selected.at(-1)?.endDate ?? "",
-        order: index + 1,
+        id: day.date,
+        ...day,
+        weekId: week?.id ?? "",
+        weekLabel: week?.label ?? "Semana",
+        termId: term?.id ?? "",
+        termLabel: term?.label ?? "Bimestre",
         active: true,
       };
     }),
@@ -487,7 +510,7 @@ export function CEHFApp() {
     return watchAcademicCalendar(
       storedAcademicConfig,
       setAcademicCalendar,
-      (error) => reportFirebaseError("cargar semanas y trimestres", error),
+      (error) => reportFirebaseError("cargar semanas y bimestres", error),
     );
   }, [firebaseUser, profile, storedAcademicConfig]);
 
@@ -1896,10 +1919,12 @@ function SectionContent({
       );
     case "reports":
       return (
-        <ReportsPage
-          role={role}
-          state={state}
-          updateState={updateState}
+        <AcademicReportsPage
+          profile={profile}
+          academicConfig={academicConfig}
+          calendar={academicCalendar}
+          accounts={managedAccounts}
+          firebaseReady={firebaseReady}
         />
       );
     case "wall-newspaper":
@@ -2457,7 +2482,7 @@ function WeekPage({
 }) {
   return (
     <div className="qualifications-page">
-      <WeeklyGradesPanel
+      <AcademicGradesPanel
         profile={profile}
         academicConfig={academicConfig}
         calendar={academicCalendar}
@@ -2579,106 +2604,6 @@ function ProgressPage({
   );
 }
 
-function ReportsPage({
-  role,
-  state,
-  updateState,
-}: {
-  role: Role;
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-}) {
-  return (
-    <section className="reports-stack">
-      {state.reports
-        .filter((report) => role !== "student" || report.status === "published")
-        .map((report) => (
-          <article className="report-card" key={report.id}>
-            <div className="report-header">
-              <div>
-                <span
-                  className={`status-tag ${
-                    report.status === "published"
-                      ? "status-achieved"
-                      : "status-neutral"
-                  }`}
-                >
-                  {report.status === "published" ? "Publicado" : "Borrador"}
-                </span>
-                <h2>{report.week}</h2>
-                <p>
-                  {report.teacher} · Versión {report.version}
-                  {report.publishedAt ? ` · ${report.publishedAt}` : ""}
-                </p>
-              </div>
-              <FileText size={28} />
-            </div>
-            <div className="report-body">
-              <div className="report-summary">
-                <span className="eyebrow">Resumen</span>
-                <p>{report.summary}</p>
-              </div>
-              <div className="report-detail success-block">
-                <CheckCircle2 size={19} />
-                <div>
-                  <strong>Un logro para reconocer</strong>
-                  <p>{report.achievement}</p>
-                </div>
-              </div>
-              <div className="report-detail support-block">
-                <CircleHelp size={19} />
-                <div>
-                  <strong>Área de acompañamiento</strong>
-                  <p>{report.support}</p>
-                </div>
-              </div>
-              <div className="report-detail next-block">
-                <ArrowRight size={19} />
-                <div>
-                  <strong>Próximo paso</strong>
-                  <p>{report.nextStep}</p>
-                </div>
-              </div>
-            </div>
-            <div className="report-footer">
-              <span>
-                <ShieldCheck size={16} /> El detalle solo se muestra dentro del
-                portal.
-              </span>
-              {role !== "student" && report.status === "draft" && (
-                <button
-                  className="primary-button"
-                  onClick={() =>
-                    updateState(
-                      (previous) => ({
-                        ...previous,
-                        reports: previous.reports.map((item) =>
-                          item.id === report.id
-                            ? {
-                                ...item,
-                                status: "published",
-                                publishedAt: "Ahora",
-                              }
-                            : item,
-                        ),
-                      }),
-                      "Reporte publicado y aviso seguro encolado",
-                    )
-                  }
-                >
-                  Publicar reporte
-                </button>
-              )}
-            </div>
-          </article>
-        ))}
-    </section>
-  );
-}
-
 function SettingsPage({
   state,
   updateSettings,
@@ -2716,6 +2641,41 @@ function SettingsPage({
 
   const [activeSettingsTab, setActiveSettingsTab] =
     useState<SettingsTabId>("appearance");
+  const [demoSeedLoading, setDemoSeedLoading] = useState(false);
+  const [demoSeedClearing, setDemoSeedClearing] = useState(false);
+  const [demoSeedCounts, setDemoSeedCounts] = useState<DemoSeedCounts | null>(null);
+
+  const handleDemoSeed = async () => {
+    if (demoSeedLoading) return;
+    setDemoSeedLoading(true);
+    try {
+      const result = await loadInstitutionDemoData();
+      setDemoSeedCounts(result.counts);
+      toast.success("Datos de demostración cargados en Firebase");
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setDemoSeedLoading(false);
+    }
+  };
+
+  const handleDemoSeedClear = async () => {
+    if (demoSeedClearing) return;
+    setDemoSeedClearing(true);
+    try {
+      const result = await clearInstitutionDemoData();
+      setDemoSeedCounts(null);
+      toast.success(
+        result.alreadyClean
+          ? "La semilla ya estaba eliminada"
+          : `${result.deleted} documentos demo eliminados`,
+      );
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setDemoSeedClearing(false);
+    }
+  };
   const settingsTabs: Array<{
     id: SettingsTabId;
     label: string;
@@ -2744,14 +2704,18 @@ function SettingsPage({
           },
         ]
       : []),
-    ...(role === "director"
+    ...(["director", "teacher"].includes(role)
       ? [
           {
             id: "whatsapp" as const,
             label: "WhatsApp",
-            description: "Mensajes a familias",
+            description: role === "director" ? "Mensajes a familias" : "Historial de envíos",
             icon: <MessageCircle size={18} />,
           },
+        ]
+      : []),
+    ...(role === "director"
+      ? [
           {
             id: "academic" as const,
             label: "Académico",
@@ -2915,21 +2879,25 @@ function SettingsPage({
           </div>
         )}
 
+        {["director", "teacher"].includes(role) && (
+          <div
+            aria-labelledby="settings-tab-whatsapp"
+            className="settings-tab-panel"
+            hidden={activeSettingsTab !== "whatsapp"}
+            id="settings-panel-whatsapp"
+            role="tabpanel"
+          >
+            <WhatsAppAdminPanel
+              institutionId={institutionId}
+              accounts={managedAccounts}
+              firebaseReady={firebaseReady}
+              role={role}
+            />
+          </div>
+        )}
+
         {role === "director" && (
           <>
-            <div
-              aria-labelledby="settings-tab-whatsapp"
-              className="settings-tab-panel"
-              hidden={activeSettingsTab !== "whatsapp"}
-              id="settings-panel-whatsapp"
-              role="tabpanel"
-            >
-              <WhatsAppAdminPanel
-                institutionId={institutionId}
-                accounts={managedAccounts}
-                firebaseReady={firebaseReady}
-              />
-            </div>
             <div
               aria-labelledby="settings-tab-academic"
               className="settings-tab-panel"
@@ -2947,6 +2915,55 @@ function SettingsPage({
                 calendar={academicCalendar}
                 onSave={saveAcademicCalendarConfiguration}
               />
+              <section className="panel settings-section demo-seed-card">
+                <div className="settings-heading">
+                  <span className="settings-icon">
+                    <Database size={20} />
+                  </span>
+                  <div>
+                    <h2>Datos de demostración</h2>
+                    <p>Puebla Firebase con información relacionada para revisar todos los módulos.</p>
+                  </div>
+                </div>
+                <div className="setting-row">
+                  <div>
+                    <strong>Carga segura y repetible</strong>
+                    <span>
+                      Crea 12 alumnos, 3 docentes y al menos 10 registros en tareas,
+                      repasos, materiales, reportes, mural, foro y talleres. No activa
+                      mensajes reales ni crea accesos de autenticación.
+                    </span>
+                  </div>
+                  <button
+                    className="primary-button"
+                    disabled={!firebaseReady || demoSeedLoading || demoSeedClearing}
+                    onClick={() => void handleDemoSeed()}
+                    type="button"
+                  >
+                    {demoSeedLoading ? <LoaderCircle className="spin" size={16} /> : <Database size={16} />}
+                    {demoSeedLoading ? "Cargando…" : "Cargar datos demo"}
+                  </button>
+                  <button
+                    className="danger-button"
+                    disabled={!firebaseReady || demoSeedLoading || demoSeedClearing}
+                    onClick={() => void handleDemoSeedClear()}
+                    type="button"
+                  >
+                    {demoSeedClearing ? <LoaderCircle className="spin" size={16} /> : <X size={16} />}
+                    {demoSeedClearing ? "Eliminando…" : "Eliminar datos demo"}
+                  </button>
+                </div>
+                {demoSeedCounts && (
+                  <div className="demo-seed-summary" role="status">
+                    <strong>Carga completada</strong>
+                    <span>{demoSeedCounts.dailyGrades} calificaciones diarias</span>
+                    <span>{demoSeedCounts.weeklyReports} reportes semanales</span>
+                    <span>{demoSeedCounts.tasks} tareas</span>
+                    <span>{demoSeedCounts.reviews} repasos</span>
+                    <span>{demoSeedCounts.wallPosts} publicaciones</span>
+                  </div>
+                )}
+              </section>
             </div>
           </>
         )}

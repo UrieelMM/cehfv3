@@ -83,6 +83,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     gradesUiSource,
     gradesCss,
     gradeReportPdfSource,
+    reportsSource,
+    reportsFirebaseSource,
+    reportsCss,
     reviewFirebaseSource,
     calendarImageSource,
     calendarModalSource,
@@ -108,9 +111,12 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
       readFile(new URL("components/workshop-file-viewer.tsx", projectRoot), "utf8"),
       readFile(new URL("lib/grades-firebase.ts", projectRoot), "utf8"),
-      readFile(new URL("components/weekly-grades.tsx", projectRoot), "utf8"),
-      readFile(new URL("app/grades.css", projectRoot), "utf8"),
+      readFile(new URL("components/academic-grades.tsx", projectRoot), "utf8"),
+      readFile(new URL("app/academic-grades.css", projectRoot), "utf8"),
       readFile(new URL("lib/grade-report-pdf.ts", projectRoot), "utf8"),
+      readFile(new URL("components/academic-reports.tsx", projectRoot), "utf8"),
+      readFile(new URL("lib/reports-firebase.ts", projectRoot), "utf8"),
+      readFile(new URL("app/academic-reports.css", projectRoot), "utf8"),
       readFile(new URL("lib/reviews-firebase.ts", projectRoot), "utf8"),
       readFile(new URL("lib/academic-calendar-image-firebase.ts", projectRoot), "utf8"),
       readFile(new URL("components/academic-calendar-modal.tsx", projectRoot), "utf8"),
@@ -241,7 +247,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(taskUiSource, /Prórroga individual/);
   assert.match(taskUiSource, /Calendario académico/);
   assert.match(taskUiSource, /Agregar semana/);
-  assert.match(taskUiSource, /Agregar trimestre/);
+  assert.match(taskUiSource, /Agregar bimestre/);
+  assert.match(taskUiSource, /Días no laborales/);
+  assert.match(taskUiSource, /academicScopeForDate/);
+  assert.match(taskUiSource, /workingDayCountForWeek/);
   assert.match(taskUiSource, /ACADEMIC_WEEKS_PAGE_SIZE = 5/);
   assert.match(taskUiSource, /academic-week-pagination/);
   assert.doesNotMatch(appSource, /key: "weekly-materials", label: "Materiales"/);
@@ -281,7 +290,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(functionsSource, /export const refreshPortalAccess/);
   assert.match(functionsSource, /setCustomUserClaims/);
   assert.match(functionsSource, /claimsChanged: changed/);
-  assert.match(functionsSource, /Cada semana sólo puede pertenecer a un trimestre/);
+  assert.match(functionsSource, /Cada semana sólo puede pertenecer a un bimestre/);
+  assert.match(functionsSource, /diasNoLaborales/);
+  assert.match(functionsSource, /no pertenece a ninguna semana configurada/);
   assert.match(appSource, /WhatsApp del padre o tutor/);
   assert.match(appSource, /Nombre del padre o tutor/);
   assert.match(appSource, /guardianName/);
@@ -315,51 +326,41 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(workshopSource, /workshop-immersive-shell/);
   assert.match(gradesSource, /DEFAULT_GRADING_WEIGHTS/);
   assert.match(gradesSource, /saveTeacherGradingConfig/);
-  assert.match(gradesSource, /saveWeeklyGrade/);
+  assert.match(gradesSource, /saveDailyGrade/);
+  assert.match(gradesSource, /aggregateDailyGradesByWeek/);
+  assert.match(gradesSource, /workingDatesForWeek/);
+  assert.match(gradesSource, /buildGradePeriodSummaries/);
   assert.match(appSource, /"my-week": "\/qualifications"/);
   assert.match(appSource, /label: "Calificaciones", icon: GraduationCap/);
   assert.doesNotMatch(appSource, /"my-week": "\/my-week"/);
-  assert.match(gradesUiSource, /Cambiar semana/);
-  assert.match(gradesUiSource, /Captura semanal/);
-  assert.match(gradesUiSource, /Calificar alumnos/);
-  assert.match(gradesUiSource, /Elige la materia/);
-  assert.match(gradesUiSource, /Buscar alumno para calificar/);
-  assert.match(gradesUiSource, /profile\.role === "teacher" \? "capture" : "summary"/);
-  assert.match(gradesUiSource, /Tus calificaciones de la semana/);
-  assert.match(gradesUiSource, /Tus calificaciones por materia/);
-  assert.match(gradesUiSource, /student-primary-results/);
-  assert.match(gradesUiSource, /<small>Maestro<\/small>/);
-  assert.match(gradesUiSource, /DirectorGradeOverview/);
-  assert.match(gradesUiSource, /Maestros, alumnos y grupos en un solo vistazo/);
-  assert.match(gradesUiSource, /records\.slice\(0, 3\)/);
-  assert.match(gradesUiSource, /Mostrar todo/);
-  assert.match(gradesUiSource, /student-grades-fullscreen-modal/);
-  assert.match(gradesUiSource, /GradeExportDialog/);
-  assert.match(gradesUiSource, /Todos los grupos/);
+  assert.match(gradesUiSource, /Día de captura/);
+  assert.match(gradesUiSource, /días hábiles esperados/);
+  assert.match(gradesUiSource, /Diarias/);
+  assert.match(gradesUiSource, /Semanales/);
+  assert.match(gradesUiSource, /Bimestrales/);
+  assert.match(gradesUiSource, /Ciclo \/ finales/);
+  assert.match(gradesUiSource, /PAGE_SIZE = 10/);
+  assert.match(gradesUiSource, /Buscar alumno, grupo o materia/);
   assert.match(gradesUiSource, /Todas las materias/);
-  assert.match(gradesUiSource, /Todos los alumnos/);
   assert.match(gradesUiSource, /downloadGradeReportPdf/);
-  assert.match(gradesUiSource, /firebaseAccountNames/);
-  assert.match(gradesUiSource, /firebaseAccountNames\.get\(record\.studentId\)/);
-  assert.match(gradesUiSource, /firebaseAccountNames\.get\(record\.teacherId\)/);
   assert.match(gradesUiSource, /profile\.guardianName/);
-  assert.match(gradesUiSource, /reportDirectorNames/);
-  assert.match(gradesUiSource, /GradeSummaryDashboard/);
-  assert.match(gradesUiSource, /Historial académico/);
-  assert.match(gradesUiSource, /Promedio por materia/);
-  assert.match(gradesUiSource, /Tendencia semanal/);
-  assert.match(gradesCss, /\.grade-week-selector/);
-  assert.match(gradesCss, /\.grade-roster-row/);
-  assert.match(gradesCss, /\.teacher-capture-heading/);
-  assert.match(gradesCss, /\.teacher-subject-selector/);
-  assert.match(gradesCss, /\.grade-roster-criteria/);
-  assert.match(gradesCss, /\.student-primary-results/);
-  assert.match(gradesCss, /\.student-subject-teacher/);
-  assert.match(gradesCss, /\.director-grade-overview/);
-  assert.match(gradesCss, /\.student-grades-fullscreen-modal/);
-  assert.match(gradesCss, /\.grade-export-modal/);
-  assert.match(gradesCss, /\.qualifications-page/);
-  assert.match(gradesCss, /\.grade-analytics-grid/);
+  assert.match(gradesCss, /\.academic-level-tabs/);
+  assert.match(gradesCss, /\.academic-capture-row/);
+  assert.match(gradesCss, /\.academic-results-table/);
+  assert.match(reportsSource, /Un logro para reconocer/);
+  assert.match(reportsSource, /Área de acompañamiento/);
+  assert.match(reportsSource, /Próximo paso/);
+  assert.match(reportsSource, /WeeklyEvidence/);
+  assert.match(reportsSource, /PAGE_SIZE = 10/);
+  assert.match(reportsFirebaseSource, /studentWeeklyReports/);
+  assert.match(reportsFirebaseSource, /saveStudentWeeklyReport/);
+  assert.match(reportsCss, /\.report-field-grid/);
+  assert.match(firestoreRules, /match \/dailyGrades\/\{gradeId\}/);
+  assert.match(firestoreRules, /match \/diasNoLaborales\/\{dayId\}/);
+  assert.match(firestoreRules, /calendarNonWorkingDayPath/);
+  assert.match(firestoreRules, /match \/studentWeeklyReports\/\{reportId\}/);
+  assert.match(appSource, /className="qualifications-page"/);
+  assert.match(gradesCss, /\.academic-metrics/);
   assert.match(gradeReportPdfSource, /Reporte institucional de calificaciones/);
   assert.match(gradeReportPdfSource, /Padre, madre o tutor/);
   assert.match(gradeReportPdfSource, /Docente responsable/);

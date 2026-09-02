@@ -27,6 +27,7 @@ import type {
   AcademicCalendar,
   AcademicCalendarInput,
   AcademicConfig,
+  AcademicNonWorkingDay,
   AcademicTerm,
   AcademicWeek,
   AppNotification,
@@ -49,8 +50,8 @@ export const defaultAcademicConfig: AcademicConfig = {
   institutionId: INSTITUTION_ID,
   schoolYearId: "cicloescolar26-27",
   schoolYearLabel: "2026–2027",
-  termId: "trimestre1",
-  termLabel: "Trimestre 1",
+  termId: "bimestre1",
+  termLabel: "Bimestre 1",
   weekId: "semana1",
   weekLabel: "Semana 1",
   timezone: "America/Mexico_City",
@@ -76,8 +77,8 @@ export const defaultAcademicCalendar: AcademicCalendar = {
   ],
   terms: [
     {
-      id: "trimestre1",
-      label: "Trimestre 1",
+      id: "bimestre1",
+      label: "Bimestre 1",
       weekIds: ["semana1"],
       startDate: "2026-08-17",
       endDate: "2026-08-21",
@@ -85,6 +86,7 @@ export const defaultAcademicCalendar: AcademicCalendar = {
       active: true,
     },
   ],
+  nonWorkingDays: [],
 };
 
 export const emptyAcademicCalendar: AcademicCalendar = {
@@ -92,6 +94,7 @@ export const emptyAcademicCalendar: AcademicCalendar = {
   configured: false,
   weeks: [],
   terms: [],
+  nonWorkingDays: [],
 };
 
 function requireFirebase() {
@@ -131,7 +134,7 @@ function academicTaskCollection(config: AcademicConfig, subjectId: string) {
     config.institutionId,
     "ciclosEscolares",
     config.schoolYearId,
-    "trimestres",
+    "bimestres",
     config.termId,
     "semanas",
     config.weekId,
@@ -147,7 +150,7 @@ export function isFirebaseTaskAssignment(task: TaskAssignment) {
     segments.length === 12 &&
     segments[0] === "institutions" &&
     segments[2] === "ciclosEscolares" &&
-    segments[4] === "trimestres" &&
+    segments[4] === "bimestres" &&
     segments[6] === "semanas" &&
     segments[8] === "materias" &&
     segments[10] === "tareas" &&
@@ -321,11 +324,24 @@ function weekFromData(id: string, data: DocumentData): AcademicWeek {
 function termFromData(id: string, data: DocumentData): AcademicTerm {
   return {
     id,
-    label: String(data.label ?? "Trimestre"),
+    label: String(data.label ?? "Bimestre"),
     weekIds: Array.isArray(data.weekIds) ? data.weekIds.map(String) : [],
     startDate: String(data.startDate ?? ""),
     endDate: String(data.endDate ?? ""),
     order: Number(data.order ?? 0),
+    active: data.active !== false,
+  };
+}
+
+function nonWorkingDayFromData(id: string, data: DocumentData): AcademicNonWorkingDay {
+  return {
+    id,
+    date: String(data.date ?? id),
+    label: String(data.label ?? "Día no laboral"),
+    weekId: String(data.weekId ?? ""),
+    weekLabel: String(data.weekLabel ?? "Semana"),
+    termId: String(data.termId ?? ""),
+    termLabel: String(data.termLabel ?? "Bimestre"),
     active: data.active !== false,
   };
 }
@@ -341,14 +357,17 @@ export function watchAcademicCalendar(
   }
   let weeks: AcademicWeek[] = [];
   let terms: AcademicTerm[] = [];
+  let nonWorkingDays: AcademicNonWorkingDay[] = [];
   let weeksReady = false;
   let termsReady = false;
+  let nonWorkingDaysReady = false;
   const emit = () => {
-    if (!weeksReady || !termsReady) return;
+    if (!weeksReady || !termsReady || !nonWorkingDaysReady) return;
     callback({
       schoolYearId: config.schoolYearId,
       weeks,
       terms,
+      nonWorkingDays,
       configured: weeks.length > 0 && terms.length > 0,
     });
   };
@@ -382,7 +401,7 @@ export function watchAcademicCalendar(
       config.institutionId,
       "ciclosEscolares",
       config.schoolYearId,
-      "trimestres",
+      "bimestres",
     ),
     (snapshot) => {
       terms = snapshot.docs
@@ -394,9 +413,29 @@ export function watchAcademicCalendar(
     },
     (error) => onError?.(error),
   );
+  const stopNonWorkingDays = onSnapshot(
+    collection(
+      firebase.db,
+      "institutions",
+      config.institutionId,
+      "ciclosEscolares",
+      config.schoolYearId,
+      "diasNoLaborales",
+    ),
+    (snapshot) => {
+      nonWorkingDays = snapshot.docs
+        .map((entry) => nonWorkingDayFromData(entry.id, entry.data()))
+        .filter((day) => day.active)
+        .sort((first, second) => first.date.localeCompare(second.date));
+      nonWorkingDaysReady = true;
+      emit();
+    },
+    (error) => onError?.(error),
+  );
   return () => {
     stopWeeks();
     stopTerms();
+    stopNonWorkingDays();
   };
 }
 
@@ -434,7 +473,7 @@ export function resolveAcademicConfig(
   return {
     ...config,
     termId: "",
-    termLabel: "Sin trimestre activo",
+    termLabel: "Sin bimestre activo",
     weekId: "",
     weekLabel: calendar.configured ? "Sin semana activa" : "Calendario pendiente",
     calendarStatus: calendar.configured ? "gap" : "unconfigured",
@@ -560,7 +599,7 @@ export async function createTaskAssignment(
         config.institutionId,
         "ciclosEscolares",
         config.schoolYearId,
-        "trimestres",
+        "bimestres",
         config.termId,
         "semanas",
         config.weekId,

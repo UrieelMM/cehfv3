@@ -66,7 +66,11 @@ service cloud.firestore {
     }
 
     function calendarTermPath(institutionId, schoolYearId, termId) {
-      return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId);
+      return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId);
+    }
+
+    function calendarNonWorkingDayPath(institutionId, schoolYearId, gradeDate) {
+      return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/diasNoLaborales/$(gradeDate);
     }
 
     function validCalendarScope(data) {
@@ -615,6 +619,94 @@ service cloud.firestore {
           && after.studentId == before.studentId;
       }
 
+      function validDailyGrade(data) {
+        let weekPath = calendarWeekPath(
+          data.institutionId, data.schoolYearId, data.weekId
+        );
+        let nonWorkingDayPath = calendarNonWorkingDayPath(
+          data.institutionId, data.schoolYearId, data.gradeDate
+        );
+        let calculatedScore = (
+          data.scores.classWork * data.weights.classWork
+          + data.scores.homework * data.weights.homework
+          + data.scores.participation * data.weights.participation
+          + data.scores.attendance * data.weights.attendance
+          + data.scores.exam * data.weights.exam
+        ) / 100;
+        return data.keys().hasOnly([
+            "institutionId", "schoolYearId", "schoolYearLabel",
+            "termId", "termLabel", "weekId", "weekLabel", "gradeDate",
+            "subjectId", "subject", "teacherId", "teacherName",
+            "studentId", "studentName", "studentGrade", "studentGroup",
+            "scores", "weights", "weightedScore", "createdAt", "updatedAt"
+          ])
+          && data.gradeDate is string
+          && data.gradeDate >= get(weekPath).data.startDate
+          && data.gradeDate <= get(weekPath).data.endDate
+          && (
+            !exists(nonWorkingDayPath)
+            || get(nonWorkingDayPath).data.active != true
+          )
+          && data.subjectId is string
+          && data.subject is string
+          && data.studentName is string
+          && validGradingWeights(data.weights)
+          && validGradeScores(data.scores)
+          && data.weightedScore is number
+          && data.weightedScore >= 0
+          && data.weightedScore <= 100
+          && data.weightedScore >= calculatedScore - 0.051
+          && data.weightedScore <= calculatedScore + 0.051
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp
+          && validCalendarScope(data);
+      }
+
+      function sameDailyGradeScope(before, after) {
+        return sameWeeklyGradeScope(before, after)
+          && after.gradeDate == before.gradeDate;
+      }
+
+      function validStudentWeeklyReport(data) {
+        return data.keys().hasOnly([
+            "institutionId", "schoolYearId", "schoolYearLabel",
+            "termId", "termLabel", "weekId", "weekLabel",
+            "subjectId", "subject", "teacherId", "teacherName",
+            "studentId", "studentName", "studentGrade", "studentGroup",
+            "achievement", "supportArea", "nextStep", "weeklyScore",
+            "gradedDays", "workingDays", "status", "createdAt", "updatedAt", "publishedAt"
+          ])
+          && data.achievement is string
+          && data.achievement.size() > 0
+          && data.achievement.size() <= 600
+          && data.supportArea is string
+          && data.supportArea.size() > 0
+          && data.supportArea.size() <= 600
+          && data.nextStep is string
+          && data.nextStep.size() > 0
+          && data.nextStep.size() <= 600
+          && data.weeklyScore is number
+          && data.weeklyScore >= 0
+          && data.weeklyScore <= 100
+          && data.gradedDays is int
+          && data.gradedDays >= 0
+          && data.workingDays is int
+          && data.workingDays >= 0
+          && data.gradedDays <= data.workingDays
+          && data.status in ["draft", "published"]
+          && data.createdAt is timestamp
+          && data.updatedAt is timestamp
+          && (
+            (data.status == "published" && data.publishedAt is timestamp)
+            || (data.status == "draft" && !("publishedAt" in data))
+          )
+          && validCalendarScope(data);
+      }
+
+      function sameStudentWeeklyReportScope(before, after) {
+        return sameWeeklyGradeScope(before, after);
+      }
+
       match /gradingConfigs/{teacherId} {
         allow read: if isActive()
           && profile().institutionId == institutionId
@@ -655,6 +747,46 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /dailyGrades/{gradeId} {
+        allow read: if isActive()
+          && profile().institutionId == institutionId
+          && resource.data.institutionId == institutionId
+          && (
+            isDirector()
+            || (roleIs("teacher") && resource.data.teacherId == request.auth.uid)
+            || (roleIs("student") && resource.data.studentId == request.auth.uid)
+          );
+        allow create: if teacherCanGrade(request.resource.data)
+          && validDailyGrade(request.resource.data);
+        allow update: if teacherCanGrade(resource.data)
+          && teacherCanGrade(request.resource.data)
+          && validDailyGrade(request.resource.data)
+          && sameDailyGradeScope(resource.data, request.resource.data);
+        allow delete: if false;
+      }
+
+      match /studentWeeklyReports/{reportId} {
+        allow read: if isActive()
+          && profile().institutionId == institutionId
+          && resource.data.institutionId == institutionId
+          && (
+            isDirector()
+            || (roleIs("teacher") && resource.data.teacherId == request.auth.uid)
+            || (
+              roleIs("student")
+              && resource.data.studentId == request.auth.uid
+              && resource.data.status == "published"
+            )
+          );
+        allow create: if teacherCanGrade(request.resource.data)
+          && validStudentWeeklyReport(request.resource.data);
+        allow update: if teacherCanGrade(resource.data)
+          && teacherCanGrade(request.resource.data)
+          && validStudentWeeklyReport(request.resource.data)
+          && sameStudentWeeklyReportScope(resource.data, request.resource.data);
+        allow delete: if false;
+      }
+
       match /ciclosEscolares/{schoolYearId} {
         allow read: if isActive() && profile().institutionId == institutionId;
         allow write: if false;
@@ -664,7 +796,12 @@ service cloud.firestore {
           allow write: if false;
         }
 
-        match /trimestres/{termId} {
+        match /bimestres/{termId} {
+          allow read: if isActive() && profile().institutionId == institutionId;
+          allow write: if false;
+        }
+
+        match /diasNoLaborales/{dayId} {
           allow read: if isActive() && profile().institutionId == institutionId;
           allow write: if false;
         }
@@ -675,7 +812,7 @@ service cloud.firestore {
         }
       }
 
-      match /ciclosEscolares/{schoolYearId}/trimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId} {
+      match /ciclosEscolares/{schoolYearId}/bimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId} {
         function taskBelongsToInstitution(data) {
           return isActive()
             && profile().institutionId == institutionId
@@ -703,7 +840,7 @@ service cloud.firestore {
         }
 
         function parentTaskPath() {
-          return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId);
+          return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId);
         }
 
         function parentTask() {
@@ -715,7 +852,7 @@ service cloud.firestore {
         }
 
         function extensionPath(studentId) {
-          return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/trimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId);
+          return /databases/$(database)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId);
         }
 
         function hasActiveExtension(studentId) {

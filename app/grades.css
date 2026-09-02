@@ -1,7 +1,10 @@
+@import "./academic-grades.css";
+@import "./academic-reports.css";
+
 .qualifications-page {
-  padding: clamp(10px, 1.6vw, 22px);
+  padding: clamp(7px, 1vw, 12px);
   border: 1px solid var(--border);
-  border-radius: 30px;
+  border-radius: 22px;
   background:
     radial-gradient(circle at 92% 2%, color-mix(in srgb, var(--violet) 11%, transparent), transparent 27%),
     radial-gradient(circle at 3% 96%, color-mix(in srgb, var(--blue) 9%, transparent), transparent 27%),

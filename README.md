@@ -46,28 +46,47 @@ Si `.env` no tiene credenciales, la pantalla de acceso permite abrir una demostr
 
 ## Organización académica de tareas
 
-Dirección define desde **Configuración → Calendario académico** las semanas con su rango de fechas y asigna cada una a un trimestre. El servidor valida traslapes, semanas sin trimestre y permisos; además sincroniza automáticamente la semana vigente según `America/Mexico_City`.
+Dirección define desde **Configuración → Calendario académico** las semanas con su rango de fechas, asigna cada una a un bimestre y registra suspensiones o días no laborales. La fecha de cada excepción determina automáticamente su semana y bimestre. El servidor valida traslapes, semanas sin bimestre, fechas duplicadas y permisos; además sincroniza la semana vigente según `America/Mexico_City`.
 
 El catálogo reutilizable queda separado de los datos operativos:
 
 ```text
 institutions/cehf-primaria/ciclosEscolares/{ciclo}/
   semanas/{semanaId}
-  trimestres/{trimestreId}
+  bimestres/{bimestreId}
+  diasNoLaborales/{AAAA-MM-DD}
   calendarioHistorial/{eventoId}
 ```
 
-Las tareas conservan el ciclo, trimestre y semana resueltos por calendario y se guardan con esta jerarquía:
+Las tareas conservan el ciclo, bimestre y semana resueltos por calendario y se guardan con esta jerarquía:
 
 ```text
 institutions/cehf-primaria/
   ciclosEscolares/cicloescolar26-27/
-    trimestres/trimestre1/
+    bimestres/bimestre1/
       semanas/semana1/
         materias/{materia}/tareas/{taskId}
 ```
 
-Cada tarea conserva sus subcolecciones `entregas`, `historial` y `prorrogas`. Las reglas comprueban que una tarea nueva use la semana actual y un trimestre válido; también rechazan entregas fuera de fecha o cerradas, salvo que exista una prórroga individual vigente. Los futuros documentos de avance y reportes deben incluir `schoolYearId`, `termId`, `termLabel`, `weekId` y `weekLabel`, que se validan contra el mismo catálogo. El detalle siempre puede abrirse en `/tasks/{taskId}`.
+Cada tarea conserva sus subcolecciones `entregas`, `historial` y `prorrogas`. Las reglas comprueban que una tarea nueva use la semana actual y un bimestre válido; también rechazan entregas fuera de fecha o cerradas, salvo que exista una prórroga individual vigente. Los futuros documentos de avance y reportes deben incluir `schoolYearId`, `termId`, `termLabel`, `weekId` y `weekLabel`, que se validan contra el mismo catálogo. El detalle siempre puede abrirse en `/tasks/{taskId}`.
+
+## Calificaciones y reportes
+
+El maestro captura una calificación por alumno, materia y día en
+`institutions/{institutionId}/dailyGrades`. La fecha debe pertenecer a una de
+las semanas configuradas y no puede ser fin de semana ni un día no laboral.
+La aplicación calcula sin recaptura:
+
+- el promedio semanal a partir de sus días hábiles (por ejemplo, cuatro si hay
+  una suspensión y cinco en una semana ordinaria);
+- el promedio bimestral a partir de las semanas del bimestre;
+- la calificación final a partir de los bimestres del ciclo.
+
+Los reportes de `studentWeeklyReports` usan el mismo ciclo, bimestre y semana.
+Cada reporte pertenece a un alumno y una materia, muestra el promedio semanal
+como evidencia y guarda **Un logro para reconocer**, **Área de acompañamiento**
+y **Próximo paso**. Los borradores sólo son visibles para personal autorizado;
+el alumno únicamente puede consultar reportes publicados.
 
 ## WhatsApp
 

@@ -221,10 +221,22 @@ export type AcademicTerm = {
   active: boolean;
 };
 
+export type AcademicNonWorkingDay = {
+  id: string;
+  date: string;
+  label: string;
+  weekId: string;
+  weekLabel: string;
+  termId: string;
+  termLabel: string;
+  active: boolean;
+};
+
 export type AcademicCalendar = {
   schoolYearId: string;
   weeks: AcademicWeek[];
   terms: AcademicTerm[];
+  nonWorkingDays: AcademicNonWorkingDay[];
   configured: boolean;
 };
 
@@ -234,6 +246,7 @@ export type AcademicCalendarInput = {
   timezone: string;
   weeks: Array<Pick<AcademicWeek, "id" | "label" | "startDate" | "endDate">>;
   terms: Array<Pick<AcademicTerm, "id" | "label" | "weekIds">>;
+  nonWorkingDays: Array<Pick<AcademicNonWorkingDay, "date" | "label">>;
 };
 
 export type AcademicCalendarImage = {
@@ -259,6 +272,31 @@ export type GradingCriterion =
 export type GradingWeights = Record<GradingCriterion, number>;
 
 export type WeeklyGradeScores = Record<GradingCriterion, number>;
+
+export type DailyGradeRecord = {
+  id: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  gradeDate: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentGrade?: string;
+  studentGroup?: string;
+  scores: WeeklyGradeScores;
+  weights: GradingWeights;
+  weightedScore: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type TeacherGradingConfig = {
   teacherId: string;
@@ -289,8 +327,68 @@ export type WeeklyGradeRecord = {
   scores: WeeklyGradeScores;
   weights: GradingWeights;
   weightedScore: number;
+  dayCount?: number;
+  workingDayCount?: number;
+  missingDayCount?: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type GradePeriodLevel = "daily" | "weekly" | "bimonthly" | "cycle";
+
+export type GradePeriodSummary = {
+  id: string;
+  level: GradePeriodLevel;
+  periodId: string;
+  periodLabel: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId?: string;
+  termLabel?: string;
+  weekId?: string;
+  weekLabel?: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentGrade?: string;
+  studentGroup?: string;
+  scores: WeeklyGradeScores;
+  weightedScore: number;
+  evidenceCount: number;
+  expectedEvidenceCount?: number;
+};
+
+export type StudentWeeklyReport = {
+  id: string;
+  institutionId: string;
+  schoolYearId: string;
+  schoolYearLabel: string;
+  termId: string;
+  termLabel: string;
+  weekId: string;
+  weekLabel: string;
+  subjectId: string;
+  subject: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string;
+  studentName: string;
+  studentGrade?: string;
+  studentGroup?: string;
+  achievement: string;
+  supportArea: string;
+  nextStep: string;
+  weeklyScore: number;
+  gradedDays: number;
+  workingDays: number;
+  status: "draft" | "published";
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
 };
 
 export type TaskPublicationStatus =
@@ -880,6 +978,7 @@ export type GuardianContact = {
 
 export type WhatsAppConfiguration = {
   institutionId: string;
+  scheduleVersion: number;
   enabled: boolean;
   dailySummaryEnabled: boolean;
   sendTime: string;
@@ -906,6 +1005,7 @@ export type WhatsAppOutboxMessage = {
   guardianContactId: string;
   recipientName: string;
   toMasked: string;
+  studentNames: string[];
   messageKind: "daily_task_summary" | "daily_task_summary_test";
   businessDate: string;
   status: WhatsAppMessageStatus;
@@ -918,7 +1018,34 @@ export type WhatsAppOutboxMessage = {
   failedAt?: string;
   lastErrorCode?: string;
   lastErrorMessage?: string;
+  dailyIndicators?: {
+    attendance?: "present" | "absent";
+    participation?: "positive" | "neutral" | "needs_support";
+    homework?: "complete" | "pending";
+  };
+  dailyScores?: {
+    attendance?: number;
+    participation?: number;
+    homework?: number;
+  };
+  dailyGradeRecordCount?: number;
+  dailyGradeSubjects?: string[];
   test: boolean;
+};
+
+export type WhatsAppLogFilters = {
+  search: string;
+  status: "all" | WhatsAppMessageStatus;
+  messageType: "all" | "automatic" | "test";
+  dateFrom: string;
+  dateTo: string;
+};
+
+export type WhatsAppLogPage = {
+  messages: WhatsAppOutboxMessage[];
+  nextPageToken?: string;
+  pageSize: number;
+  scanned: number;
 };
 
 export type PortalSettings = {

@@ -16,14 +16,17 @@ import type {
   GuardianContact,
   GuardianContactStatus,
   WhatsAppConfiguration,
+  WhatsAppLogFilters,
+  WhatsAppLogPage,
   WhatsAppOutboxMessage,
 } from "./types";
 
 export const defaultWhatsAppConfiguration: WhatsAppConfiguration = {
   institutionId: "cehf-primaria",
+  scheduleVersion: 2,
   enabled: false,
   dailySummaryEnabled: true,
-  sendTime: "18:00",
+  sendTime: "23:00",
   sendOnNoTaskDays: true,
   timeZone: "America/Mexico_City",
   templateName: "cehf_reporte_diario_alumno_v1",
@@ -87,10 +90,14 @@ function configurationFromData(
     ...defaultWhatsAppConfiguration,
     ...data,
     institutionId,
+    scheduleVersion: 2,
     enabled: data?.enabled === true,
     dailySummaryEnabled: data?.dailySummaryEnabled !== false,
     sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
-    sendTime: String(data?.sendTime ?? "18:00"),
+    sendTime:
+      Number(data?.scheduleVersion) === 2
+        ? String(data?.sendTime ?? "23:00")
+        : "23:00",
     timeZone: String(data?.timeZone ?? "America/Mexico_City"),
     templateName:
       storedTemplateName === "cehf_resumen_tareas_diario_v1"
@@ -114,6 +121,7 @@ function messageFromData(
     guardianContactId: String(data.guardianContactId ?? ""),
     recipientName: String(data.recipientName ?? "Familia CEHF"),
     toMasked: String(data.toMasked ?? "••••"),
+    studentNames: stringList(data.studentNames),
     messageKind:
       data.messageKind === "daily_task_summary_test"
         ? "daily_task_summary_test"
@@ -131,6 +139,16 @@ function messageFromData(
     lastErrorMessage: data.lastErrorMessage
       ? String(data.lastErrorMessage)
       : undefined,
+    dailyIndicators:
+      data.dailyIndicators && typeof data.dailyIndicators === "object"
+        ? data.dailyIndicators
+        : undefined,
+    dailyScores:
+      data.dailyScores && typeof data.dailyScores === "object"
+        ? data.dailyScores
+        : undefined,
+    dailyGradeRecordCount: Number(data.dailyGradeRecordCount ?? 0),
+    dailyGradeSubjects: stringList(data.dailyGradeSubjects),
     test: data.test === true,
   };
 }
@@ -255,4 +273,22 @@ export async function queueDailyWhatsAppSummaries(businessDate?: string) {
     { queued: number; skipped: number; businessDate: string }
   >(requireWhatsAppFunctions(), "queueDailyWhatsAppSummaries");
   return (await callable({ ...(businessDate ? { businessDate } : {}) })).data;
+}
+
+export async function listWhatsAppMessageLog(
+  filters: WhatsAppLogFilters,
+  pageToken?: string,
+  pageSize = 15,
+) {
+  const callable = httpsCallable<
+    WhatsAppLogFilters & { pageToken?: string; pageSize: number },
+    WhatsAppLogPage
+  >(requireWhatsAppFunctions(), "listWhatsAppMessageLog");
+  return (
+    await callable({
+      ...filters,
+      pageSize,
+      ...(pageToken ? { pageToken } : {}),
+    })
+  ).data;
 }

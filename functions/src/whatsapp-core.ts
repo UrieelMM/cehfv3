@@ -17,6 +17,13 @@ export type DailyParticipationStatus =
   | "positive"
   | "neutral"
   | "needs_support";
+export type DailyHomeworkStatus = "complete" | "pending";
+
+export type DailyGradeIndicatorScores = {
+  attendance: number;
+  participation: number;
+  homework: number;
+};
 
 export type DailyReportTemplateInput = {
   guardianName: string;
@@ -24,7 +31,7 @@ export type DailyReportTemplateInput = {
   businessDate: string;
   attendance: DailyAttendanceStatus;
   participation: DailyParticipationStatus;
-  homework: Pick<DailyStudentSummary, "total" | "pending">;
+  homework: DailyHomeworkStatus;
 };
 
 function digits(value: string) {
@@ -160,9 +167,31 @@ export function participationEmoji(status: DailyParticipationStatus) {
 }
 
 export function homeworkEmoji(
-  summary: Pick<DailyStudentSummary, "total" | "pending">,
+  status: DailyHomeworkStatus,
 ) {
-  return summary.pending === 0 ? "✅" : "❌";
+  return status === "complete" ? "✅" : "❌";
+}
+
+export function dailyGradeIndicators(
+  scores: DailyGradeIndicatorScores,
+): {
+  attendance: DailyAttendanceStatus;
+  participation: DailyParticipationStatus;
+  homework: DailyHomeworkStatus;
+} {
+  return {
+    attendance: (scores.attendance >= 70
+      ? "present"
+      : "absent") satisfies DailyAttendanceStatus,
+    participation: (scores.participation >= 80
+      ? "positive"
+      : scores.participation >= 60
+        ? "neutral"
+        : "needs_support") satisfies DailyParticipationStatus,
+    homework: (scores.homework >= 70
+      ? "complete"
+      : "pending") satisfies DailyHomeworkStatus,
+  };
 }
 
 export function buildDailyReportTemplateParameters(
