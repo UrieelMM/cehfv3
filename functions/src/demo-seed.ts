@@ -1,4 +1,4 @@
-import { Timestamp, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 
 const SEED_TAG = "codex-demo-v1";
 const SCHOOL_YEAR_ID = "ciclo-2026-2027-demo";
@@ -321,5 +321,146 @@ export async function seedDemoData(director: Director) {
       wallPosts: 10, forumTopics: 10, forumPosts: 10, workshopResources: 10, workshopTasks: 10, notifications: 10,
       guardianContacts: 10, whatsappHistory: 10,
     },
+  };
+}
+
+export async function clearDemoData(director: Director) {
+  const db = getFirestore();
+  const manifestRef = db.doc(
+    `institutions/${director.institutionId}/demoSeeds/${SEED_TAG}`,
+  );
+  const manifest = await manifestRef.get();
+  if (!manifest.exists) {
+    return { ok: true as const, seedTag: SEED_TAG, deleted: 0, alreadyClean: true };
+  }
+
+  const paths: string[] = Array.isArray(manifest.data()?.documentPaths)
+    ? manifest.data()!.documentPaths.map((path: unknown) => String(path))
+    : [];
+  const portalPath = `institutions/${director.institutionId}/portal/shared`;
+  const academicConfigPath = `institutions/${director.institutionId}/configuracion/academica`;
+  const whatsappConfigPath = `institutions/${director.institutionId}/configuracion/whatsapp`;
+  const workshopPaths = new Set([
+    `institutions/${director.institutionId}/workshops/tics`,
+    `institutions/${director.institutionId}/workshops/reading`,
+  ]);
+  const sharedPaths = new Set([
+    portalPath,
+    academicConfigPath,
+    whatsappConfigPath,
+    ...workshopPaths,
+  ]);
+  const candidates = paths.filter((path) => !sharedPaths.has(path));
+  const writer = db.bulkWriter();
+  let deleted = 0;
+
+  for (let offset = 0; offset < candidates.length; offset += 100) {
+    const references = candidates.slice(offset, offset + 100).map((path) => db.doc(path));
+    const snapshots = await db.getAll(...references);
+    snapshots.forEach((snapshot) => {
+      if (snapshot.exists && snapshot.data()?.seedTag === SEED_TAG) {
+        writer.delete(snapshot.ref);
+        deleted += 1;
+      }
+    });
+  }
+
+  const portalSnapshot = await db.doc(portalPath).get();
+  if (portalSnapshot.data()?.seedTag === SEED_TAG) {
+    writer.update(portalSnapshot.ref, {
+      week: FieldValue.delete(),
+      weeklyVerse: FieldValue.delete(),
+      progress: [],
+      reports: [],
+      reviews: [],
+      tasks: [],
+      materials: [],
+      wallPosts: [],
+      muralEdition: FieldValue.delete(),
+      forumTopics: [],
+      forumModeration: [],
+      forumBans: [],
+      notifications: [],
+      seedTag: FieldValue.delete(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: director.name,
+    });
+  }
+
+  const academicConfigSnapshot = await db.doc(academicConfigPath).get();
+  if (academicConfigSnapshot.data()?.seedTag === SEED_TAG) {
+    writer.delete(academicConfigSnapshot.ref);
+    deleted += 1;
+  }
+
+  const whatsappConfigSnapshot = await db.doc(whatsappConfigPath).get();
+  if (whatsappConfigSnapshot.data()?.seedTag === SEED_TAG) {
+    writer.update(whatsappConfigSnapshot.ref, {
+      enabled: false,
+      dailySummaryEnabled: false,
+      seedTag: FieldValue.delete(),
+      updatedAt: Timestamp.now(),
+      updatedBy: director.uid,
+    });
+  }
+
+  for (const workshopPath of workshopPaths) {
+    const snapshot = await db.doc(workshopPath).get();
+    if (snapshot.data()?.seedTag !== SEED_TAG) continue;
+    const data = snapshot.data()!;
+    const withoutDemoIds = (value: unknown) =>
+      Array.isArray(value)
+        ? value.map(String).filter((id) => !id.startsWith("demo-"))
+        : [];
+    const teacherStudentIds = Object.fromEntries(
+      Object.entries((data.teacherStudentIds ?? {}) as Record<string, unknown>)
+        .filter(([teacherId]) => !teacherId.startsWith("demo-"))
+        .map(([teacherId, studentIds]) => [teacherId, withoutDemoIds(studentIds)]),
+    );
+    writer.update(snapshot.ref, {
+      studentIds: withoutDemoIds(data.studentIds),
+      teacherIds: withoutDemoIds(data.teacherIds),
+      managerIds: withoutDemoIds(data.managerIds),
+      memberIds: withoutDemoIds(data.memberIds),
+      teacherStudentIds,
+      seedTag: FieldValue.delete(),
+      updatedAt: Timestamp.now(),
+      updatedBy: director.uid,
+    });
+  }
+
+  const directorNotifications = await db
+    .collection(`notifications/${director.uid}/items`)
+    .get();
+  const seededAt = manifest.data()?.createdAt instanceof Timestamp
+    ? manifest.data()!.createdAt.toMillis()
+    : 0;
+  directorNotifications.docs.forEach((snapshot) => {
+    const data = snapshot.data();
+    const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toMillis() : 0;
+    const generatedBySeed =
+      snapshot.id.startsWith("demo-notification-") ||
+      String(data.resourceId ?? "").startsWith("demo-") ||
+      (data.eventType === "workshop_manager_granted" &&
+        ["tics", "reading"].includes(String(data.workshopId ?? "")) &&
+        createdAt >= seededAt);
+    if (generatedBySeed) writer.delete(snapshot.ref);
+  });
+
+  writer.delete(manifestRef);
+  await writer.close();
+
+  for (const [uid] of teacherData) {
+    await db.recursiveDelete(db.doc(`notifications/${uid}`));
+  }
+  for (let index = 0; index < studentNames.length; index += 1) {
+    await db.recursiveDelete(db.doc(`notifications/demo-student-${pathId(index)}`));
+  }
+
+  return {
+    ok: true as const,
+    seedTag: SEED_TAG,
+    deleted,
+    alreadyClean: false,
   };
 }

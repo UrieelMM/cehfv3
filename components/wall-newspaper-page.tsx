@@ -192,6 +192,7 @@ function MuralEditionCover({
   onOpenStory?: (story: WallPost) => void;
 }) {
   const { cover } = edition;
+  const periodLabel = edition.periodLabel || "Edición actual";
   const imageUrl = imagePreview === undefined ? cover.imageUrl : imagePreview;
   const coverStyle = {
     "--mural-cover-bg": cover.backgroundColor,
@@ -205,7 +206,7 @@ function MuralEditionCover({
     <section
       className={`mural-cover mural-cover-${cover.layout} mural-cover-font-${cover.font} ${imageUrl ? "has-image" : "no-image"} ${preview ? "is-preview" : ""}`}
       style={coverStyle}
-      aria-label={`Portada de ${edition.periodLabel}`}
+      aria-label={`Portada de ${periodLabel}`}
     >
       <div className={`mural-cover-motif motif-${cover.motif}`} aria-hidden="true">
         {Array.from({ length: MURAL_GRAPHIC_PARTS }, (_, index) => <i key={index} />)}
@@ -219,7 +220,7 @@ function MuralEditionCover({
         <p>{cover.description}</p>
         {cover.showManager && (
           <div className="mural-cover-management">
-            <span><CalendarDays size={14} />{edition.periodLabel}</span>
+            <span><CalendarDays size={14} />{periodLabel}</span>
             <span><UserRoundCheck size={14} />{edition.group} · {edition.teacherName}</span>
           </div>
         )}
@@ -237,7 +238,7 @@ function MuralEditionCover({
           />
         )}
         <div className="mural-cover-monogram" aria-hidden="true">
-          <span>CEHF</span><strong>{edition.periodLabel.slice(0, 3).toLocaleUpperCase("es-MX")}</strong><small>PERIÓDICO<br />MURAL</small>
+          <span>CEHF</span><strong>{periodLabel.slice(0, 3).toLocaleUpperCase("es-MX")}</strong><small>PERIÓDICO<br />MURAL</small>
         </div>
         {featured && !preview && (
           <button type="button" className="mural-cover-featured" onClick={() => onOpenStory?.(featured)}>

@@ -34,3 +34,15 @@ export async function loadInstitutionDemoData() {
   const result = await callable({ confirmation: "CARGAR DEMO" });
   return result.data;
 }
+
+export async function clearInstitutionDemoData() {
+  if (!firebase.functions) {
+    throw new Error("Firebase Functions no está configurado para esta limpieza.");
+  }
+  const callable = httpsCallable<
+    { confirmation: string },
+    { ok: true; seedTag: string; deleted: number; alreadyClean: boolean }
+  >(firebase.functions, "clearInstitutionDemoData");
+  const result = await callable({ confirmation: "ELIMINAR DEMO" });
+  return result.data;
+}

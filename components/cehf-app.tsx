@@ -60,7 +60,11 @@ import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { WorkshopsPage } from "@/components/workshops-page";
 import { GradingWeightsCard } from "@/components/weekly-grades";
-import { loadInstitutionDemoData, type DemoSeedCounts } from "@/lib/demo-seed-firebase";
+import {
+  clearInstitutionDemoData,
+  loadInstitutionDemoData,
+  type DemoSeedCounts,
+} from "@/lib/demo-seed-firebase";
 import { AcademicGradesPanel } from "@/components/academic-grades";
 import { AcademicReportsPage } from "@/components/academic-reports";
 import {
@@ -2638,6 +2642,7 @@ function SettingsPage({
   const [activeSettingsTab, setActiveSettingsTab] =
     useState<SettingsTabId>("appearance");
   const [demoSeedLoading, setDemoSeedLoading] = useState(false);
+  const [demoSeedClearing, setDemoSeedClearing] = useState(false);
   const [demoSeedCounts, setDemoSeedCounts] = useState<DemoSeedCounts | null>(null);
 
   const handleDemoSeed = async () => {
@@ -2651,6 +2656,24 @@ function SettingsPage({
       toast.error(friendlyFirebaseError(error));
     } finally {
       setDemoSeedLoading(false);
+    }
+  };
+
+  const handleDemoSeedClear = async () => {
+    if (demoSeedClearing) return;
+    setDemoSeedClearing(true);
+    try {
+      const result = await clearInstitutionDemoData();
+      setDemoSeedCounts(null);
+      toast.success(
+        result.alreadyClean
+          ? "La semilla ya estaba eliminada"
+          : `${result.deleted} documentos demo eliminados`,
+      );
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setDemoSeedClearing(false);
     }
   };
   const settingsTabs: Array<{
@@ -2905,12 +2928,21 @@ function SettingsPage({
                   </div>
                   <button
                     className="primary-button"
-                    disabled={!firebaseReady || demoSeedLoading}
+                    disabled={!firebaseReady || demoSeedLoading || demoSeedClearing}
                     onClick={() => void handleDemoSeed()}
                     type="button"
                   >
                     {demoSeedLoading ? <LoaderCircle className="spin" size={16} /> : <Database size={16} />}
                     {demoSeedLoading ? "Cargando…" : "Cargar datos demo"}
+                  </button>
+                  <button
+                    className="danger-button"
+                    disabled={!firebaseReady || demoSeedLoading || demoSeedClearing}
+                    onClick={() => void handleDemoSeedClear()}
+                    type="button"
+                  >
+                    {demoSeedClearing ? <LoaderCircle className="spin" size={16} /> : <X size={16} />}
+                    {demoSeedClearing ? "Eliminando…" : "Eliminar datos demo"}
                   </button>
                 </div>
                 {demoSeedCounts && (
