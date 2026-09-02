@@ -27,6 +27,7 @@ export const muralLimits = {
 
 export const muralCoverLayouts = ["split", "editorial", "immersive"] as const;
 export const muralCoverFonts = ["modern", "editorial", "classic"] as const;
+export const muralCoverGradients = ["campus", "aurora", "coral", "cobalt"] as const;
 export const muralCoverMotifs = [
   "orbits",
   "grid",
@@ -78,6 +79,9 @@ export const muralEditionSchema = z.object({
     backgroundColor: hexColor,
     accentColor: hexColor,
     textColor: hexColor,
+    gradientPreset: z.enum(muralCoverGradients),
+    useTitleGradient: z.boolean(),
+    useBackgroundGradient: z.boolean(),
     layout: z.enum(muralCoverLayouts),
     font: z.enum(muralCoverFonts),
     motif: z.enum(muralCoverMotifs),

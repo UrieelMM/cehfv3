@@ -411,3 +411,25 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   await access(new URL("public/login-campus.jpg", projectRoot));
   await access(new URL("public/sw.js", projectRoot));
 });
+
+test("supports optional editorial gradients for mural editions", async () => {
+  const [contract, muralFirebase, muralEditor, functionsSource, css] = await Promise.all([
+    readFile(new URL("lib/mural-contract.ts", projectRoot), "utf8"),
+    readFile(new URL("lib/mural-firebase.ts", projectRoot), "utf8"),
+    readFile(new URL("components/wall-newspaper-page.tsx", projectRoot), "utf8"),
+    readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
+    readFile(new URL("app/globals.css", projectRoot), "utf8"),
+  ]);
+
+  assert.match(contract, /muralCoverGradients/);
+  assert.match(contract, /useTitleGradient:\s*z\.boolean\(\)/);
+  assert.match(contract, /useBackgroundGradient:\s*z\.boolean\(\)/);
+  assert.match(muralFirebase, /gradientPreset:\s*"campus"/);
+  assert.match(muralFirebase, /useTitleGradient:\s*true/);
+  assert.match(muralFirebase, /useBackgroundGradient:\s*true/);
+  assert.match(muralEditor, /Degradados editoriales/);
+  assert.match(muralEditor, /El degradado de Una mirada\. Todo claro\./);
+  assert.match(functionsSource, /MURAL_COVER_GRADIENTS/);
+  assert.match(css, /\.mural-cover\.has-title-gradient h1/);
+  assert.match(css, /background:\s*var\(--mural-cover-surface/);
+});

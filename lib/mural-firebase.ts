@@ -46,6 +46,9 @@ export const defaultMuralCover: MuralEditionCover = {
   backgroundColor: "#172554",
   accentColor: "#fb7185",
   textColor: "#ffffff",
+  gradientPreset: "campus",
+  useTitleGradient: true,
+  useBackgroundGradient: true,
   layout: "split",
   font: "editorial",
   motif: "orbits",
@@ -179,6 +182,11 @@ async function muralEditionFromData(id: string, data: DocumentData): Promise<Mur
     backgroundColor: String(coverData.backgroundColor ?? defaultMuralCover.backgroundColor),
     accentColor: String(coverData.accentColor ?? defaultMuralCover.accentColor),
     textColor: String(coverData.textColor ?? defaultMuralCover.textColor),
+    gradientPreset: ["campus", "aurora", "coral", "cobalt"].includes(String(coverData.gradientPreset))
+      ? String(coverData.gradientPreset) as MuralEditionCover["gradientPreset"]
+      : defaultMuralCover.gradientPreset,
+    useTitleGradient: coverData.useTitleGradient !== false,
+    useBackgroundGradient: coverData.useBackgroundGradient !== false,
     layout: ["split", "editorial", "immersive"].includes(String(coverData.layout))
       ? String(coverData.layout) as MuralEditionCover["layout"]
       : defaultMuralCover.layout,

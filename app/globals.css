@@ -2908,7 +2908,7 @@ code {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--mural-cover-text) 12%, transparent);
   border-radius: 24px;
-  background: var(--mural-cover-bg);
+  background: var(--mural-cover-surface, var(--mural-cover-bg));
   box-shadow: 0 22px 58px color-mix(in srgb, var(--mural-cover-bg) 25%, transparent);
   color: var(--mural-cover-text);
   isolation: isolate;
@@ -2985,6 +2985,21 @@ code {
   line-height: 0.94;
   letter-spacing: -0.055em;
   text-wrap: balance;
+}
+
+.mural-cover.has-title-gradient h1 {
+  background: var(--mural-title-gradient);
+  background-size: 220% auto;
+  background-clip: text;
+  color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: mural-title-gradient-flow 9s ease-in-out infinite alternate;
+}
+
+@keyframes mural-title-gradient-flow {
+  from { background-position: 0% center; }
+  to { background-position: 100% center; }
 }
 
 .mural-cover-font-editorial h1 {
@@ -4595,6 +4610,102 @@ code {
 
 .mural-toggle-stack strong { font-size: calc(0.63rem + 0.125rem); }
 .mural-toggle-stack small { color: var(--muted); font-size: calc(0.56rem + 0.125rem); font-weight: 500; }
+
+.mural-gradient-control {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--violet) 16%, var(--border));
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--violet-soft) 45%, var(--surface)), var(--surface));
+}
+
+.mural-gradient-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mural-gradient-heading > span {
+  color: var(--foreground);
+  font-size: calc(0.62rem + 0.125rem);
+  font-weight: 750;
+}
+
+.mural-gradient-heading > small {
+  color: var(--muted);
+  font-size: calc(0.5rem + 0.125rem);
+  font-weight: 550;
+}
+
+.mural-gradient-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mural-gradient-grid button {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.mural-gradient-grid button:hover {
+  transform: translateY(-2px);
+}
+
+.mural-gradient-grid button.active {
+  border-color: var(--violet);
+  background: var(--violet-soft);
+}
+
+.mural-gradient-grid button > i {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 38px;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.mural-gradient-grid button > i > span {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  left: 7px;
+  height: 5px;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+}
+
+.mural-gradient-grid em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: calc(0.49rem + 0.125rem);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mural-gradient-grid button.active em {
+  color: var(--violet);
+  font-weight: 750;
+}
+
+.mural-gradient-toggles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mural-gradient-toggles > label {
+  min-width: 0;
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+}
 
 .mural-palette-grid {
   display: grid;
@@ -10551,6 +10662,10 @@ code {
     animation: none;
   }
 
+  .mural-cover.has-title-gradient h1 {
+    animation: none;
+  }
+
   .loading-progress span {
     inset: 0;
     width: 100%;
@@ -14028,6 +14143,20 @@ code {
     overflow: visible;
     padding: 12px;
     border-right: 0;
+  }
+
+  .mural-gradient-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mural-gradient-toggles {
+    grid-template-columns: 1fr;
+  }
+
+  .mural-gradient-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 
   .mural-studio-tabs {

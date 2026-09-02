@@ -2521,6 +2521,7 @@ const MURAL_CATEGORIES = [
 
 const MURAL_COVER_LAYOUTS = ["split", "editorial", "immersive"] as const;
 const MURAL_COVER_FONTS = ["modern", "editorial", "classic"] as const;
+const MURAL_COVER_GRADIENTS = ["campus", "aurora", "coral", "cobalt"] as const;
 const MURAL_COVER_MOTIFS = [
   "orbits",
   "grid",
@@ -2709,12 +2710,16 @@ function muralEditionInput(value: unknown, institutionId: string) {
     : {};
   const layout = String(coverInput.layout ?? "split");
   const font = String(coverInput.font ?? "editorial");
+  const gradientPreset = String(coverInput.gradientPreset ?? "campus");
   const motif = String(coverInput.motif ?? "orbits");
   if (!MURAL_COVER_LAYOUTS.includes(layout as typeof MURAL_COVER_LAYOUTS[number])) {
     throw new HttpsError("invalid-argument", "Selecciona una composición válida.");
   }
   if (!MURAL_COVER_FONTS.includes(font as typeof MURAL_COVER_FONTS[number])) {
     throw new HttpsError("invalid-argument", "Selecciona una tipografía válida.");
+  }
+  if (!MURAL_COVER_GRADIENTS.includes(gradientPreset as typeof MURAL_COVER_GRADIENTS[number])) {
+    throw new HttpsError("invalid-argument", "Selecciona un degradado válido.");
   }
   if (!MURAL_COVER_MOTIFS.includes(motif as typeof MURAL_COVER_MOTIFS[number])) {
     throw new HttpsError("invalid-argument", "Selecciona un elemento decorativo válido.");
@@ -2748,6 +2753,9 @@ function muralEditionInput(value: unknown, institutionId: string) {
       backgroundColor: muralColor(coverInput.backgroundColor, "el fondo"),
       accentColor: muralColor(coverInput.accentColor, "el acento"),
       textColor: muralColor(coverInput.textColor, "el texto"),
+      gradientPreset: gradientPreset as typeof MURAL_COVER_GRADIENTS[number],
+      useTitleGradient: coverInput.useTitleGradient !== false,
+      useBackgroundGradient: coverInput.useBackgroundGradient !== false,
       layout: layout as typeof MURAL_COVER_LAYOUTS[number],
       font: font as typeof MURAL_COVER_FONTS[number],
       motif: motif as typeof MURAL_COVER_MOTIFS[number],

@@ -684,6 +684,7 @@ export type WallPost = {
 
 export type MuralCoverLayout = "split" | "editorial" | "immersive";
 export type MuralCoverFont = "modern" | "editorial" | "classic";
+export type MuralCoverGradientPreset = "campus" | "aurora" | "coral" | "cobalt";
 export type MuralCoverMotif =
   | "orbits"
   | "grid"
@@ -715,6 +716,9 @@ export type MuralEditionCover = {
   backgroundColor: string;
   accentColor: string;
   textColor: string;
+  gradientPreset: MuralCoverGradientPreset;
+  useTitleGradient: boolean;
+  useBackgroundGradient: boolean;
   layout: MuralCoverLayout;
   font: MuralCoverFont;
   motif: MuralCoverMotif;

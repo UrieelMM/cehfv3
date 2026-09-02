@@ -45,6 +45,7 @@ import { toast } from "sonner";
 import {
   muralCategories,
   muralCoverFonts,
+  muralCoverGradients,
   muralCoverLayouts,
   muralCoverLimits,
   muralCoverMotifs,
@@ -67,6 +68,7 @@ import {
 } from "@/lib/mural-firebase";
 import type {
   ManagedAccount,
+  MuralCoverGradientPreset,
   MuralEdition,
   PortalState,
   UserProfile,
@@ -82,6 +84,38 @@ const coverPalettes = [
   { name: "Terracota", backgroundColor: "#7c2d3a", accentColor: "#f5c7a9", textColor: "#fffaf5" },
   { name: "Cobalto", backgroundColor: "#173f73", accentColor: "#8dd3f7", textColor: "#ffffff" },
 ] as const;
+
+const coverGradientStyles = {
+  campus: {
+    name: "Campus",
+    description: "El degradado de Una mirada. Todo claro.",
+    background: "radial-gradient(circle at 76% 46%, rgb(66 77 190 / 0.3), transparent 28%), linear-gradient(145deg, #0d1239, #111744 48%, #1b246f)",
+    title: "linear-gradient(100deg, #ffffff 5%, #aeb5ff 45%, #ef8998 75%, #ffffff 96%)",
+  },
+  aurora: {
+    name: "Aurora",
+    description: "Azules luminosos y un matiz menta.",
+    background: "radial-gradient(circle at 82% 28%, rgb(141 180 255 / 0.3), transparent 30%), linear-gradient(145deg, #0b1520, #172838 52%, #1c3159)",
+    title: "linear-gradient(100deg, #ffffff 4%, #8db4ff 46%, #aeb5ff 74%, #ffffff 96%)",
+  },
+  coral: {
+    name: "Coral",
+    description: "Cálido, editorial y expresivo.",
+    background: "radial-gradient(circle at 76% 72%, rgb(239 107 125 / 0.34), transparent 31%), linear-gradient(145deg, #351523, #6b2138 54%, #151c63)",
+    title: "linear-gradient(100deg, #ffffff 3%, #ef8998 42%, #d0a068 72%, #ffffff 97%)",
+  },
+  cobalt: {
+    name: "Cobalto",
+    description: "Profundo, sobrio y contemporáneo.",
+    background: "radial-gradient(circle at 78% 30%, rgb(59 111 158 / 0.38), transparent 30%), linear-gradient(145deg, #0b1520, #173f73 54%, #1f2985)",
+    title: "linear-gradient(100deg, #ffffff 4%, #a7c7ff 48%, #aeb5ff 76%, #ffffff 97%)",
+  },
+} satisfies Record<MuralCoverGradientPreset, {
+  name: string;
+  description: string;
+  background: string;
+  title: string;
+}>;
 
 const coverLayoutLabels = {
   split: "Dividida",
@@ -161,8 +195,9 @@ function muralMonthLabel(month: string) {
 }
 
 function editionToInput(edition: MuralEdition): MuralEditionInput {
+  const normalizedCover = { ...defaultMuralCover, ...edition.cover };
   const cover = Object.fromEntries(
-    Object.entries(edition.cover).filter(([key]) => key !== "imageUrl"),
+    Object.entries(normalizedCover).filter(([key]) => key !== "imageUrl"),
   ) as MuralEditionInput["cover"];
   return {
     id: edition.id,
@@ -192,19 +227,24 @@ function MuralEditionCover({
   onOpenStory?: (story: WallPost) => void;
 }) {
   const { cover } = edition;
+  const gradientPreset = coverGradientStyles[cover.gradientPreset ?? "campus"];
+  const useTitleGradient = cover.useTitleGradient !== false;
+  const useBackgroundGradient = cover.useBackgroundGradient !== false;
   const periodLabel = edition.periodLabel || "Edición actual";
   const imageUrl = imagePreview === undefined ? cover.imageUrl : imagePreview;
   const coverStyle = {
     "--mural-cover-bg": cover.backgroundColor,
     "--mural-cover-accent": cover.accentColor,
     "--mural-cover-text": cover.textColor,
+    "--mural-cover-surface": useBackgroundGradient ? gradientPreset.background : cover.backgroundColor,
+    "--mural-title-gradient": gradientPreset.title,
     "--mural-cover-overlay": `${cover.overlayOpacity / 100}`,
     "--mural-image-x": `${cover.imagePositionX}%`,
     "--mural-image-y": `${cover.imagePositionY}%`,
   } as CSSProperties;
   return (
     <section
-      className={`mural-cover mural-cover-${cover.layout} mural-cover-font-${cover.font} ${imageUrl ? "has-image" : "no-image"} ${preview ? "is-preview" : ""}`}
+      className={`mural-cover mural-cover-${cover.layout} mural-cover-font-${cover.font} ${useTitleGradient ? "has-title-gradient" : "has-solid-title"} ${useBackgroundGradient ? "has-background-gradient" : "has-solid-background"} ${imageUrl ? "has-image" : "no-image"} ${preview ? "is-preview" : ""}`}
       style={coverStyle}
       aria-label={`Portada de ${periodLabel}`}
     >
@@ -530,7 +570,32 @@ function MuralEditionEditor({
             {tab === "design" && (
               <div className="mural-studio-panel">
                 <div className="mural-control-heading"><Brush size={17} /><div><strong>Dirección de arte</strong><span>Composición, color, tipografía y ritmo visual.</span></div></div>
-                <label>Paletas profesionales<div className="mural-palette-grid">{coverPalettes.map((palette) => <button type="button" key={palette.name} className={draft.cover.backgroundColor === palette.backgroundColor ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, cover: { ...current.cover, backgroundColor: palette.backgroundColor, accentColor: palette.accentColor, textColor: palette.textColor } }))}><i style={{ background: palette.backgroundColor }}><span style={{ background: palette.accentColor }} /></i><em>{palette.name}</em></button>)}</div></label>
+                <div className="mural-gradient-control">
+                  <div className="mural-gradient-heading"><span>Degradados editoriales</span><small>Campus es el estilo predeterminado.</small></div>
+                  <div className="mural-gradient-grid">
+                    {muralCoverGradients.map((item) => {
+                      const gradient = coverGradientStyles[item];
+                      return (
+                        <button
+                          type="button"
+                          key={item}
+                          className={draft.cover.gradientPreset === item ? "active" : ""}
+                          onClick={() => coverField("gradientPreset", item)}
+                          aria-pressed={draft.cover.gradientPreset === item}
+                          title={gradient.description}
+                        >
+                          <i style={{ background: gradient.background }}><span style={{ background: gradient.title }} /></i>
+                          <em>{gradient.name}</em>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mural-toggle-stack mural-gradient-toggles">
+                    <label><input type="checkbox" checked={draft.cover.useTitleGradient} onChange={(event) => coverField("useTitleGradient", event.target.checked)} /><span><strong>Degradado en el título</strong><small>Aplica el color al título principal.</small></span></label>
+                    <label><input type="checkbox" checked={draft.cover.useBackgroundGradient} onChange={(event) => coverField("useBackgroundGradient", event.target.checked)} /><span><strong>Fondo degradado</strong><small>Puede desactivarse para usar un color sólido.</small></span></label>
+                  </div>
+                </div>
+                <label>Paletas de color sólido<div className="mural-palette-grid">{coverPalettes.map((palette) => <button type="button" key={palette.name} className={!draft.cover.useBackgroundGradient && draft.cover.backgroundColor === palette.backgroundColor ? "active" : ""} onClick={() => setDraft((current) => ({ ...current, cover: { ...current.cover, backgroundColor: palette.backgroundColor, accentColor: palette.accentColor, textColor: palette.textColor, useBackgroundGradient: false } }))}><i style={{ background: palette.backgroundColor }}><span style={{ background: palette.accentColor }} /></i><em>{palette.name}</em></button>)}</div></label>
                 <div className="mural-color-row"><label>Fondo<span><input type="color" value={draft.cover.backgroundColor} onChange={(event) => coverField("backgroundColor", event.target.value)} /><code>{draft.cover.backgroundColor}</code></span></label><label>Acento<span><input type="color" value={draft.cover.accentColor} onChange={(event) => coverField("accentColor", event.target.value)} /><code>{draft.cover.accentColor}</code></span></label><label>Texto<span><input type="color" value={draft.cover.textColor} onChange={(event) => coverField("textColor", event.target.value)} /><code>{draft.cover.textColor}</code></span></label></div>
                 <label>Composición<div className="mural-option-grid three">{muralCoverLayouts.map((item) => <button type="button" key={item} className={draft.cover.layout === item ? "active" : ""} onClick={() => coverField("layout", item)}><span className={`layout-icon ${item}`}><i /><i /></span>{coverLayoutLabels[item]}</button>)}</div></label>
                 <label>Personalidad tipográfica<div className="mural-option-grid three">{muralCoverFonts.map((item) => <button type="button" key={item} className={`${draft.cover.font === item ? "active" : ""} font-${item}`} onClick={() => coverField("font", item)}>Aa<small>{coverFontLabels[item]}</small></button>)}</div></label>
