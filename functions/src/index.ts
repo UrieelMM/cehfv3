@@ -29,8 +29,8 @@ import {
   WHATSAPP_TEMPLATE_LANGUAGE,
   WHATSAPP_TIMEZONE,
   buildDailyReportTemplateParameters,
+  dailyGradeIndicators,
   dailyOutboxId,
-  firstName,
   isOptOutMessage,
   isTransientWhatsAppError,
   isValidSendTime,
@@ -39,8 +39,8 @@ import {
   normalizeMexicanPhone,
   retryDelayMinutes,
   shouldRunDailySummary,
-  type DailyStudentSummary,
   type DailyAttendanceStatus,
+  type DailyHomeworkStatus,
   type DailyParticipationStatus,
 } from "./whatsapp-core.js";
 import { clearDemoData, seedDemoData } from "./demo-seed.js";
@@ -3605,6 +3605,7 @@ type GuardianContactStatus =
 
 type WhatsAppConfiguration = {
   institutionId: string;
+  scheduleVersion: number;
   enabled: boolean;
   dailySummaryEnabled: boolean;
   sendTime: string;
@@ -3615,29 +3616,32 @@ type WhatsAppConfiguration = {
   graphApiVersion: string;
 };
 
-type SummaryTask = {
-  kind: "academic" | "workshop";
-  reference: DocumentReference;
-  targetGroup?: string;
-  audienceStudentIds?: string[];
-};
-
 type SummaryStudent = {
   uid: string;
   name: string;
-  groupKey: string;
 };
 
 type DailyStudentReport = {
+  studentId: string;
+  studentName: string;
   attendance: DailyAttendanceStatus;
   participation: DailyParticipationStatus;
+  homework: DailyHomeworkStatus;
+  scores: {
+    attendance: number;
+    participation: number;
+    homework: number;
+  };
+  recordCount: number;
+  subjects: string[];
 };
 
 const DEFAULT_WHATSAPP_CONFIGURATION: WhatsAppConfiguration = {
   institutionId: "cehf-primaria",
+  scheduleVersion: 2,
   enabled: false,
   dailySummaryEnabled: true,
-  sendTime: "18:00",
+  sendTime: "23:00",
   sendOnNoTaskDays: true,
   timeZone: WHATSAPP_TIMEZONE,
   templateName: WHATSAPP_DAILY_TEMPLATE,
@@ -3700,7 +3704,11 @@ function whatsappConfigFromData(
     institutionId,
     enabled: data?.enabled === true,
     dailySummaryEnabled: data?.dailySummaryEnabled !== false,
-    sendTime: isValidSendTime(data?.sendTime) ? String(data?.sendTime) : "18:00",
+    scheduleVersion: 2,
+    sendTime:
+      Number(data?.scheduleVersion) === 2 && isValidSendTime(data?.sendTime)
+        ? String(data?.sendTime)
+        : "23:00",
     sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
     templateName:
       storedTemplateName === "cehf_resumen_tareas_diario_v1"
@@ -3725,6 +3733,39 @@ async function readWhatsAppConfiguration(institutionId: string) {
     .doc(`institutions/${institutionId}/configuracion/whatsapp`)
     .get();
   return whatsappConfigFromData(institutionId, snapshot.data());
+}
+
+async function requireWhatsAppStaff(
+  auth: CallableRequest<unknown>["auth"],
+) {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const snapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = snapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  const directorClaimsAreValid =
+    role !== "director" ||
+    (auth.token.role === "director" &&
+      auth.token.allPermissions === true &&
+      auth.token.institutionId === institutionId);
+  if (
+    !snapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher"].includes(role) ||
+    !institutionId ||
+    !directorClaimsAreValid
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo Dirección y docentes pueden consultar los envíos de WhatsApp.",
+    );
+  }
+  return {
+    uid: auth.uid,
+    institutionId,
+    name: String(profile?.name ?? "Personal CEHF"),
+    role: role as "director" | "teacher",
+  };
 }
 
 async function verifyGuardianStudents(
@@ -3955,66 +3996,6 @@ export const saveWhatsAppConfiguration = onCall(async (request) => {
   return { configuration };
 });
 
-function dueOnBusinessDate(
-  value: unknown,
-  businessDate: string,
-  timeZone: string,
-) {
-  const date = value instanceof Timestamp ? value.toDate() : new Date(String(value));
-  return !Number.isNaN(date.getTime()) && localDateKey(date, timeZone) === businessDate;
-}
-
-async function loadSummaryTasks(
-  institutionId: string,
-  businessDate: string,
-  timeZone: string,
-) {
-  const academicConfig = await db
-    .doc(`institutions/${institutionId}/configuracion/academica`)
-    .get();
-  const schoolYearId = String(academicConfig.data()?.schoolYearId ?? "");
-  const academicTasks = schoolYearId
-    ? await db
-        .collectionGroup("tareas")
-        .where("institutionId", "==", institutionId)
-        .where("schoolYearId", "==", schoolYearId)
-        .get()
-    : null;
-  const workshopTasks = await db
-    .collectionGroup("tasks")
-    .where("institutionId", "==", institutionId)
-    .get();
-  const tasks: SummaryTask[] = [];
-  academicTasks?.docs.forEach((snapshot) => {
-    const task = snapshot.data();
-    if (
-      ["published", "closed"].includes(String(task.status)) &&
-      dueOnBusinessDate(task.dueAt, businessDate, timeZone)
-    ) {
-      tasks.push({
-        kind: "academic",
-        reference: snapshot.ref,
-        targetGroup: String(task.targetGroup ?? ""),
-      });
-    }
-  });
-  workshopTasks.docs.forEach((snapshot) => {
-    const task = snapshot.data();
-    if (
-      snapshot.ref.path.includes("/workshops/") &&
-      ["published", "closed"].includes(String(task.status)) &&
-      dueOnBusinessDate(task.dueAt, businessDate, timeZone)
-    ) {
-      tasks.push({
-        kind: "workshop",
-        reference: snapshot.ref,
-        audienceStudentIds: notificationRecipients(task.audienceStudentIds),
-      });
-    }
-  });
-  return tasks;
-}
-
 async function loadSummaryStudents(
   institutionId: string,
   studentIds: string[],
@@ -4041,102 +4022,88 @@ async function loadSummaryStudents(
           {
             uid: snapshot.id,
             name: String(student.name ?? "Alumno"),
-            groupKey: `${String(student.grade ?? "")} ${String(student.group ?? "")}`.trim(),
           } satisfies SummaryStudent,
         ];
       }),
   );
 }
 
-async function buildStudentSummaries(
-  students: Map<string, SummaryStudent>,
-  tasks: SummaryTask[],
-) {
-  const summaries = new Map<string, DailyStudentSummary>();
-  const submissionChecks: Array<{
-    studentId: string;
-    reference: DocumentReference;
-  }> = [];
-  students.forEach((student) => {
-    const summary: DailyStudentSummary = {
-      studentId: student.uid,
-      studentName: student.name,
-      firstName: firstName(student.name),
-      submitted: 0,
-      total: 0,
-      pending: 0,
-    };
-    tasks.forEach((task) => {
-      const assigned =
-        task.kind === "academic"
-          ? task.targetGroup === student.groupKey
-          : task.audienceStudentIds?.includes(student.uid) === true;
-      if (!assigned) return;
-      summary.total += 1;
-      submissionChecks.push({
-        studentId: student.uid,
-        reference:
-          task.kind === "academic"
-            ? task.reference.collection("entregas").doc(student.uid)
-            : task.reference.collection("submissions").doc(student.uid),
-      });
-    });
-    summaries.set(student.uid, summary);
-  });
-  for (let offset = 0; offset < submissionChecks.length; offset += 400) {
-    const checks = submissionChecks.slice(offset, offset + 400);
-    const snapshots = await db.getAll(...checks.map((check) => check.reference));
-    snapshots.forEach((snapshot, index) => {
-      const status = String(snapshot.data()?.status ?? "");
-      if (
-        snapshot.exists &&
-        ["submitted", "feedback", "reviewed"].includes(status)
-      ) {
-        const summary = summaries.get(checks[index].studentId);
-        if (summary) summary.submitted += 1;
-      }
-    });
-  }
-  summaries.forEach((summary) => {
-    summary.pending = Math.max(0, summary.total - summary.submitted);
-  });
-  return summaries;
+function whatsappDailyScore(value: unknown) {
+  const score = Number(value);
+  return Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
 }
 
-function dailyAttendanceStatus(value: unknown): DailyAttendanceStatus | null {
-  return value === "present" || value === "absent" ? value : null;
-}
-
-function dailyParticipationStatus(
-  value: unknown,
-): DailyParticipationStatus | null {
-  return ["positive", "neutral", "needs_support"].includes(String(value))
-    ? (value as DailyParticipationStatus)
-    : null;
-}
-
-async function loadDailyStudentReports(
+async function loadDailyStudentGradeReports(
   institutionId: string,
   businessDate: string,
   studentIds: string[],
 ) {
   if (!studentIds.length) return new Map<string, DailyStudentReport>();
-  const snapshots = await db.getAll(
-    ...studentIds.map((studentId) =>
-      db.doc(
-        `institutions/${institutionId}/dailyReports/${businessDate}/students/${studentId}`,
-      ),
-    ),
-  );
+  const requestedStudents = new Set(studentIds);
+  const snapshot = await db
+    .collection(`institutions/${institutionId}/dailyGrades`)
+    .where("gradeDate", "==", businessDate)
+    .get();
+  const aggregates = new Map<
+    string,
+    {
+      studentName: string;
+      attendance: number;
+      participation: number;
+      homework: number;
+      recordCount: number;
+      subjects: Set<string>;
+    }
+  >();
+  snapshot.docs.forEach((gradeSnapshot) => {
+    const grade = gradeSnapshot.data();
+    const studentId = String(grade.studentId ?? "");
+    if (!requestedStudents.has(studentId)) return;
+    const scores = grade.scores && typeof grade.scores === "object"
+      ? (grade.scores as Record<string, unknown>)
+      : {};
+    const attendance = whatsappDailyScore(scores.attendance);
+    const participation = whatsappDailyScore(scores.participation);
+    const homework = whatsappDailyScore(scores.homework);
+    if (attendance === null || participation === null || homework === null) return;
+    const current = aggregates.get(studentId) ?? {
+      studentName: String(grade.studentName ?? "Alumno"),
+      attendance: 0,
+      participation: 0,
+      homework: 0,
+      recordCount: 0,
+      subjects: new Set<string>(),
+    };
+    current.attendance += attendance;
+    current.participation += participation;
+    current.homework += homework;
+    current.recordCount += 1;
+    const subject = String(grade.subject ?? "").trim();
+    if (subject) current.subjects.add(subject);
+    aggregates.set(studentId, current);
+  });
   return new Map(
-    snapshots.flatMap((snapshot) => {
-      const attendance = dailyAttendanceStatus(snapshot.data()?.attendance);
-      const participation = dailyParticipationStatus(
-        snapshot.data()?.participation,
-      );
-      return snapshot.exists && attendance && participation
-        ? [[snapshot.id, { attendance, participation } satisfies DailyStudentReport]]
-        : [];
+    [...aggregates.entries()].map(([studentId, aggregate]) => {
+      const scores = {
+        attendance: Math.round(aggregate.attendance / aggregate.recordCount),
+        participation: Math.round(
+          aggregate.participation / aggregate.recordCount,
+        ),
+        homework: Math.round(aggregate.homework / aggregate.recordCount),
+      };
+      return [
+        studentId,
+        {
+          studentId,
+          studentName: aggregate.studentName,
+          ...dailyGradeIndicators(scores),
+          scores,
+          recordCount: aggregate.recordCount,
+          subjects: [...aggregate.subjects].sort((first, second) =>
+            first.localeCompare(second, "es"),
+          ),
+        } satisfies DailyStudentReport,
+      ];
     }),
   );
 }
@@ -4172,13 +4139,7 @@ async function createDailySummaryOutbox(
     ),
   ];
   const students = await loadSummaryStudents(institutionId, studentIds);
-  const tasks = await loadSummaryTasks(
-    institutionId,
-    businessDate,
-    configuration.timeZone,
-  );
-  const summaries = await buildStudentSummaries(students, tasks);
-  const dailyReports = await loadDailyStudentReports(
+  const dailyReports = await loadDailyStudentGradeReports(
     institutionId,
     businessDate,
     [...students.keys()],
@@ -4188,41 +4149,39 @@ async function createDailySummaryOutbox(
   const outboxIds: string[] = [];
   for (const contactSnapshot of contacts) {
     const contact = contactSnapshot.data() as DocumentData;
-    const contactSummaries = notificationRecipients(contact.studentIds)
-      .map((studentId) => summaries.get(studentId))
-      .filter((summary): summary is DailyStudentSummary => Boolean(summary));
-    if (!contactSummaries.length) {
+    const contactStudents = notificationRecipients(contact.studentIds)
+      .map((studentId) => students.get(studentId))
+      .filter((student): student is SummaryStudent => Boolean(student));
+    if (!contactStudents.length) {
       skipped += 1;
       continue;
     }
-    for (const summary of contactSummaries) {
-      if (
-        !configuration.sendOnNoTaskDays &&
-        summary.total === 0 &&
-        options.test !== true
-      ) {
-        skipped += 1;
-        continue;
-      }
-      const recordedReport = dailyReports.get(summary.studentId);
+    for (const student of contactStudents) {
+      const recordedReport = dailyReports.get(student.uid);
       if (!recordedReport && options.test !== true) {
         skipped += 1;
         continue;
       }
       const report = recordedReport ?? {
+        studentId: student.uid,
+        studentName: student.name,
         attendance: "present" as const,
         participation: "positive" as const,
+        homework: "complete" as const,
+        scores: { attendance: 100, participation: 95, homework: 100 },
+        recordCount: 1,
+        subjects: ["Datos de prueba"],
       };
       const outboxId = options.test
-        ? `test_${Date.now()}_${contactSnapshot.id}_${summary.studentId}`
-        : dailyOutboxId(businessDate, contactSnapshot.id, summary.studentId);
+        ? `test_${Date.now()}_${contactSnapshot.id}_${student.uid}`
+        : dailyOutboxId(businessDate, contactSnapshot.id, student.uid);
       const parameters = buildDailyReportTemplateParameters({
         guardianName: String(contact.name ?? "Familia CEHF"),
-        studentName: summary.studentName,
+        studentName: student.name,
         businessDate,
         attendance: report.attendance,
         participation: report.participation,
-        homework: summary,
+        homework: report.homework,
       });
       const now = Timestamp.now();
       try {
@@ -4238,9 +4197,17 @@ async function createDailySummaryOutbox(
             ? "daily_task_summary_test"
             : "daily_task_summary",
           businessDate,
-          studentIds: [summary.studentId],
-          studentSummaries: [summary],
-          dailyIndicators: report,
+          studentIds: [student.uid],
+          studentNames: [student.name],
+          studentName: student.name,
+          dailyIndicators: {
+            attendance: report.attendance,
+            participation: report.participation,
+            homework: report.homework,
+          },
+          dailyScores: report.scores,
+          dailyGradeRecordCount: report.recordCount,
+          dailyGradeSubjects: report.subjects,
           templateName: configuration.templateName,
           templateLanguage: configuration.templateLanguage,
           templateParameters: parameters,
@@ -4266,6 +4233,179 @@ async function createDailySummaryOutbox(
   }
   return { queued, skipped, outboxIds, businessDate };
 }
+
+function whatsappLogSearchText(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function whatsappLogDate(value: unknown) {
+  if (value instanceof Timestamp) return value.toDate().toISOString();
+  const parsed = new Date(String(value ?? ""));
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+function serializeWhatsAppLogMessage(
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+) {
+  const message = snapshot.data();
+  const studentNames = notificationRecipients(
+    message.studentNames ??
+      (Array.isArray(message.studentSummaries)
+        ? message.studentSummaries.map(
+            (summary: Record<string, unknown>) =>
+              summary.studentName ?? summary.firstName,
+          )
+        : []),
+  );
+  return {
+    id: snapshot.id,
+    recipientName: String(message.recipientName ?? "Familia CEHF"),
+    toMasked: String(message.toMasked ?? "••••"),
+    studentNames,
+    messageKind:
+      message.messageKind === "daily_task_summary_test"
+        ? "daily_task_summary_test"
+        : "daily_task_summary",
+    businessDate: String(message.businessDate ?? ""),
+    status: String(message.status ?? "queued"),
+    attemptCount: Number(message.attemptCount ?? 0),
+    test: message.test === true,
+    dailyIndicators:
+      message.dailyIndicators && typeof message.dailyIndicators === "object"
+        ? message.dailyIndicators
+        : undefined,
+    dailyScores:
+      message.dailyScores && typeof message.dailyScores === "object"
+        ? message.dailyScores
+        : undefined,
+    dailyGradeRecordCount: Number(message.dailyGradeRecordCount ?? 0),
+    dailyGradeSubjects: notificationRecipients(message.dailyGradeSubjects),
+    createdAt: whatsappLogDate(message.createdAt),
+    sentAt: whatsappLogDate(message.sentAt),
+    deliveredAt: whatsappLogDate(message.deliveredAt),
+    readAt: whatsappLogDate(message.readAt),
+    failedAt: whatsappLogDate(message.failedAt),
+    lastErrorCode: message.lastErrorCode
+      ? String(message.lastErrorCode)
+      : undefined,
+    lastErrorMessage: message.lastErrorMessage
+      ? String(message.lastErrorMessage)
+      : undefined,
+  };
+}
+
+export const listWhatsAppMessageLog = onCall(async (request) => {
+  const staff = await requireWhatsAppStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const pageSizeValue = Number(input.pageSize ?? 15);
+  const pageSize = Number.isInteger(pageSizeValue)
+    ? Math.min(50, Math.max(5, pageSizeValue))
+    : 15;
+  const search = whatsappLogSearchText(input.search).slice(0, 80);
+  const status = String(input.status ?? "all");
+  const messageType = String(input.messageType ?? "all");
+  const allowedStatuses = new Set([
+    "all",
+    "queued",
+    "sending",
+    "sent",
+    "delivered",
+    "read",
+    "failed",
+    "cancelled",
+  ]);
+  if (!allowedStatuses.has(status)) {
+    throw new HttpsError("invalid-argument", "El filtro de estado no es válido.");
+  }
+  if (!["all", "automatic", "test"].includes(messageType)) {
+    throw new HttpsError("invalid-argument", "El tipo de mensaje no es válido.");
+  }
+  const dateFrom = input.dateFrom
+    ? calendarDate(input.dateFrom, "La fecha inicial")
+    : "";
+  const dateTo = input.dateTo
+    ? calendarDate(input.dateTo, "La fecha final")
+    : "";
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    throw new HttpsError(
+      "invalid-argument",
+      "La fecha inicial no puede ser posterior a la final.",
+    );
+  }
+  const pageToken = String(input.pageToken ?? "").trim();
+  if (pageToken && !/^[A-Za-z0-9_-]{1,300}$/.test(pageToken)) {
+    throw new HttpsError("invalid-argument", "La página solicitada no es válida.");
+  }
+  let cursor = pageToken
+    ? await db.doc(`messageOutbox/${pageToken}`).get()
+    : undefined;
+  if (
+    cursor &&
+    (!cursor.exists || cursor.data()?.institutionId !== staff.institutionId)
+  ) {
+    throw new HttpsError("invalid-argument", "La página solicitada ya no existe.");
+  }
+  const matches: Array<ReturnType<typeof serializeWhatsAppLogMessage>> = [];
+  let scanned = 0;
+  let reachedEnd = false;
+  let lastScannedId = "";
+  while (matches.length < pageSize + 1 && scanned < 1000 && !reachedEnd) {
+    let query = db
+      .collection("messageOutbox")
+      .where("institutionId", "==", staff.institutionId)
+      .orderBy("createdAt", "desc")
+      .limit(100);
+    if (cursor) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    if (snapshot.empty) {
+      reachedEnd = true;
+      break;
+    }
+    scanned += snapshot.size;
+    cursor = snapshot.docs.at(-1);
+    lastScannedId = cursor?.id ?? lastScannedId;
+    reachedEnd = snapshot.size < 100;
+    snapshot.docs.forEach((document) => {
+      if (matches.length >= pageSize + 1) return;
+      const message = serializeWhatsAppLogMessage(document);
+      if (status !== "all" && message.status !== status) return;
+      if (messageType === "test" && !message.test) return;
+      if (messageType === "automatic" && message.test) return;
+      if (dateFrom && message.businessDate < dateFrom) return;
+      if (dateTo && message.businessDate > dateTo) return;
+      if (search) {
+        const haystack = whatsappLogSearchText([
+          message.recipientName,
+          message.toMasked,
+          message.studentNames.join(" "),
+          message.businessDate,
+          message.status,
+          message.lastErrorMessage ?? "",
+        ].join(" "));
+        if (!haystack.includes(search)) return;
+      }
+      matches.push(message);
+    });
+  }
+  const hasExtraMatch = matches.length > pageSize;
+  const messages = matches.slice(0, pageSize);
+  const nextPageToken = hasExtraMatch
+    ? messages.at(-1)?.id
+    : !reachedEnd && lastScannedId
+      ? lastScannedId
+      : undefined;
+  return {
+    messages,
+    nextPageToken,
+    pageSize,
+    scanned,
+  };
+});
 
 export const queueDailyWhatsAppSummaries = onCall(async (request) => {
   const director = await requireAccountDirector(request.auth);

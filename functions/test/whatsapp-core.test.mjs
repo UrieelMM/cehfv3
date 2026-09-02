@@ -4,6 +4,7 @@ import {
   buildStudentSummaryLine,
   buildDailyReportTemplateParameters,
   buildTemplateParameters,
+  dailyGradeIndicators,
   dailyOutboxId,
   isOptOutMessage,
   isTransientWhatsAppError,
@@ -56,7 +57,7 @@ test("genera los seis parámetros del reporte diario con emojis", () => {
       businessDate: "2026-08-19",
       attendance: "present",
       participation: "neutral",
-      homework: { total: 2, pending: 1 },
+      homework: "pending",
     }),
     [
       "María",
@@ -66,6 +67,21 @@ test("genera los seis parámetros del reporte diario con emojis", () => {
       "😐",
       "❌",
     ],
+  );
+});
+
+test("convierte las calificaciones diarias en indicadores familiares", () => {
+  assert.deepEqual(
+    dailyGradeIndicators({ attendance: 100, participation: 92, homework: 80 }),
+    { attendance: "present", participation: "positive", homework: "complete" },
+  );
+  assert.deepEqual(
+    dailyGradeIndicators({ attendance: 60, participation: 70, homework: 65 }),
+    { attendance: "absent", participation: "neutral", homework: "pending" },
+  );
+  assert.deepEqual(
+    dailyGradeIndicators({ attendance: 0, participation: 40, homework: 0 }),
+    { attendance: "absent", participation: "needs_support", homework: "pending" },
   );
 });
 

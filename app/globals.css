@@ -6315,7 +6315,7 @@ code {
 .whatsapp-config-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(180px, 0.7fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
 }
 
 .whatsapp-check-card,
@@ -6609,9 +6609,111 @@ code {
   min-height: 190px;
 }
 
+.whatsapp-readonly-summary {
+  align-items: flex-start;
+  background: var(--blue-soft);
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--border));
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+}
+
+.whatsapp-readonly-summary > span {
+  align-items: center;
+  background: var(--surface);
+  border-radius: 10px;
+  color: var(--blue);
+  display: flex;
+  flex: 0 0 auto;
+  height: 38px;
+  justify-content: center;
+  width: 38px;
+}
+
+.whatsapp-readonly-summary p {
+  color: var(--muted);
+  font-size: calc(0.8rem + 0.125rem);
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
 .whatsapp-delivery {
   display: grid;
   gap: 13px;
+}
+
+.whatsapp-log-refresh {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.whatsapp-log-filters {
+  align-items: end;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(210px, 1.4fr) repeat(4, minmax(125px, 0.72fr)) auto;
+  padding: 12px;
+}
+
+.whatsapp-log-filters label {
+  color: var(--muted-strong);
+  display: grid;
+  font-size: calc(0.72rem + 0.125rem);
+  font-weight: 700;
+  gap: 5px;
+}
+
+.whatsapp-log-filters input,
+.whatsapp-log-filters select {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  min-height: 40px;
+  min-width: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.whatsapp-log-search > div {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--muted);
+  display: flex;
+  gap: 7px;
+  min-height: 40px;
+  padding-left: 10px;
+}
+
+.whatsapp-log-search input {
+  border: 0;
+  min-height: 36px;
+  padding-left: 0;
+}
+
+.whatsapp-log-filter-actions {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.whatsapp-log-filter-actions button {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.whatsapp-log-loading {
+  min-height: 160px;
 }
 
 .whatsapp-message-table-wrap {
@@ -6650,9 +6752,39 @@ code {
 
 .whatsapp-message-table td:first-child > strong,
 .whatsapp-message-table td:first-child > small,
+.whatsapp-message-table td:nth-child(2) > strong,
+.whatsapp-message-table td:nth-child(2) > small,
 .whatsapp-message-table td:nth-child(3) > small {
   display: block;
   margin-top: 4px;
+}
+
+.whatsapp-log-indicators {
+  color: var(--foreground) !important;
+  font-size: calc(0.84rem + 0.125rem) !important;
+  letter-spacing: 0.01em;
+}
+
+.whatsapp-log-pagination {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.whatsapp-log-pagination button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  display: inline-flex;
+  gap: 5px;
+  padding: 8px 10px;
+}
+
+.whatsapp-log-pagination span {
+  color: var(--muted);
+  font-size: calc(0.76rem + 0.125rem);
 }
 
 .whatsapp-message-table tr:last-child td {
@@ -6663,6 +6795,15 @@ code {
   .whatsapp-config-grid,
   .whatsapp-admin-columns {
     grid-template-columns: 1fr;
+  }
+
+  .whatsapp-log-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .whatsapp-log-search,
+  .whatsapp-log-filter-actions {
+    grid-column: 1 / -1;
   }
 }
 
@@ -6712,6 +6853,25 @@ code {
   .whatsapp-contact-actions,
   .whatsapp-optout-note {
     padding-left: 0;
+  }
+
+  .whatsapp-log-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .whatsapp-log-search,
+  .whatsapp-log-filter-actions {
+    grid-column: auto;
+  }
+
+  .whatsapp-log-filter-actions,
+  .whatsapp-log-filter-actions button,
+  .whatsapp-log-pagination button {
+    flex: 1;
+  }
+
+  .whatsapp-log-pagination {
+    justify-content: space-between;
   }
 }
 

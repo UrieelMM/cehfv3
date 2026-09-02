@@ -7,7 +7,6 @@ import "./workshops.css";
 import "./materials.css";
 import "./reviews.css";
 import "./grades.css";
-import "./design-system.css";
 
 const themeBootstrapScript = `
   (() => {
@@ -61,9 +60,9 @@ export async function generateMetadata(): Promise<Metadata> {
       url: origin,
       images: [
         {
-          url: `${origin}/og-campus-gallery.png`,
-          width: 1731,
-          height: 909,
+          url: `${origin}/og-campus.png`,
+          width: 1739,
+          height: 904,
           alt: "Campus CEHF — Una semana clara para aprender mejor",
         },
       ],
@@ -72,7 +71,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title: "Campus CEHF",
       description: "Una semana clara para aprender mejor.",
-      images: [`${origin}/og-campus-gallery.png`],
+      images: [`${origin}/og-campus.png`],
     },
   };
 }

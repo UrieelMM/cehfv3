@@ -978,6 +978,7 @@ export type GuardianContact = {
 
 export type WhatsAppConfiguration = {
   institutionId: string;
+  scheduleVersion: number;
   enabled: boolean;
   dailySummaryEnabled: boolean;
   sendTime: string;
@@ -1004,6 +1005,7 @@ export type WhatsAppOutboxMessage = {
   guardianContactId: string;
   recipientName: string;
   toMasked: string;
+  studentNames: string[];
   messageKind: "daily_task_summary" | "daily_task_summary_test";
   businessDate: string;
   status: WhatsAppMessageStatus;
@@ -1016,7 +1018,34 @@ export type WhatsAppOutboxMessage = {
   failedAt?: string;
   lastErrorCode?: string;
   lastErrorMessage?: string;
+  dailyIndicators?: {
+    attendance?: "present" | "absent";
+    participation?: "positive" | "neutral" | "needs_support";
+    homework?: "complete" | "pending";
+  };
+  dailyScores?: {
+    attendance?: number;
+    participation?: number;
+    homework?: number;
+  };
+  dailyGradeRecordCount?: number;
+  dailyGradeSubjects?: string[];
   test: boolean;
+};
+
+export type WhatsAppLogFilters = {
+  search: string;
+  status: "all" | WhatsAppMessageStatus;
+  messageType: "all" | "automatic" | "test";
+  dateFrom: string;
+  dateTo: string;
+};
+
+export type WhatsAppLogPage = {
+  messages: WhatsAppOutboxMessage[];
+  nextPageToken?: string;
+  pageSize: number;
+  scanned: number;
 };
 
 export type PortalSettings = {

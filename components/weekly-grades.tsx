@@ -809,7 +809,6 @@ function DirectorGradeOverview({
         <span className="director-overview-icon"><Building2 size={24} /></span>
         <div>
           <span className="eyebrow">Lectura institucional</span>
-          <h3>Maestros, alumnos y grupos en un solo vistazo</h3>
           <p>Consulta la cobertura de captura y detecta rápidamente dónde dar seguimiento esta semana.</p>
         </div>
         <div className="director-overview-metrics">

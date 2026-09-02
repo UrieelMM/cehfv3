@@ -2704,14 +2704,18 @@ function SettingsPage({
           },
         ]
       : []),
-    ...(role === "director"
+    ...(["director", "teacher"].includes(role)
       ? [
           {
             id: "whatsapp" as const,
             label: "WhatsApp",
-            description: "Mensajes a familias",
+            description: role === "director" ? "Mensajes a familias" : "Historial de envíos",
             icon: <MessageCircle size={18} />,
           },
+        ]
+      : []),
+    ...(role === "director"
+      ? [
           {
             id: "academic" as const,
             label: "Académico",
@@ -2875,21 +2879,25 @@ function SettingsPage({
           </div>
         )}
 
+        {["director", "teacher"].includes(role) && (
+          <div
+            aria-labelledby="settings-tab-whatsapp"
+            className="settings-tab-panel"
+            hidden={activeSettingsTab !== "whatsapp"}
+            id="settings-panel-whatsapp"
+            role="tabpanel"
+          >
+            <WhatsAppAdminPanel
+              institutionId={institutionId}
+              accounts={managedAccounts}
+              firebaseReady={firebaseReady}
+              role={role}
+            />
+          </div>
+        )}
+
         {role === "director" && (
           <>
-            <div
-              aria-labelledby="settings-tab-whatsapp"
-              className="settings-tab-panel"
-              hidden={activeSettingsTab !== "whatsapp"}
-              id="settings-panel-whatsapp"
-              role="tabpanel"
-            >
-              <WhatsAppAdminPanel
-                institutionId={institutionId}
-                accounts={managedAccounts}
-                firebaseReady={firebaseReady}
-              />
-            </div>
             <div
               aria-labelledby="settings-tab-academic"
               className="settings-tab-panel"

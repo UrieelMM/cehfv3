@@ -3,13 +3,17 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
+  Filter,
   MessageCircle,
   Pause,
   Pencil,
   Play,
   Plus,
   RefreshCw,
+  Search,
   Send,
   ShieldCheck,
   UserRoundCheck,
@@ -20,18 +24,20 @@ import { friendlyFirebaseError } from "@/lib/firebase";
 import type {
   GuardianContact,
   ManagedAccount,
+  Role,
   WhatsAppConfiguration,
+  WhatsAppLogFilters,
   WhatsAppOutboxMessage,
 } from "@/lib/types";
 import {
   defaultWhatsAppConfiguration,
+  listWhatsAppMessageLog,
   queueDailyWhatsAppSummaries,
   saveGuardianContact,
   saveWhatsAppConfiguration,
   sendWhatsAppTest,
   setGuardianContactStatus,
   watchGuardianContacts,
-  watchRecentWhatsAppMessages,
   watchWhatsAppConfiguration,
 } from "@/lib/whatsapp-firebase";
 
@@ -39,6 +45,15 @@ type Props = {
   institutionId: string;
   accounts: ManagedAccount[];
   firebaseReady: boolean;
+  role: Role;
+};
+
+const EMPTY_LOG_FILTERS: WhatsAppLogFilters = {
+  search: "",
+  status: "all",
+  messageType: "all",
+  dateFrom: "",
+  dateTo: "",
 };
 
 const contactStatusLabels: Record<GuardianContact["status"], string> = {
@@ -85,7 +100,9 @@ export function WhatsAppAdminPanel({
   institutionId,
   accounts,
   firebaseReady,
+  role,
 }: Props) {
+  const isDirector = role === "director";
   const [configuration, setConfiguration] = useState<WhatsAppConfiguration>({
     ...defaultWhatsAppConfiguration,
     institutionId,
@@ -93,6 +110,15 @@ export function WhatsAppAdminPanel({
   const [contacts, setContacts] = useState<GuardianContact[]>([]);
   const [messages, setMessages] = useState<WhatsAppOutboxMessage[]>([]);
   const [loading, setLoading] = useState(firebaseReady);
+  const [logLoading, setLogLoading] = useState(firebaseReady);
+  const [logFilters, setLogFilters] = useState<WhatsAppLogFilters>({
+    ...EMPTY_LOG_FILTERS,
+  });
+  const [appliedLogFilters, setAppliedLogFilters] =
+    useState<WhatsAppLogFilters>({ ...EMPTY_LOG_FILTERS });
+  const [pageTokens, setPageTokens] = useState<string[]>([""]);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [nextPageToken, setNextPageToken] = useState<string>();
   const [busy, setBusy] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | undefined>();
   const [name, setName] = useState("");
@@ -109,12 +135,29 @@ export function WhatsAppAdminPanel({
     [accounts],
   );
 
+  async function loadLog(
+    filters: WhatsAppLogFilters,
+    pageToken?: string,
+  ) {
+    setLogLoading(true);
+    try {
+      const page = await listWhatsAppMessageLog(filters, pageToken, 15);
+      setMessages(page.messages);
+      setNextPageToken(page.nextPageToken);
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setLogLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!firebaseReady) return;
     let readySources = 0;
+    const expectedSources = isDirector ? 2 : 1;
     const markReady = () => {
       readySources += 1;
-      if (readySources >= 3) setLoading(false);
+      if (readySources >= expectedSources) setLoading(false);
     };
     const report = (error: Error) => {
       console.error("[Campus CEHF] WhatsApp", error);
@@ -129,28 +172,54 @@ export function WhatsAppAdminPanel({
       },
       report,
     );
-    const stopContacts = watchGuardianContacts(
-      institutionId,
-      (next) => {
-        setContacts(next);
-        markReady();
-      },
-      report,
-    );
-    const stopMessages = watchRecentWhatsAppMessages(
-      institutionId,
-      (next) => {
-        setMessages(next);
-        markReady();
-      },
-      report,
-    );
+    const stopContacts = isDirector
+      ? watchGuardianContacts(
+          institutionId,
+          (next) => {
+            setContacts(next);
+            markReady();
+          },
+          report,
+        )
+      : () => undefined;
+    void loadLog(EMPTY_LOG_FILTERS);
     return () => {
       stopConfiguration();
       stopContacts();
-      stopMessages();
     };
-  }, [firebaseReady, institutionId]);
+  }, [firebaseReady, institutionId, isDirector]);
+
+  function applyLogFilters() {
+    const next = { ...logFilters };
+    setAppliedLogFilters(next);
+    setPageTokens([""]);
+    setPageIndex(0);
+    void loadLog(next);
+  }
+
+  function resetLogFilters() {
+    const next = { ...EMPTY_LOG_FILTERS };
+    setLogFilters(next);
+    setAppliedLogFilters(next);
+    setPageTokens([""]);
+    setPageIndex(0);
+    void loadLog(next);
+  }
+
+  function openNextLogPage() {
+    if (!nextPageToken || logLoading) return;
+    setPageTokens((current) => [...current.slice(0, pageIndex + 1), nextPageToken]);
+    setPageIndex((current) => current + 1);
+    void loadLog(appliedLogFilters, nextPageToken);
+  }
+
+  function openPreviousLogPage() {
+    if (pageIndex === 0 || logLoading) return;
+    const previousIndex = pageIndex - 1;
+    const previousToken = pageTokens[previousIndex] || undefined;
+    setPageIndex(previousIndex);
+    void loadLog(appliedLogFilters, previousToken);
+  }
 
   function resetContactForm() {
     setEditingId(undefined);
@@ -199,7 +268,7 @@ export function WhatsAppAdminPanel({
           </span>
           <div>
             <h2>WhatsApp para familias</h2>
-            <p>Disponible al iniciar sesión como Dirección con Firebase.</p>
+            <p>Disponible para Dirección y docentes al iniciar sesión con Firebase.</p>
           </div>
         </div>
         <div className="setup-note">
@@ -218,7 +287,11 @@ export function WhatsAppAdminPanel({
         </span>
         <div>
           <h2>WhatsApp para familias</h2>
-          <p>Resumen diario, consentimiento, pruebas y entregabilidad.</p>
+          <p>
+            {isDirector
+              ? "Horario, contactos, pruebas e historial de entregabilidad."
+              : "Consulta el historial de reportes enviados a las familias."}
+          </p>
         </div>
         <span
           className={`whatsapp-provider-state ${configuration.enabled ? "active" : "paused"}`}
@@ -234,7 +307,9 @@ export function WhatsAppAdminPanel({
         </div>
       ) : (
         <>
-          <div className="whatsapp-config-grid">
+          {isDirector ? (
+            <>
+              <div className="whatsapp-config-grid">
             <label className="whatsapp-check-card">
               <input
                 type="checkbox"
@@ -251,22 +326,6 @@ export function WhatsAppAdminPanel({
                 <small>El portal sigue funcionando si está pausado.</small>
               </span>
             </label>
-            <label className="whatsapp-check-card">
-              <input
-                type="checkbox"
-                checked={configuration.sendOnNoTaskDays}
-                onChange={(event) =>
-                  setConfiguration((current) => ({
-                    ...current,
-                    sendOnNoTaskDays: event.target.checked,
-                  }))
-                }
-              />
-              <span>
-                <strong>Avisar aunque no haya tareas</strong>
-                <small>Confirma a la familia que no hubo entregas programadas.</small>
-              </span>
-            </label>
             <label className="whatsapp-time-field">
               <span>Hora del resumen</span>
               <input
@@ -280,10 +339,10 @@ export function WhatsAppAdminPanel({
                   }))
                 }
               />
-              <small>Hora de Ciudad de México, de lunes a viernes.</small>
+              <small>Hora de Ciudad de México, de lunes a viernes. Inicialmente 23:00.</small>
             </label>
-          </div>
-          <div className="whatsapp-actions-row">
+              </div>
+              <div className="whatsapp-actions-row">
             <button
               className="primary-button"
               type="button"
@@ -331,16 +390,16 @@ export function WhatsAppAdminPanel({
             <span className="whatsapp-last-send">
               <Clock3 size={15} /> Último envío correcto: {displayDate(configuration.lastSuccessfulSendAt)}
             </span>
-          </div>
+              </div>
 
-          <div className="whatsapp-template-preview">
+              <div className="whatsapp-template-preview">
             <strong>Plantilla requerida en Meta: {configuration.templateName}</strong>
             <code>
               {"Hola {{1}}, te enviamos el reporte de {{2}} del día {{3}}.\n\nAsistencia: {{4}}\nParticipación: {{5}}\nTarea: {{6}}\n\nCentro Educativo Héroes de la Fe\nEste es un mensaje informativo. Favor de no responder."}
             </code>
-          </div>
+              </div>
 
-          <div className="whatsapp-admin-columns">
+              <div className="whatsapp-admin-columns">
             <form
               id="whatsapp-contact-form"
               className="whatsapp-contact-form"
@@ -549,21 +608,155 @@ export function WhatsAppAdminPanel({
                 </div>
               )}
             </div>
-          </div>
+              </div>
+            </>
+          ) : (
+            <div className="whatsapp-readonly-summary">
+              <span><Clock3 size={18} /></span>
+              <div>
+                <strong>Envío programado: {configuration.sendTime}</strong>
+                <p>
+                  Hora de Ciudad de México, de lunes a viernes. Sólo Dirección
+                  puede cambiar el horario, administrar contactos o hacer envíos
+                  manuales.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="whatsapp-delivery">
             <div className="whatsapp-subheading">
               <div>
-                <h3>Entregabilidad reciente</h3>
-                <p>Los últimos 30 mensajes; los teléfonos permanecen enmascarados.</p>
+                <h3>Historial de WhatsApp</h3>
+                <p>Consulta envíos, entregas, lecturas y errores; los teléfonos permanecen enmascarados.</p>
               </div>
+              <button
+                className="secondary-button whatsapp-log-refresh"
+                disabled={logLoading}
+                onClick={() =>
+                  void loadLog(
+                    appliedLogFilters,
+                    pageTokens[pageIndex] || undefined,
+                  )
+                }
+                type="button"
+              >
+                <RefreshCw size={15} className={logLoading ? "spin" : undefined} />
+                Actualizar
+              </button>
             </div>
-            {messages.length ? (
+            <form
+              className="whatsapp-log-filters"
+              onSubmit={(event) => {
+                event.preventDefault();
+                applyLogFilters();
+              }}
+            >
+              <label className="whatsapp-log-search">
+                <span>Buscar</span>
+                <div>
+                  <Search size={16} />
+                  <input
+                    maxLength={80}
+                    onChange={(event) =>
+                      setLogFilters((current) => ({
+                        ...current,
+                        search: event.target.value,
+                      }))
+                    }
+                    placeholder="Tutor, alumno, fecha o error"
+                    value={logFilters.search}
+                  />
+                </div>
+              </label>
+              <label>
+                <span>Estado</span>
+                <select
+                  onChange={(event) =>
+                    setLogFilters((current) => ({
+                      ...current,
+                      status: event.target.value as WhatsAppLogFilters["status"],
+                    }))
+                  }
+                  value={logFilters.status}
+                >
+                  <option value="all">Todos</option>
+                  <option value="queued">En cola</option>
+                  <option value="sending">Enviando</option>
+                  <option value="sent">Enviado</option>
+                  <option value="delivered">Entregado</option>
+                  <option value="read">Leído</option>
+                  <option value="failed">Falló</option>
+                  <option value="cancelled">Cancelado</option>
+                </select>
+              </label>
+              <label>
+                <span>Tipo</span>
+                <select
+                  onChange={(event) =>
+                    setLogFilters((current) => ({
+                      ...current,
+                      messageType: event.target.value as WhatsAppLogFilters["messageType"],
+                    }))
+                  }
+                  value={logFilters.messageType}
+                >
+                  <option value="all">Todos</option>
+                  <option value="automatic">Automáticos</option>
+                  <option value="test">Pruebas</option>
+                </select>
+              </label>
+              <label>
+                <span>Desde</span>
+                <input
+                  onChange={(event) =>
+                    setLogFilters((current) => ({
+                      ...current,
+                      dateFrom: event.target.value,
+                    }))
+                  }
+                  type="date"
+                  value={logFilters.dateFrom}
+                />
+              </label>
+              <label>
+                <span>Hasta</span>
+                <input
+                  onChange={(event) =>
+                    setLogFilters((current) => ({
+                      ...current,
+                      dateTo: event.target.value,
+                    }))
+                  }
+                  type="date"
+                  value={logFilters.dateTo}
+                />
+              </label>
+              <div className="whatsapp-log-filter-actions">
+                <button className="primary-button" disabled={logLoading} type="submit">
+                  <Filter size={15} /> Aplicar
+                </button>
+                <button
+                  className="text-button"
+                  disabled={logLoading}
+                  onClick={resetLogFilters}
+                  type="button"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </form>
+            {logLoading ? (
+              <div className="whatsapp-loading whatsapp-log-loading">
+                <RefreshCw size={18} className="spin" /> Cargando historial…
+              </div>
+            ) : messages.length ? (
               <div className="whatsapp-message-table-wrap">
                 <table className="whatsapp-message-table">
                   <thead>
                     <tr>
                       <th>Contacto</th>
+                      <th>Alumno y reporte</th>
                       <th>Fecha escolar</th>
                       <th>Estado</th>
                       <th>Intentos</th>
@@ -571,31 +764,68 @@ export function WhatsAppAdminPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {messages.map((message) => (
-                      <tr key={message.id}>
-                        <td>
-                          <strong>{message.recipientName}</strong>
-                          <small>{message.toMasked}{message.test ? " · prueba" : ""}</small>
-                        </td>
-                        <td>{message.businessDate}</td>
-                        <td>
-                          <span className={`whatsapp-status ${message.status}`}>
-                            {messageStatusLabels[message.status]}
-                          </span>
-                          {message.lastErrorMessage && (
-                            <small className="whatsapp-error">{message.lastErrorMessage}</small>
-                          )}
-                        </td>
-                        <td>{message.attemptCount}</td>
-                        <td>{displayDate(message.createdAt)}</td>
-                      </tr>
-                    ))}
+                    {messages.map((message) => {
+                      const indicators = message.dailyIndicators;
+                      const scores = message.dailyScores;
+                      return (
+                        <tr key={message.id}>
+                          <td>
+                            <strong>{message.recipientName}</strong>
+                            <small>{message.toMasked}{message.test ? " · prueba" : ""}</small>
+                          </td>
+                          <td>
+                            <strong>{message.studentNames.join(", ") || "Alumno"}</strong>
+                            <small className="whatsapp-log-indicators">
+                              A {indicators?.attendance === "present" ? "✅" : "❌"}
+                              {" · "}P {indicators?.participation === "positive" ? "😊" : indicators?.participation === "neutral" ? "😐" : "😟"}
+                              {" · "}T {indicators?.homework === "complete" ? "✅" : "❌"}
+                            </small>
+                            {scores && (
+                              <small>
+                                Calificaciones: {scores.attendance ?? "—"} / {scores.participation ?? "—"} / {scores.homework ?? "—"}
+                              </small>
+                            )}
+                          </td>
+                          <td>
+                            {message.businessDate}
+                            <small>{message.test ? "Prueba" : "Automático"}</small>
+                          </td>
+                          <td>
+                            <span className={`whatsapp-status ${message.status}`}>
+                              {messageStatusLabels[message.status]}
+                            </span>
+                            {message.lastErrorMessage && (
+                              <small className="whatsapp-error">{message.lastErrorMessage}</small>
+                            )}
+                          </td>
+                          <td>{message.attemptCount}</td>
+                          <td>{displayDate(message.createdAt)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <p className="empty-inline">Todavía no hay mensajes enviados.</p>
+              <p className="empty-inline">No hay mensajes que coincidan con los filtros.</p>
             )}
+            <div className="whatsapp-log-pagination" aria-label="Paginación del historial">
+              <button
+                disabled={pageIndex === 0 || logLoading}
+                onClick={openPreviousLogPage}
+                type="button"
+              >
+                <ChevronLeft size={16} /> Anterior
+              </button>
+              <span>Página {pageIndex + 1}</span>
+              <button
+                disabled={!nextPageToken || logLoading}
+                onClick={openNextLogPage}
+                type="button"
+              >
+                Siguiente <ChevronRight size={16} />
+              </button>
+            </div>
           </div>
         </>
       )}
