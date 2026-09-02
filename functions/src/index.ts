@@ -43,6 +43,7 @@ import {
   type DailyAttendanceStatus,
   type DailyParticipationStatus,
 } from "./whatsapp-core.js";
+import { seedDemoData } from "./demo-seed.js";
 
 initializeApp();
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
@@ -1014,6 +1015,29 @@ export const saveAcademicCalendar = onCall(async (request) => {
   });
   return { calendarStatus };
 });
+
+export const seedInstitutionDemoData = onCall(
+  { timeoutSeconds: 540, memory: "1GiB" },
+  async (request) => {
+    const director = await requireCalendarDirector(request.auth);
+    const confirmation = String(
+      (request.data as Record<string, unknown> | undefined)?.confirmation ?? "",
+    );
+    if (confirmation !== "CARGAR DEMO") {
+      throw new HttpsError(
+        "failed-precondition",
+        "Confirma la carga con la frase CARGAR DEMO.",
+      );
+    }
+    const result = await seedDemoData(director);
+    logger.info("Demo dataset seeded", {
+      institutionId: director.institutionId,
+      seedTag: result.seedTag,
+      counts: result.counts,
+    });
+    return result;
+  },
+);
 
 type StudentRecipient = {
   uid: string;

@@ -8510,6 +8510,47 @@ code {
   font-size: calc(0.69rem + 0.125rem);
 }
 
+.demo-seed-card {
+  margin-top: 16px;
+}
+
+.demo-seed-card .setting-row > div {
+  max-width: 680px;
+}
+
+.demo-seed-card .primary-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.demo-seed-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.demo-seed-summary strong,
+.demo-seed-summary span {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 720px) {
+  .demo-seed-card .setting-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .demo-seed-card .primary-button {
+    justify-content: center;
+  }
+}
+
 .theme-options {
   display: flex;
   gap: 4px;

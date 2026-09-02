@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
   Clock3,
   Copy,
+  Database,
   FileBarChart,
   GraduationCap,
   Home,
@@ -21,6 +22,7 @@ import {
   EyeOff,
   LayoutDashboard,
   LockKeyhole,
+  LoaderCircle,
   LogIn,
   LogOut,
   Mail,
@@ -58,6 +60,7 @@ import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { WorkshopsPage } from "@/components/workshops-page";
 import { GradingWeightsCard } from "@/components/weekly-grades";
+import { loadInstitutionDemoData, type DemoSeedCounts } from "@/lib/demo-seed-firebase";
 import { AcademicGradesPanel } from "@/components/academic-grades";
 import { AcademicReportsPage } from "@/components/academic-reports";
 import {
@@ -2634,6 +2637,22 @@ function SettingsPage({
 
   const [activeSettingsTab, setActiveSettingsTab] =
     useState<SettingsTabId>("appearance");
+  const [demoSeedLoading, setDemoSeedLoading] = useState(false);
+  const [demoSeedCounts, setDemoSeedCounts] = useState<DemoSeedCounts | null>(null);
+
+  const handleDemoSeed = async () => {
+    if (demoSeedLoading) return;
+    setDemoSeedLoading(true);
+    try {
+      const result = await loadInstitutionDemoData();
+      setDemoSeedCounts(result.counts);
+      toast.success("Datos de demostración cargados en Firebase");
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setDemoSeedLoading(false);
+    }
+  };
   const settingsTabs: Array<{
     id: SettingsTabId;
     label: string;
@@ -2865,6 +2884,46 @@ function SettingsPage({
                 calendar={academicCalendar}
                 onSave={saveAcademicCalendarConfiguration}
               />
+              <section className="panel settings-section demo-seed-card">
+                <div className="settings-heading">
+                  <span className="settings-icon">
+                    <Database size={20} />
+                  </span>
+                  <div>
+                    <h2>Datos de demostración</h2>
+                    <p>Puebla Firebase con información relacionada para revisar todos los módulos.</p>
+                  </div>
+                </div>
+                <div className="setting-row">
+                  <div>
+                    <strong>Carga segura y repetible</strong>
+                    <span>
+                      Crea 12 alumnos, 3 docentes y al menos 10 registros en tareas,
+                      repasos, materiales, reportes, mural, foro y talleres. No activa
+                      mensajes reales ni crea accesos de autenticación.
+                    </span>
+                  </div>
+                  <button
+                    className="primary-button"
+                    disabled={!firebaseReady || demoSeedLoading}
+                    onClick={() => void handleDemoSeed()}
+                    type="button"
+                  >
+                    {demoSeedLoading ? <LoaderCircle className="spin" size={16} /> : <Database size={16} />}
+                    {demoSeedLoading ? "Cargando…" : "Cargar datos demo"}
+                  </button>
+                </div>
+                {demoSeedCounts && (
+                  <div className="demo-seed-summary" role="status">
+                    <strong>Carga completada</strong>
+                    <span>{demoSeedCounts.dailyGrades} calificaciones diarias</span>
+                    <span>{demoSeedCounts.weeklyReports} reportes semanales</span>
+                    <span>{demoSeedCounts.tasks} tareas</span>
+                    <span>{demoSeedCounts.reviews} repasos</span>
+                    <span>{demoSeedCounts.wallPosts} publicaciones</span>
+                  </div>
+                )}
+              </section>
             </div>
           </>
         )}
