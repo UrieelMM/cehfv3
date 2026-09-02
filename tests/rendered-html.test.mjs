@@ -25,17 +25,17 @@ async function render(pathname = "/") {
   );
 }
 
-test("server-renders the Campus CEHF entry experience", async () => {
+test("server-renders the Campus CEHF landing experience", async () => {
   const response = await render("/");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
   assert.match(html, /<title>Campus CEHF<\/title>/i);
-  assert.match(html, /Una semana clara para aprender mejor/i);
-  assert.match(html, /Preparando tu experiencia/i);
+  assert.match(html, /Todo lo que importa/i);
+  assert.match(html, /Entrar al campus/i);
   assert.match(html, /manifest\.webmanifest/i);
-  assert.match(html, /og-campus\.png/i);
+  assert.match(html, /og-landing\.png/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);
 });
 

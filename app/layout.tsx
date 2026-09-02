@@ -7,6 +7,7 @@ import "./workshops.css";
 import "./materials.css";
 import "./reviews.css";
 import "./grades.css";
+import "./landing.css";
 
 const themeBootstrapScript = `
   (() => {
@@ -42,7 +43,7 @@ export async function generateMetadata(): Promise<Metadata> {
     (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const description =
-    "Tu experiencia académica, comunidad y progreso en un solo lugar.";
+    "Todo lo que importa, en un mismo lugar. Una experiencia académica clara para aprender, avanzar y conectar.";
 
   return {
     title: {
@@ -53,25 +54,25 @@ export async function generateMetadata(): Promise<Metadata> {
     applicationName: "Campus CEHF",
     manifest: "/manifest.webmanifest",
     openGraph: {
-      title: "Campus CEHF",
-      description: "Una semana clara para aprender mejor.",
+      title: "Campus CEHF · Todo lo que importa, en un mismo lugar",
+      description,
       type: "website",
       locale: "es_MX",
       url: origin,
       images: [
         {
-          url: `${origin}/og-campus.png`,
-          width: 1739,
-          height: 904,
-          alt: "Campus CEHF — Una semana clara para aprender mejor",
+          url: `${origin}/og-landing.png`,
+          width: 1734,
+          height: 907,
+          alt: "Campus CEHF — Todo lo que importa, en un mismo lugar",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Campus CEHF",
-      description: "Una semana clara para aprender mejor.",
-      images: [`${origin}/og-campus.png`],
+      title: "Campus CEHF · Todo lo que importa, en un mismo lugar",
+      description,
+      images: [`${origin}/og-landing.png`],
     },
   };
 }

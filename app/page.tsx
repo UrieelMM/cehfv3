@@ -1,5 +1,5 @@
-import { CEHFApp } from "@/components/cehf-app";
+import { LandingPage } from "@/components/landing-page";
 
 export default function Home() {
-  return <CEHFApp />;
+  return <LandingPage />;
 }
