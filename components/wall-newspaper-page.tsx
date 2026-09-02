@@ -214,8 +214,8 @@ function editionToInput(edition: MuralEdition): MuralEditionInput {
     teacherId: edition.teacherId,
     teacherName: edition.teacherName,
     cover,
-    gallerySlides: (edition.gallerySlides?.length ? edition.gallerySlides : defaultMuralGallerySlides).map((slide) => Object.fromEntries(
-      Object.entries(slide).filter(([key]) => key !== "imageUrl"),
+    gallerySlides: (edition.gallerySlides?.length ? edition.gallerySlides : defaultMuralGallerySlides).map((slide, index) => Object.fromEntries(
+      Object.entries({ ...defaultMuralGallerySlides[index % defaultMuralGallerySlides.length], ...slide }).filter(([key]) => key !== "imageUrl"),
     ) as MuralEditionInput["gallerySlides"][number]),
   };
 }
@@ -311,6 +311,9 @@ function Mural3DGallerySlide({
   preview?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
+  const glowLayerRef = useRef<HTMLDivElement>(null);
+  const glowLightsRef = useRef<Array<HTMLSpanElement | null>>([]);
+  const glowTarget = useRef({ x: -180, y: -180, active: false });
   const sceneStyle = {
     "--gallery-accent": slide.accentColor,
     "--gallery-image-x": `${slide.imagePositionX}%`,
@@ -319,6 +322,26 @@ function Mural3DGallerySlide({
     "--gallery-rotate-x": "0deg",
     "--gallery-rotate-y": "0deg",
   } as CSSProperties;
+
+  useEffect(() => {
+    if (preview || reduceMotion) return;
+    const points = Array.from({ length: 7 }, () => ({ x: -180, y: -180 }));
+    let animationFrame = 0;
+    const animateGlow = () => {
+      points.forEach((point, index) => {
+        const target = index === 0 ? glowTarget.current : points[index - 1];
+        const ease = index === 0 ? 0.24 : 0.19;
+        point.x += (target.x - point.x) * ease;
+        point.y += (target.y - point.y) * ease;
+        const node = glowLightsRef.current[index];
+        if (node) node.style.transform = `translate3d(${point.x}px, ${point.y}px, 0) translate(-50%, -50%) scale(${1 - index * 0.075})`;
+      });
+      if (glowLayerRef.current) glowLayerRef.current.style.opacity = glowTarget.current.active ? "1" : "0";
+      animationFrame = window.requestAnimationFrame(animateGlow);
+    };
+    animationFrame = window.requestAnimationFrame(animateGlow);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [preview, reduceMotion]);
 
   return (
     <article
@@ -329,29 +352,40 @@ function Mural3DGallerySlide({
         const bounds = event.currentTarget.getBoundingClientRect();
         const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 2;
         const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 2;
+        glowTarget.current = { x: event.clientX - bounds.left, y: event.clientY - bounds.top, active: true };
         event.currentTarget.style.setProperty("--gallery-rotate-x", `${(-y * 3.5).toFixed(2)}deg`);
         event.currentTarget.style.setProperty("--gallery-rotate-y", `${(x * 5).toFixed(2)}deg`);
       }}
       onPointerLeave={(event) => {
+        glowTarget.current.active = false;
         event.currentTarget.style.setProperty("--gallery-rotate-x", "0deg");
         event.currentTarget.style.setProperty("--gallery-rotate-y", "0deg");
       }}
     >
+      {!preview && !reduceMotion && <div className="mural-glow-cursor" ref={glowLayerRef} aria-hidden="true">{Array.from({ length: 7 }, (_, lightIndex) => <span key={lightIndex} ref={(node) => { glowLightsRef.current[lightIndex] = node; }} />)}</div>}
       <div className="mural-3d-orbit" aria-hidden="true"><i /><i /><i /></div>
       <div className="mural-3d-backdrop" aria-hidden="true"><i /><i /><i /></div>
-      <div className="mural-3d-image-plane">
-        {slide.imageUrl ? (
-          <div role="img" aria-label={slide.title} style={{ backgroundImage: `url(${slide.imageUrl})` }} />
-        ) : (
-          <div className="mural-3d-placeholder" aria-hidden="true"><Layers3 /><span>CEHF</span></div>
-        )}
-        <i aria-hidden="true" />
-      </div>
+      {slide.layout !== "cinematic" && <div className="mural-3d-image-plane">
+          {slide.imageUrl ? (
+            <div role="img" aria-label={slide.title} style={{ backgroundImage: `url(${slide.imageUrl})` }} />
+          ) : (
+            <div className="mural-3d-placeholder" aria-hidden="true"><Layers3 /><span>CEHF</span></div>
+          )}
+          <i aria-hidden="true" />
+        </div>}
       <div className="mural-3d-copy">
         <span className="mural-3d-kicker"><i />{slide.kicker || "GALERÍA CEHF"}</span>
         <h2>{slide.title}</h2>
         {slide.caption && <p>{slide.caption}</p>}
       </div>
+      {slide.layout === "cinematic" && (
+        <section className="mural-3d-editorial-panel">
+          {slide.contentKicker && <span>{slide.contentKicker}</span>}
+          <h3>{slide.contentTitle || "Desarrolla el tema"}</h3>
+          {slide.contentSubtitle && <h4>{slide.contentSubtitle}</h4>}
+          <div>{(slide.body || "Agrega párrafos desde el editor para presentar hechos, ideas y conclusiones de forma clara.").split(/\n\s*\n/).map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>)}</div>
+        </section>
+      )}
       <div className="mural-3d-number" aria-hidden="true"><span>{String(index).padStart(2, "0")}</span><i />{String(total).padStart(2, "0")}</div>
       <span className="mural-3d-watermark" aria-hidden="true">ENTRE LÍNEAS</span>
     </article>
@@ -752,12 +786,21 @@ function MuralEditionEditor({
                     <button type="button" className="danger" onClick={removeGallerySlide} disabled={draft.gallerySlides.length === 1} aria-label="Eliminar diapositiva"><Trash2 size={15} /></button>
                   </div>
                 </div>
-                <label className="mural-image-drop compact"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseGalleryImage(event.target.files?.[0])} /><Upload size={20} /><strong>{galleryPreviews[selectedSlide.id] ? "Cambiar imagen del slide" : "Subir imagen del slide"}</strong><span>JPG, PNG o WEBP · máximo 8 MB</span></label>
-                {galleryPreviews[selectedSlide.id] && <button type="button" className="mural-gallery-remove-image" onClick={() => { setGalleryImages((previous) => { const next = { ...previous }; delete next[selectedSlide.id]; return next; }); setGalleryPreviews((previous) => ({ ...previous, [selectedSlide.id]: "" })); gallerySlideField("imagePath", ""); }}><X size={13} />Quitar imagen</button>}
                 <label>Antetítulo<input value={selectedSlide.kicker} maxLength={muralGalleryLimits.kicker} onChange={(event) => gallerySlideField("kicker", event.target.value)} /><small>{selectedSlide.kicker.length}/{muralGalleryLimits.kicker}</small></label>
                 <label>Título visual<textarea value={selectedSlide.title} maxLength={muralGalleryLimits.title} onChange={(event) => gallerySlideField("title", event.target.value)} /><small>{selectedSlide.title.length}/{muralGalleryLimits.title}</small></label>
                 <label>Texto breve<textarea value={selectedSlide.caption} maxLength={muralGalleryLimits.caption} onChange={(event) => gallerySlideField("caption", event.target.value)} /><small>{selectedSlide.caption.length}/{muralGalleryLimits.caption}</small></label>
-                <label>Composición 3D<div className="mural-option-grid three">{muralGalleryLayouts.map((layout) => <button type="button" key={layout} className={selectedSlide.layout === layout ? "active" : ""} onClick={() => gallerySlideField("layout", layout)}><span className={`gallery-layout-icon ${layout}`}><i /><i /></span><small>{layout === "focus" ? "Enfoque" : layout === "split" ? "Dividida" : "Cinemática"}</small></button>)}</div></label>
+                <label>Tipo de diapositiva<div className="mural-option-grid three mural-gallery-type-grid">{muralGalleryLayouts.map((layout) => <button type="button" key={layout} className={selectedSlide.layout === layout ? "active" : ""} onClick={() => gallerySlideField("layout", layout)}><span className={`gallery-layout-icon ${layout}`}><i /><i /></span><small>{layout === "focus" ? "Visual 3D" : layout === "split" ? "Título + imagen" : "Tema + texto"}</small></button>)}</div></label>
+                {selectedSlide.layout !== "cinematic" && <>
+                  <label className="mural-image-drop compact"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseGalleryImage(event.target.files?.[0])} /><Upload size={20} /><strong>{galleryPreviews[selectedSlide.id] ? "Cambiar imagen del slide" : "Subir imagen del slide"}</strong><span>JPG, PNG o WEBP · máximo 8 MB</span></label>
+                  {galleryPreviews[selectedSlide.id] && <button type="button" className="mural-gallery-remove-image" onClick={() => { setGalleryImages((previous) => { const next = { ...previous }; delete next[selectedSlide.id]; return next; }); setGalleryPreviews((previous) => ({ ...previous, [selectedSlide.id]: "" })); gallerySlideField("imagePath", ""); }}><X size={13} />Quitar imagen</button>}
+                </>}
+                {selectedSlide.layout === "cinematic" && <div className="mural-gallery-content-fields">
+                  <div className="mural-control-heading"><Type size={16} /><div><strong>Contenido del lado derecho</strong><span>Ideal para exponer historia, celebraciones, ciencia o proyectos.</span></div></div>
+                  <label>Sección<input value={selectedSlide.contentKicker} maxLength={muralGalleryLimits.contentKicker} onChange={(event) => gallerySlideField("contentKicker", event.target.value)} placeholder="Ej. Momento histórico" /><small>{selectedSlide.contentKicker.length}/{muralGalleryLimits.contentKicker}</small></label>
+                  <label>Título del contenido<input value={selectedSlide.contentTitle} maxLength={muralGalleryLimits.contentTitle} onChange={(event) => gallerySlideField("contentTitle", event.target.value)} placeholder="El inicio de un nuevo país" /><small>{selectedSlide.contentTitle.length}/{muralGalleryLimits.contentTitle}</small></label>
+                  <label>Subtítulo<textarea value={selectedSlide.contentSubtitle} maxLength={muralGalleryLimits.contentSubtitle} onChange={(event) => gallerySlideField("contentSubtitle", event.target.value)} placeholder="Una frase que introduzca el tema." /><small>{selectedSlide.contentSubtitle.length}/{muralGalleryLimits.contentSubtitle}</small></label>
+                  <label>Párrafos<textarea className="mural-gallery-body-input" value={selectedSlide.body} maxLength={muralGalleryLimits.body} onChange={(event) => gallerySlideField("body", event.target.value)} placeholder={"Escribe el desarrollo del tema.\n\nSepara cada párrafo con una línea en blanco."} /><small>{selectedSlide.body.length}/{muralGalleryLimits.body}</small></label>
+                </div>}
                 <div className="mural-color-row single"><label>Color de luz<span><input type="color" value={selectedSlide.accentColor} onChange={(event) => gallerySlideField("accentColor", event.target.value)} /><code>{selectedSlide.accentColor}</code></span></label></div>
                 <label className="mural-range-label"><span><strong>Profundidad 3D</strong><small>Nivel {selectedSlide.depth}</small></span><input type="range" min="1" max="3" value={selectedSlide.depth} onChange={(event) => gallerySlideField("depth", Number(event.target.value))} /></label>
                 <label className="mural-range-label"><span><strong>Enfoque horizontal</strong><small>{selectedSlide.imagePositionX}%</small></span><input type="range" min="0" max="100" value={selectedSlide.imagePositionX} onChange={(event) => gallerySlideField("imagePositionX", Number(event.target.value))} /></label>

@@ -66,6 +66,10 @@ export const muralGalleryLimits = {
   kicker: 42,
   title: 84,
   caption: 220,
+  contentKicker: 42,
+  contentTitle: 90,
+  contentSubtitle: 180,
+  body: 1_600,
 } as const;
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, "Selecciona un color válido.");
@@ -105,6 +109,10 @@ export const muralEditionSchema = z.object({
     kicker: z.string().trim().max(muralGalleryLimits.kicker),
     title: z.string().trim().min(2, "Agrega un título a cada diapositiva.").max(muralGalleryLimits.title),
     caption: z.string().trim().max(muralGalleryLimits.caption),
+    contentKicker: z.string().trim().max(muralGalleryLimits.contentKicker),
+    contentTitle: z.string().trim().max(muralGalleryLimits.contentTitle),
+    contentSubtitle: z.string().trim().max(muralGalleryLimits.contentSubtitle),
+    body: z.string().trim().max(muralGalleryLimits.body),
     imagePath: z.string().max(500),
     accentColor: hexColor,
     layout: z.enum(muralGalleryLayouts),

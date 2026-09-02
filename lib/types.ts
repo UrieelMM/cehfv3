@@ -738,6 +738,10 @@ export type MuralGallerySlide = {
   kicker: string;
   title: string;
   caption: string;
+  contentKicker: string;
+  contentTitle: string;
+  contentSubtitle: string;
+  body: string;
   imagePath: string;
   imageUrl?: string;
   accentColor: string;

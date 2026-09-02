@@ -62,9 +62,9 @@ export const defaultMuralCover: MuralEditionCover = {
 };
 
 export const defaultMuralGallerySlides: MuralGallerySlide[] = [
-  { id: "gallery-ideas", kicker: "IDEAS EN MOVIMIENTO", title: "Creamos para transformar", caption: "Proyectos, hallazgos y voces que nacen en nuestras aulas.", imagePath: "", accentColor: "#aeb5ff", layout: "focus", depth: 3, imagePositionX: 50, imagePositionY: 50 },
-  { id: "gallery-community", kicker: "COMUNIDAD CEHF", title: "Aprender también es compartir", caption: "Una mirada cercana a los momentos que nos unen como comunidad.", imagePath: "", accentColor: "#ef6b7d", layout: "split", depth: 2, imagePositionX: 50, imagePositionY: 50 },
-  { id: "gallery-future", kicker: "LO QUE SIGUE", title: "Cada historia abre una posibilidad", caption: "Celebramos la curiosidad, el talento y las preguntas que nos hacen crecer.", imagePath: "", accentColor: "#8db4ff", layout: "cinematic", depth: 3, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-ideas", kicker: "IDEAS EN MOVIMIENTO", title: "Creamos para transformar", caption: "Proyectos, hallazgos y voces que nacen en nuestras aulas.", contentKicker: "", contentTitle: "", contentSubtitle: "", body: "", imagePath: "", accentColor: "#aeb5ff", layout: "focus", depth: 3, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-community", kicker: "COMUNIDAD CEHF", title: "Aprender también es compartir", caption: "Una mirada cercana a los momentos que nos unen como comunidad.", contentKicker: "", contentTitle: "", contentSubtitle: "", body: "", imagePath: "", accentColor: "#ef6b7d", layout: "split", depth: 2, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-future", kicker: "HISTORIA PARA DESCUBRIR", title: "La Independencia de México", caption: "Un tema presentado de forma clara, visual y memorable.", contentKicker: "MOMENTO HISTÓRICO", contentTitle: "El inicio de un nuevo país", contentSubtitle: "Una lucha que transformó nuestra historia y nuestra identidad.", body: "En 1810 comenzó un movimiento que buscaba justicia, libertad y una nueva forma de organizar el territorio.\n\nSus protagonistas, ideas y consecuencias siguen ayudándonos a comprender el México de hoy.", imagePath: "", accentColor: "#8db4ff", layout: "cinematic", depth: 3, imagePositionX: 50, imagePositionY: 50 },
 ];
 
 export function defaultMuralEdition(profile: UserProfile): MuralEdition {
@@ -248,6 +248,10 @@ async function muralEditionFromData(id: string, data: DocumentData): Promise<Mur
       kicker: String(slide.kicker ?? fallback.kicker),
       title: String(slide.title ?? fallback.title),
       caption: String(slide.caption ?? fallback.caption),
+      contentKicker: String(slide.contentKicker ?? fallback.contentKicker),
+      contentTitle: String(slide.contentTitle ?? fallback.contentTitle),
+      contentSubtitle: String(slide.contentSubtitle ?? fallback.contentSubtitle),
+      body: String(slide.body ?? fallback.body),
       imagePath: slideImagePath,
       imageUrl: slideImageUrl,
       accentColor: /^#[0-9a-f]{6}$/i.test(String(slide.accentColor ?? "")) ? String(slide.accentColor) : fallback.accentColor,

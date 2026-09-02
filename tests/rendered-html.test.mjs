@@ -447,6 +447,9 @@ test("ships a configurable 3D gallery for mural immersive mode", async () => {
   assert.match(muralSource, /Galería inmersiva 3D/);
   assert.match(muralSource, /Mural3DGallerySlide/);
   assert.match(muralSource, /dragConstraints/);
+  assert.match(muralSource, /mural-glow-cursor/);
+  assert.match(muralSource, /Tema \+ texto/);
+  assert.match(muralSource, /Contenido del lado derecho/);
   assert.doesNotMatch(muralSource, /MuralImmersiveView edition=\{edition\} stories=/);
   assert.match(muralContract, /muralGalleryLayouts/);
   assert.match(muralContract, /gallerySlides: z\.array/);
@@ -455,5 +458,7 @@ test("ships a configurable 3D gallery for mural immersive mode", async () => {
   assert.match(functionsSource, /gallerySlides: input\.gallerySlides/);
   assert.match(css, /\.mural-3d-gallery-slide/);
   assert.match(css, /@keyframes mural-gallery-orbit/);
+  assert.match(css, /\.mural-glow-cursor/);
+  assert.match(css, /\.mural-3d-editorial-panel/);
   assert.match(storageRules, /wall\/\{postId\}\/\{assetId\}/);
 });

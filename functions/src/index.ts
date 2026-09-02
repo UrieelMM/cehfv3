@@ -2649,6 +2649,20 @@ function muralOptionalText(value: unknown, label: string, maximum: number) {
   return normalized;
 }
 
+function muralParagraphText(value: unknown, label: string, maximum: number) {
+  const normalized = String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .split(/\n\s*\n/)
+    .map(compactMuralText)
+    .filter(Boolean)
+    .join("\n\n");
+  if (normalized.length > maximum) {
+    throw new HttpsError("invalid-argument", `${label} puede tener hasta ${maximum.toLocaleString("es-MX")} caracteres.`);
+  }
+  return normalized;
+}
+
 function muralColor(value: unknown, label: string) {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (!/^#[0-9a-f]{6}$/.test(normalized)) {
@@ -2759,6 +2773,10 @@ function muralEditionInput(value: unknown, institutionId: string) {
       kicker: muralOptionalText(slide.kicker, "El antetítulo de la diapositiva", 42),
       title: muralText(slide.title, "El título de la diapositiva", 2, 84),
       caption: muralOptionalText(slide.caption, "El texto de la diapositiva", 220),
+      contentKicker: muralOptionalText(slide.contentKicker, "La sección del contenido", 42),
+      contentTitle: muralOptionalText(slide.contentTitle, "El título del contenido", 90),
+      contentSubtitle: muralOptionalText(slide.contentSubtitle, "El subtítulo del contenido", 180),
+      body: muralParagraphText(slide.body, "El desarrollo del contenido", 1_600),
       imagePath: slideImagePath,
       accentColor: muralColor(slide.accentColor, "el acento de la diapositiva"),
       layout: galleryLayout as typeof MURAL_GALLERY_LAYOUTS[number],
