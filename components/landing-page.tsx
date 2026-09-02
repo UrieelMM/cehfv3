@@ -319,7 +319,7 @@ export function LandingPage() {
         <div className="lp-story-grid">
           <div className="lp-story-copy">
             <span className="lp-section-kicker is-on-dark">Diseñado para acompañarte</span>
-            <h2>Una mirada.<br />Todo claro.</h2>
+            <h2>Una mirada.<br /><span>Todo claro.</span></h2>
             <div className="lp-story-points">
               <article>
                 <span>01</span>
