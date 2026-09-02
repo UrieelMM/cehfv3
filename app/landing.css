@@ -742,11 +742,19 @@
     linear-gradient(145deg, #111744, #202b84 62%, #313aa0);
 }
 
+.lp-bento-tasks .lp-bento-copy {
+  max-width: 370px;
+}
+
+.lp-bento-tasks .lp-bento-copy p {
+  max-width: 280px;
+}
+
 .lp-task-stack {
   position: absolute;
-  right: -34px;
+  right: -24px;
   bottom: 42px;
-  width: min(440px, 64%);
+  width: min(390px, 54%);
   transform: rotate(-4deg);
 }
 
@@ -925,14 +933,35 @@
 }
 
 .lp-community-avatar { width: 62px; height: 62px; }
-.lp-community-avatar.avatar-one { top: 18%; left: 17%; background: #e9eafa; color: var(--lp-blue); }
-.lp-community-avatar.avatar-two { top: 11%; right: 16%; background: var(--lp-blue); color: #fff; }
-.lp-community-avatar.avatar-three { right: 30%; bottom: 5%; background: #32758d; color: #fff; }
+.lp-community-avatar {
+  top: 0;
+  left: 0;
+  offset-path: ellipse(34% 40% at 50% 50%);
+  offset-rotate: 0deg;
+  animation: lp-avatar-orbit 20s linear infinite;
+  will-change: offset-distance;
+}
+
+.lp-community-avatar.avatar-one {
+  background: #e9eafa;
+  color: var(--lp-blue);
+}
+
+.lp-community-avatar.avatar-two {
+  background: var(--lp-blue);
+  color: #fff;
+  animation-delay: -6.666s;
+}
+
+.lp-community-avatar.avatar-three {
+  background: #32758d;
+  color: #fff;
+  animation-delay: -13.333s;
+}
+
 .lp-community-heart { top: 37%; left: 43%; width: 72px; height: 72px; background: #fff; color: var(--lp-coral); }
 
-.lp-bento-community:hover .avatar-one { transform: translate(-5px, -6px); }
-.lp-bento-community:hover .avatar-two { transform: translate(6px, -4px); }
-.lp-bento-community:hover .avatar-three { transform: translate(4px, 7px); }
+.lp-bento-community:hover .lp-community-avatar { scale: 1.04; }
 .lp-bento-community:hover .lp-community-heart { transform: scale(1.1); }
 
 .lp-bento-calendar {
@@ -1525,14 +1554,27 @@
   50% { transform: translateX(38%); }
 }
 
+@keyframes lp-avatar-orbit {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+
 @media (max-width: 980px) {
+  .lp-bento-grid {
+    grid-template-columns: 1fr;
+  }
+
   .lp-bento-card {
-    min-height: 480px;
+    min-height: 520px;
   }
 
   .lp-task-stack,
   .lp-calendar-sheet {
-    width: 70%;
+    width: min(440px, 54%);
+  }
+
+  .lp-bento-tasks {
+    min-height: 620px;
   }
 
   .lp-story-grid {
@@ -1694,6 +1736,10 @@
     border-radius: 22px;
   }
 
+  .lp-bento-tasks {
+    min-height: 650px;
+  }
+
   .lp-bento-copy {
     padding: 30px;
   }
@@ -1818,4 +1864,12 @@
   .lp-final-cta::before {
     animation: none;
   }
+
+  .lp-community-avatar {
+    animation: none;
+  }
+
+  .lp-community-avatar.avatar-one { offset-distance: 0%; }
+  .lp-community-avatar.avatar-two { offset-distance: 33.333%; }
+  .lp-community-avatar.avatar-three { offset-distance: 66.666%; }
 }
