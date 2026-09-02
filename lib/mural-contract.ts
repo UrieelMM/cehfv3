@@ -28,6 +28,7 @@ export const muralLimits = {
 export const muralCoverLayouts = ["split", "editorial", "immersive"] as const;
 export const muralCoverFonts = ["modern", "editorial", "classic"] as const;
 export const muralCoverGradients = ["campus", "aurora", "coral", "cobalt"] as const;
+export const muralGalleryLayouts = ["focus", "split", "cinematic"] as const;
 export const muralCoverMotifs = [
   "orbits",
   "grid",
@@ -58,6 +59,13 @@ export const muralCoverLimits = {
   badge: 32,
   ctaLabel: 32,
   seasonName: 50,
+} as const;
+
+export const muralGalleryLimits = {
+  slides: 10,
+  kicker: 42,
+  title: 84,
+  caption: 220,
 } as const;
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, "Selecciona un color válido.");
@@ -92,6 +100,18 @@ export const muralEditionSchema = z.object({
     imagePositionY: z.number().min(0).max(100),
     overlayOpacity: z.number().min(0).max(85),
   }),
+  gallerySlides: z.array(z.object({
+    id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/, "La diapositiva no es válida."),
+    kicker: z.string().trim().max(muralGalleryLimits.kicker),
+    title: z.string().trim().min(2, "Agrega un título a cada diapositiva.").max(muralGalleryLimits.title),
+    caption: z.string().trim().max(muralGalleryLimits.caption),
+    imagePath: z.string().max(500),
+    accentColor: hexColor,
+    layout: z.enum(muralGalleryLayouts),
+    depth: z.number().int().min(1).max(3),
+    imagePositionX: z.number().min(0).max(100),
+    imagePositionY: z.number().min(0).max(100),
+  })).min(1, "Agrega al menos una diapositiva a la galería.").max(muralGalleryLimits.slides),
 }).superRefine((input, context) => {
   if (input.periodType === "season" && input.seasonName.trim().length < 3) {
     context.addIssue({

@@ -433,3 +433,27 @@ test("supports optional editorial gradients for mural editions", async () => {
   assert.match(css, /\.mural-cover\.has-title-gradient h1/);
   assert.match(css, /background:\s*var\(--mural-cover-surface/);
 });
+
+test("ships a configurable 3D gallery for mural immersive mode", async () => {
+  const [muralSource, muralContract, muralFirebase, functionsSource, css, storageRules] = await Promise.all([
+    readFile(new URL("components/wall-newspaper-page.tsx", projectRoot), "utf8"),
+    readFile(new URL("lib/mural-contract.ts", projectRoot), "utf8"),
+    readFile(new URL("lib/mural-firebase.ts", projectRoot), "utf8"),
+    readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
+    readFile(new URL("app/globals.css", projectRoot), "utf8"),
+    readFile(new URL("storage.rules", projectRoot), "utf8"),
+  ]);
+
+  assert.match(muralSource, /Galería inmersiva 3D/);
+  assert.match(muralSource, /Mural3DGallerySlide/);
+  assert.match(muralSource, /dragConstraints/);
+  assert.doesNotMatch(muralSource, /MuralImmersiveView edition=\{edition\} stories=/);
+  assert.match(muralContract, /muralGalleryLayouts/);
+  assert.match(muralContract, /gallerySlides: z\.array/);
+  assert.match(muralFirebase, /wall\/gallery/);
+  assert.match(functionsSource, /MURAL_GALLERY_LAYOUTS/);
+  assert.match(functionsSource, /gallerySlides: input\.gallerySlides/);
+  assert.match(css, /\.mural-3d-gallery-slide/);
+  assert.match(css, /@keyframes mural-gallery-orbit/);
+  assert.match(storageRules, /wall\/\{postId\}\/\{assetId\}/);
+});

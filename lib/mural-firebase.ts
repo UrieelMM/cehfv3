@@ -18,6 +18,7 @@ import type { MuralEditionInput, MuralSubmissionInput } from "./mural-contract";
 import type {
   MuralEdition,
   MuralEditionCover,
+  MuralGallerySlide,
   Role,
   UserProfile,
   WallPost,
@@ -60,6 +61,12 @@ export const defaultMuralCover: MuralEditionCover = {
   overlayOpacity: 24,
 };
 
+export const defaultMuralGallerySlides: MuralGallerySlide[] = [
+  { id: "gallery-ideas", kicker: "IDEAS EN MOVIMIENTO", title: "Creamos para transformar", caption: "Proyectos, hallazgos y voces que nacen en nuestras aulas.", imagePath: "", accentColor: "#aeb5ff", layout: "focus", depth: 3, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-community", kicker: "COMUNIDAD CEHF", title: "Aprender también es compartir", caption: "Una mirada cercana a los momentos que nos unen como comunidad.", imagePath: "", accentColor: "#ef6b7d", layout: "split", depth: 2, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-future", kicker: "LO QUE SIGUE", title: "Cada historia abre una posibilidad", caption: "Celebramos la curiosidad, el talento y las preguntas que nos hacen crecer.", imagePath: "", accentColor: "#8db4ff", layout: "cinematic", depth: 3, imagePositionX: 50, imagePositionY: 50 },
+];
+
 export function defaultMuralEdition(profile: UserProfile): MuralEdition {
   const month = new Date().toISOString().slice(0, 7);
   const periodLabel = new Intl.DateTimeFormat("es-MX", {
@@ -82,6 +89,7 @@ export function defaultMuralEdition(profile: UserProfile): MuralEdition {
     teacherId: profile.role === "teacher" ? profile.uid : "demo-teacher-mariana",
     teacherName: profile.role === "teacher" ? profile.name : "Mariana López",
     cover: { ...defaultMuralCover },
+    gallerySlides: defaultMuralGallerySlides.map((slide) => ({ ...slide })),
   };
 }
 
@@ -225,6 +233,30 @@ async function muralEditionFromData(id: string, data: DocumentData): Promise<Mur
     imagePositionY: numberInRange(coverData.imagePositionY, 50),
     overlayOpacity: numberInRange(coverData.overlayOpacity, 24, 0, 85),
   };
+  const rawSlides = Array.isArray(data.gallerySlides) && data.gallerySlides.length
+    ? data.gallerySlides
+    : defaultMuralGallerySlides;
+  const gallerySlides = await Promise.all(rawSlides.slice(0, 10).map(async (entry: unknown, index: number): Promise<MuralGallerySlide> => {
+    const slide = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+    const slideImagePath = String(slide.imagePath ?? "");
+    const slideImageUrl = slideImagePath && firebase.storage
+      ? await getDownloadURL(ref(firebase.storage, slideImagePath)).catch(() => "")
+      : "";
+    const fallback = defaultMuralGallerySlides[index % defaultMuralGallerySlides.length];
+    return {
+      id: /^[A-Za-z0-9_-]{1,80}$/.test(String(slide.id ?? "")) ? String(slide.id) : `gallery-${index + 1}`,
+      kicker: String(slide.kicker ?? fallback.kicker),
+      title: String(slide.title ?? fallback.title),
+      caption: String(slide.caption ?? fallback.caption),
+      imagePath: slideImagePath,
+      imageUrl: slideImageUrl,
+      accentColor: /^#[0-9a-f]{6}$/i.test(String(slide.accentColor ?? "")) ? String(slide.accentColor) : fallback.accentColor,
+      layout: ["focus", "split", "cinematic"].includes(String(slide.layout)) ? String(slide.layout) as MuralGallerySlide["layout"] : fallback.layout,
+      depth: numberInRange(slide.depth, fallback.depth, 1, 3),
+      imagePositionX: numberInRange(slide.imagePositionX, 50),
+      imagePositionY: numberInRange(slide.imagePositionY, 50),
+    };
+  }));
   return {
     id,
     institutionId: String(data.institutionId ?? ""),
@@ -238,6 +270,7 @@ async function muralEditionFromData(id: string, data: DocumentData): Promise<Mur
     teacherId: String(data.teacherId ?? ""),
     teacherName: String(data.teacherName ?? "Dirección CEHF"),
     cover,
+    gallerySlides,
     createdAt: dateFromData(data.createdAt),
     updatedAt: dateFromData(data.updatedAt),
     updatedBy: data.updatedBy ? String(data.updatedBy) : undefined,
@@ -379,6 +412,7 @@ export async function saveMuralEdition(
   profile: UserProfile,
   input: MuralEditionInput,
   coverImage?: File | null,
+  galleryImages: Record<string, File> = {},
 ) {
   if (!firebase.functions) throw new Error("Firebase no está configurado.");
   let imagePath = input.cover.imagePath;
@@ -391,6 +425,18 @@ export async function saveMuralEdition(
       customMetadata: { institutionId: profile.institutionId, purpose: "mural-cover" },
     });
   }
+  const gallerySlides = await Promise.all(input.gallerySlides.map(async (slide) => {
+    const galleryImage = galleryImages[slide.id];
+    if (!galleryImage) return slide;
+    if (!firebase.storage) throw new Error("El almacenamiento de imágenes no está disponible.");
+    const metadata = coverImageMetadata(galleryImage);
+    const slideImagePath = `institutions/${profile.institutionId}/wall/gallery/${slide.id}-${crypto.randomUUID()}.${metadata.extension}`;
+    await uploadBytes(ref(firebase.storage, slideImagePath), galleryImage, {
+      contentType: metadata.contentType,
+      customMetadata: { institutionId: profile.institutionId, purpose: "mural-gallery", slideId: slide.id },
+    });
+    return { ...slide, imagePath: slideImagePath };
+  }));
   const callable = httpsCallable<MuralEditionInput, { edition: MuralEdition }>(
     firebase.functions,
     "saveMuralEdition",
@@ -398,6 +444,7 @@ export async function saveMuralEdition(
   const result = await callable({
     ...input,
     cover: { ...input.cover, imagePath },
+    gallerySlides,
   });
   return result.data.edition;
 }

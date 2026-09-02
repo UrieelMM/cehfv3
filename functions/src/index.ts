@@ -2522,6 +2522,7 @@ const MURAL_CATEGORIES = [
 const MURAL_COVER_LAYOUTS = ["split", "editorial", "immersive"] as const;
 const MURAL_COVER_FONTS = ["modern", "editorial", "classic"] as const;
 const MURAL_COVER_GRADIENTS = ["campus", "aurora", "coral", "cobalt"] as const;
+const MURAL_GALLERY_LAYOUTS = ["focus", "split", "cinematic"] as const;
 const MURAL_COVER_MOTIFS = [
   "orbits",
   "grid",
@@ -2735,6 +2736,37 @@ function muralEditionInput(value: unknown, institutionId: string) {
   const periodKey = periodType === "month"
     ? month
     : `${month.slice(0, 4)}-${muralSlug(seasonName)}`;
+  if (!Array.isArray(input.gallerySlides) || input.gallerySlides.length < 1 || input.gallerySlides.length > 10) {
+    throw new HttpsError("invalid-argument", "La galería debe tener entre 1 y 10 diapositivas.");
+  }
+  const escapedInstitutionId = institutionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const gallerySlides = input.gallerySlides.map((entry, index) => {
+    const slide = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+    const id = String(slide.id ?? "").trim();
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) {
+      throw new HttpsError("invalid-argument", `La diapositiva ${index + 1} no es válida.`);
+    }
+    const slideImagePath = String(slide.imagePath ?? "").trim();
+    if (slideImagePath && !new RegExp(`^institutions/${escapedInstitutionId}/wall/gallery/[A-Za-z0-9._-]{1,260}$`).test(slideImagePath)) {
+      throw new HttpsError("invalid-argument", "Una imagen de la galería no pertenece a esta institución.");
+    }
+    const galleryLayout = String(slide.layout ?? "focus");
+    if (!MURAL_GALLERY_LAYOUTS.includes(galleryLayout as typeof MURAL_GALLERY_LAYOUTS[number])) {
+      throw new HttpsError("invalid-argument", "Selecciona una composición válida para la galería.");
+    }
+    return {
+      id,
+      kicker: muralOptionalText(slide.kicker, "El antetítulo de la diapositiva", 42),
+      title: muralText(slide.title, "El título de la diapositiva", 2, 84),
+      caption: muralOptionalText(slide.caption, "El texto de la diapositiva", 220),
+      imagePath: slideImagePath,
+      accentColor: muralColor(slide.accentColor, "el acento de la diapositiva"),
+      layout: galleryLayout as typeof MURAL_GALLERY_LAYOUTS[number],
+      depth: muralRange(slide.depth, "La profundidad", 1, 3),
+      imagePositionX: muralRange(slide.imagePositionX, "El enfoque horizontal", 0, 100),
+      imagePositionY: muralRange(slide.imagePositionY, "El enfoque vertical", 0, 100),
+    };
+  });
   return {
     requestedId: muralEditionId(input.id),
     periodType,
@@ -2744,6 +2776,7 @@ function muralEditionInput(value: unknown, institutionId: string) {
     seasonName,
     group,
     teacherId,
+    gallerySlides,
     cover: {
       kicker: muralText(coverInput.kicker, "El antetítulo", 2, 48),
       title: muralText(coverInput.title, "El título de portada", 4, 90),
@@ -2870,6 +2903,7 @@ function muralEditionResponse(id: string, edition: DocumentData) {
     teacherId: String(edition.teacherId ?? ""),
     teacherName: String(edition.teacherName ?? "Dirección CEHF"),
     cover: edition.cover ?? {},
+    gallerySlides: Array.isArray(edition.gallerySlides) ? edition.gallerySlides : [],
     createdAt: muralIso(edition.createdAt),
     updatedAt: muralIso(edition.updatedAt),
     updatedBy: String(edition.updatedBy ?? ""),
@@ -2902,6 +2936,7 @@ export const saveMuralEdition = onCall(async (request) => {
     const next = {
       ...currentData,
       cover: input.cover,
+      gallerySlides: input.gallerySlides,
       updatedAt: now,
       updatedBy: actor.uid,
       updatedByName: actor.name,
@@ -2959,6 +2994,7 @@ export const saveMuralEdition = onCall(async (request) => {
     teacherId: input.teacherId,
     teacherName: String(teacher.name ?? "Maestra CEHF"),
     cover: input.cover,
+    gallerySlides: input.gallerySlides,
     createdAt: targetData?.createdAt ?? now,
     createdBy: targetData?.createdBy ?? actor.uid,
     updatedAt: now,

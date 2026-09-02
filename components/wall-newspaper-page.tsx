@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Clock3,
   Heart,
+  ImagePlus,
+  Layers3,
   LoaderCircle,
   Maximize2,
   Palette,
@@ -20,13 +22,13 @@ import {
   Pause,
   Pencil,
   Play,
-  Quote,
   RotateCcw,
   Search,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   Type,
   Upload,
   UserRoundCheck,
@@ -50,6 +52,8 @@ import {
   muralCoverLimits,
   muralCoverMotifs,
   muralEditionSchema,
+  muralGalleryLayouts,
+  muralGalleryLimits,
   muralLimits,
   muralSubmissionSchema,
   type MuralEditionInput,
@@ -58,6 +62,7 @@ import {
 import {
   defaultMuralCover,
   defaultMuralEdition,
+  defaultMuralGallerySlides,
   reviewMuralStory,
   reviewerRoleLabel,
   saveMuralEdition,
@@ -70,6 +75,7 @@ import type {
   ManagedAccount,
   MuralCoverGradientPreset,
   MuralEdition,
+  MuralGallerySlide,
   PortalState,
   UserProfile,
   WallPost,
@@ -208,6 +214,9 @@ function editionToInput(edition: MuralEdition): MuralEditionInput {
     teacherId: edition.teacherId,
     teacherName: edition.teacherName,
     cover,
+    gallerySlides: (edition.gallerySlides?.length ? edition.gallerySlides : defaultMuralGallerySlides).map((slide) => Object.fromEntries(
+      Object.entries(slide).filter(([key]) => key !== "imageUrl"),
+    ) as MuralEditionInput["gallerySlides"][number]),
   };
 }
 
@@ -290,21 +299,77 @@ function MuralEditionCover({
   );
 }
 
+function Mural3DGallerySlide({
+  slide,
+  index,
+  total,
+  preview = false,
+}: {
+  slide: MuralGallerySlide;
+  index: number;
+  total: number;
+  preview?: boolean;
+}) {
+  const reduceMotion = useReducedMotion();
+  const sceneStyle = {
+    "--gallery-accent": slide.accentColor,
+    "--gallery-image-x": `${slide.imagePositionX}%`,
+    "--gallery-image-y": `${slide.imagePositionY}%`,
+    "--gallery-depth": slide.depth,
+    "--gallery-rotate-x": "0deg",
+    "--gallery-rotate-y": "0deg",
+  } as CSSProperties;
+
+  return (
+    <article
+      className={`mural-3d-gallery-slide layout-${slide.layout} depth-${slide.depth} ${slide.imageUrl ? "has-image" : "no-image"} ${preview ? "is-preview" : ""}`}
+      style={sceneStyle}
+      onPointerMove={(event) => {
+        if (preview || reduceMotion) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 2;
+        const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 2;
+        event.currentTarget.style.setProperty("--gallery-rotate-x", `${(-y * 3.5).toFixed(2)}deg`);
+        event.currentTarget.style.setProperty("--gallery-rotate-y", `${(x * 5).toFixed(2)}deg`);
+      }}
+      onPointerLeave={(event) => {
+        event.currentTarget.style.setProperty("--gallery-rotate-x", "0deg");
+        event.currentTarget.style.setProperty("--gallery-rotate-y", "0deg");
+      }}
+    >
+      <div className="mural-3d-orbit" aria-hidden="true"><i /><i /><i /></div>
+      <div className="mural-3d-backdrop" aria-hidden="true"><i /><i /><i /></div>
+      <div className="mural-3d-image-plane">
+        {slide.imageUrl ? (
+          <div role="img" aria-label={slide.title} style={{ backgroundImage: `url(${slide.imageUrl})` }} />
+        ) : (
+          <div className="mural-3d-placeholder" aria-hidden="true"><Layers3 /><span>CEHF</span></div>
+        )}
+        <i aria-hidden="true" />
+      </div>
+      <div className="mural-3d-copy">
+        <span className="mural-3d-kicker"><i />{slide.kicker || "GALERÍA CEHF"}</span>
+        <h2>{slide.title}</h2>
+        {slide.caption && <p>{slide.caption}</p>}
+      </div>
+      <div className="mural-3d-number" aria-hidden="true"><span>{String(index).padStart(2, "0")}</span><i />{String(total).padStart(2, "0")}</div>
+      <span className="mural-3d-watermark" aria-hidden="true">ENTRE LÍNEAS</span>
+    </article>
+  );
+}
+
 function MuralImmersiveView({
   edition,
-  stories,
   onClose,
-  onReadStory,
 }: {
   edition: MuralEdition;
-  stories: WallPost[];
   onClose: () => void;
-  onReadStory: (story: WallPost) => void;
 }) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [playing, setPlaying] = useState(false);
   const reduceMotion = useReducedMotion();
-  const slideCount = stories.length + 1;
+  const gallerySlides = edition.gallerySlides?.length ? edition.gallerySlides : defaultMuralGallerySlides;
+  const slideCount = gallerySlides.length + 1;
   const cover = edition.cover;
   const immersiveStyle = {
     "--mural-cover-bg": cover.backgroundColor,
@@ -339,7 +404,7 @@ function MuralImmersiveView({
 
   useEffect(() => {
     if (!playing || reduceMotion) return;
-    const timer = window.setInterval(() => move(1), 7000);
+    const timer = window.setInterval(() => move(1), 6500);
     return () => window.clearInterval(timer);
   }, [move, playing, reduceMotion]);
 
@@ -353,7 +418,7 @@ function MuralImmersiveView({
     return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, [onClose]);
 
-  const activeStory = activeSlide > 0 ? stories[activeSlide - 1] : undefined;
+  const activeGallerySlide = activeSlide > 0 ? gallerySlides[activeSlide - 1] : undefined;
   const closeImmersive = () => {
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
@@ -396,31 +461,23 @@ function MuralImmersiveView({
             >
               <MuralEditionCover edition={edition} onExplore={() => move(1)} />
             </motion.div>
-          ) : activeStory ? (
-            <motion.article
-              className={`mural-immersive-story story-${activeStory.accent}`}
-              key={activeStory.id}
-              initial={{ opacity: 0, x: reduceMotion ? 0 : 44, scale: reduceMotion ? 1 : 0.985 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: reduceMotion ? 0 : -44, scale: reduceMotion ? 1 : 0.985 }}
-              transition={{ duration: reduceMotion ? 0 : 0.42, ease: [0.22, 1, 0.36, 1] }}
+          ) : activeGallerySlide ? (
+            <motion.div
+              className="mural-immersive-gallery-wrap"
+              key={activeGallerySlide.id}
+              drag={reduceMotion ? false : "x"}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.16}
+              onDragEnd={(_, info) => {
+                if (Math.abs(info.offset.x) > 70) move(info.offset.x < 0 ? 1 : -1);
+              }}
+              initial={{ opacity: 0, rotateY: reduceMotion ? 0 : 18, z: reduceMotion ? 0 : -180, scale: reduceMotion ? 1 : 0.86 }}
+              animate={{ opacity: 1, rotateY: 0, z: 0, scale: 1 }}
+              exit={{ opacity: 0, rotateY: reduceMotion ? 0 : -16, z: reduceMotion ? 0 : -140, scale: reduceMotion ? 1 : 0.9 }}
+              transition={{ duration: reduceMotion ? 0 : 0.68, ease: [0.16, 1, 0.3, 1] }}
             >
-              <div className="mural-immersive-story-copy">
-                <div className="mural-immersive-story-index"><span>{String(activeSlide).padStart(2, "0")}</span><i /><small>{activeStory.category}</small></div>
-                <span className="mural-immersive-section">{activeStory.section ?? activeStory.category}</span>
-                <h2>{activeStory.title}</h2>
-                <p>{activeStory.lead ?? activeStory.excerpt}</p>
-                {activeStory.quote && <blockquote><Quote size={18} />{activeStory.quote}</blockquote>}
-                <div className="mural-immersive-byline"><span>Por <strong>{activeStory.author}</strong></span><i /><span>{activeStory.group}</span><i /><span>{activeStory.readingTime}</span></div>
-                <button type="button" onClick={() => onReadStory(activeStory)}>Abrir historia completa <ArrowRight size={17} /></button>
-              </div>
-              <div className="mural-immersive-story-visual" aria-hidden="true">
-                <div className={`mural-cover-motif motif-${edition.cover.motif}`}>{Array.from({ length: MURAL_GRAPHIC_PARTS }, (_, index) => <i key={index} />)}</div>
-                <span>PERIÓDICO<br />MURAL</span>
-                <Newspaper size={88} strokeWidth={1.2} />
-                <strong>{edition.periodLabel.slice(0, 3).toLocaleUpperCase("es-MX")}</strong>
-              </div>
-            </motion.article>
+              <Mural3DGallerySlide slide={activeGallerySlide} index={activeSlide} total={gallerySlides.length} />
+            </motion.div>
           ) : null}
         </AnimatePresence>
       </main>
@@ -429,7 +486,7 @@ function MuralImmersiveView({
         <button type="button" onClick={() => move(-1)} aria-label="Diapositiva anterior"><ChevronLeft size={19} />Anterior</button>
         <nav aria-label="Diapositivas del mural">
           {Array.from({ length: slideCount }, (_, index) => (
-            <button type="button" key={index} className={activeSlide === index ? "active" : ""} onClick={() => setActiveSlide(index)} aria-label={index === 0 ? "Ver portada" : `Ver historia ${index}`} aria-current={activeSlide === index ? "true" : undefined}><i /></button>
+            <button type="button" key={index} className={activeSlide === index ? "active" : ""} onClick={() => setActiveSlide(index)} aria-label={index === 0 ? "Ver portada" : `Ver diapositiva ${index}`} aria-current={activeSlide === index ? "true" : undefined}><i /></button>
           ))}
         </nav>
         <button type="button" onClick={() => move(1)}>Siguiente<ChevronRight size={19} /></button>
@@ -454,15 +511,19 @@ function MuralEditionEditor({
   groups: string[];
   busy: boolean;
   onClose: () => void;
-  onSave: (input: MuralEditionInput, image: File | null) => Promise<void>;
+  onSave: (input: MuralEditionInput, image: File | null, galleryImages: Record<string, File>) => Promise<void>;
 }) {
   const canAssign = profile.role === "director";
-  const [tab, setTab] = useState<"assignment" | "content" | "design" | "image">(
+  const [tab, setTab] = useState<"assignment" | "content" | "design" | "image" | "gallery">(
     canAssign ? "assignment" : "content",
   );
   const [draft, setDraft] = useState<MuralEditionInput>(() => editionToInput(edition));
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | undefined>(edition.cover.imageUrl);
+  const [galleryImages, setGalleryImages] = useState<Record<string, File>>({});
+  const [galleryPreviews, setGalleryPreviews] = useState<Record<string, string>>(() => Object.fromEntries((edition.gallerySlides ?? []).map((slide) => [slide.id, slide.imageUrl ?? ""])));
+  const [selectedSlideId, setSelectedSlideId] = useState(() => draft.gallerySlides[0]?.id ?? "");
+  const generatedPreviewUrls = useRef(new Set<string>());
   const [error, setError] = useState("");
   const teachers = accounts.filter((account) => account.role === "teacher" && account.active);
   const coverField = <Key extends keyof MuralEditionInput["cover"]>(
@@ -473,6 +534,15 @@ function MuralEditionEditor({
     cover: { ...previous.cover, [key]: value },
   }));
   const selectedTeacher = teachers.find((teacher) => teacher.uid === draft.teacherId);
+  const selectedSlideIndex = Math.max(0, draft.gallerySlides.findIndex((slide) => slide.id === selectedSlideId));
+  const selectedSlide = draft.gallerySlides[selectedSlideIndex];
+  const gallerySlideField = <Key extends keyof MuralEditionInput["gallerySlides"][number]>(
+    key: Key,
+    value: MuralEditionInput["gallerySlides"][number][Key],
+  ) => setDraft((previous) => ({
+    ...previous,
+    gallerySlides: previous.gallerySlides.map((slide) => slide.id === selectedSlideId ? { ...slide, [key]: value } : slide),
+  }));
   const previewEdition: MuralEdition = {
     ...edition,
     periodType: draft.periodType,
@@ -483,11 +553,12 @@ function MuralEditionEditor({
     teacherId: draft.teacherId,
     teacherName: selectedTeacher?.name ?? draft.teacherName,
     cover: { ...draft.cover, imageUrl: imagePreview },
+    gallerySlides: draft.gallerySlides.map((slide) => ({ ...slide, imageUrl: galleryPreviews[slide.id] })),
   };
 
   useEffect(() => () => {
-    if (imagePreview?.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
-  }, [imagePreview]);
+    generatedPreviewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   const chooseImage = (file?: File) => {
     if (!file) return;
@@ -497,7 +568,51 @@ function MuralEditionEditor({
     }
     setError("");
     setImage(file);
-    setImagePreview(URL.createObjectURL(file));
+    const previewUrl = URL.createObjectURL(file);
+    generatedPreviewUrls.current.add(previewUrl);
+    setImagePreview(previewUrl);
+  };
+
+  const chooseGalleryImage = (file?: File) => {
+    if (!file || !selectedSlide) return;
+    if (!( ["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) || file.size >= 8 * 1024 * 1024) {
+      setError("Selecciona una imagen JPG, PNG o WEBP menor a 8 MB.");
+      return;
+    }
+    setError("");
+    const previewUrl = URL.createObjectURL(file);
+    generatedPreviewUrls.current.add(previewUrl);
+    setGalleryImages((previous) => ({ ...previous, [selectedSlide.id]: file }));
+    setGalleryPreviews((previous) => ({ ...previous, [selectedSlide.id]: previewUrl }));
+  };
+
+  const addGallerySlide = () => {
+    if (draft.gallerySlides.length >= muralGalleryLimits.slides) return;
+    const template = defaultMuralGallerySlides[draft.gallerySlides.length % defaultMuralGallerySlides.length];
+    const slide = { ...template, id: `gallery-${crypto.randomUUID()}`, imagePath: "" };
+    setDraft((previous) => ({ ...previous, gallerySlides: [...previous.gallerySlides, slide] }));
+    setSelectedSlideId(slide.id);
+    setTab("gallery");
+  };
+
+  const moveGallerySlide = (delta: number) => {
+    if (!selectedSlide) return;
+    const nextIndex = selectedSlideIndex + delta;
+    if (nextIndex < 0 || nextIndex >= draft.gallerySlides.length) return;
+    setDraft((previous) => {
+      const slides = [...previous.gallerySlides];
+      [slides[selectedSlideIndex], slides[nextIndex]] = [slides[nextIndex], slides[selectedSlideIndex]];
+      return { ...previous, gallerySlides: slides };
+    });
+  };
+
+  const removeGallerySlide = () => {
+    if (!selectedSlide || draft.gallerySlides.length === 1) return;
+    const nextSlides = draft.gallerySlides.filter((slide) => slide.id !== selectedSlide.id);
+    setDraft((previous) => ({ ...previous, gallerySlides: nextSlides }));
+    setGalleryImages((previous) => { const next = { ...previous }; delete next[selectedSlide.id]; return next; });
+    setGalleryPreviews((previous) => { const next = { ...previous }; delete next[selectedSlide.id]; return next; });
+    setSelectedSlideId(nextSlides[Math.min(selectedSlideIndex, nextSlides.length - 1)].id);
   };
 
   const tabs = [
@@ -505,6 +620,7 @@ function MuralEditionEditor({
     { id: "content" as const, label: "Textos", icon: Type },
     { id: "design" as const, label: "Diseño", icon: Palette },
     { id: "image" as const, label: "Imagen", icon: Camera },
+    { id: "gallery" as const, label: "Galería 3D", icon: Layers3 },
   ];
 
   return (
@@ -528,11 +644,11 @@ function MuralEditionEditor({
             return;
           }
           setError("");
-          void onSave(result.data, image);
+          void onSave(result.data, image, galleryImages);
         }}
       >
         <header className="mural-studio-header">
-          <div><span className="eyebrow">ESTUDIO DE PORTADA</span><h2>Diseña la edición</h2><p>Personaliza cada detalle y revisa el resultado en tiempo real.</p></div>
+          <div><span className="eyebrow">ESTUDIO DEL MURAL</span><h2>Diseña la edición</h2><p>Personaliza la portada y su galería inmersiva en tiempo real.</p></div>
           <button className="plain-icon" type="button" onClick={onClose} disabled={busy} aria-label="Cerrar"><X size={20} /></button>
         </header>
         <div className="mural-studio-body">
@@ -615,16 +731,51 @@ function MuralEditionEditor({
                 <div className="mural-image-tip"><SlidersHorizontal size={17} /><span>Usa el contraste para mantener el texto legible cuando la imagen tenga zonas claras.</span></div>
               </div>
             )}
+
+            {tab === "gallery" && selectedSlide && (
+              <div className="mural-studio-panel mural-gallery-editor">
+                <div className="mural-control-heading"><Layers3 size={17} /><div><strong>Galería inmersiva 3D</strong><span>Portada + diapositivas visuales; las historias permanecen en el mural normal.</span></div></div>
+                <div className="mural-gallery-slide-rail" aria-label="Diapositivas de la galería">
+                  {draft.gallerySlides.map((slide, index) => (
+                    <button type="button" key={slide.id} className={slide.id === selectedSlide.id ? "active" : ""} onClick={() => setSelectedSlideId(slide.id)}>
+                      <span style={galleryPreviews[slide.id] ? { backgroundImage: `url(${galleryPreviews[slide.id]})` } : { background: `linear-gradient(145deg, #111744, ${slide.accentColor})` }}>{index + 1}</span>
+                      <small>{slide.title || `Slide ${index + 1}`}</small>
+                    </button>
+                  ))}
+                  <button type="button" className="add" onClick={addGallerySlide} disabled={draft.gallerySlides.length >= muralGalleryLimits.slides}><ImagePlus size={17} /><small>Agregar</small></button>
+                </div>
+                <div className="mural-gallery-editor-actions">
+                  <span>Slide {selectedSlideIndex + 1} de {draft.gallerySlides.length}</span>
+                  <div>
+                    <button type="button" onClick={() => moveGallerySlide(-1)} disabled={selectedSlideIndex === 0} aria-label="Mover antes"><ChevronLeft size={15} /></button>
+                    <button type="button" onClick={() => moveGallerySlide(1)} disabled={selectedSlideIndex === draft.gallerySlides.length - 1} aria-label="Mover después"><ChevronRight size={15} /></button>
+                    <button type="button" className="danger" onClick={removeGallerySlide} disabled={draft.gallerySlides.length === 1} aria-label="Eliminar diapositiva"><Trash2 size={15} /></button>
+                  </div>
+                </div>
+                <label className="mural-image-drop compact"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseGalleryImage(event.target.files?.[0])} /><Upload size={20} /><strong>{galleryPreviews[selectedSlide.id] ? "Cambiar imagen del slide" : "Subir imagen del slide"}</strong><span>JPG, PNG o WEBP · máximo 8 MB</span></label>
+                {galleryPreviews[selectedSlide.id] && <button type="button" className="mural-gallery-remove-image" onClick={() => { setGalleryImages((previous) => { const next = { ...previous }; delete next[selectedSlide.id]; return next; }); setGalleryPreviews((previous) => ({ ...previous, [selectedSlide.id]: "" })); gallerySlideField("imagePath", ""); }}><X size={13} />Quitar imagen</button>}
+                <label>Antetítulo<input value={selectedSlide.kicker} maxLength={muralGalleryLimits.kicker} onChange={(event) => gallerySlideField("kicker", event.target.value)} /><small>{selectedSlide.kicker.length}/{muralGalleryLimits.kicker}</small></label>
+                <label>Título visual<textarea value={selectedSlide.title} maxLength={muralGalleryLimits.title} onChange={(event) => gallerySlideField("title", event.target.value)} /><small>{selectedSlide.title.length}/{muralGalleryLimits.title}</small></label>
+                <label>Texto breve<textarea value={selectedSlide.caption} maxLength={muralGalleryLimits.caption} onChange={(event) => gallerySlideField("caption", event.target.value)} /><small>{selectedSlide.caption.length}/{muralGalleryLimits.caption}</small></label>
+                <label>Composición 3D<div className="mural-option-grid three">{muralGalleryLayouts.map((layout) => <button type="button" key={layout} className={selectedSlide.layout === layout ? "active" : ""} onClick={() => gallerySlideField("layout", layout)}><span className={`gallery-layout-icon ${layout}`}><i /><i /></span><small>{layout === "focus" ? "Enfoque" : layout === "split" ? "Dividida" : "Cinemática"}</small></button>)}</div></label>
+                <div className="mural-color-row single"><label>Color de luz<span><input type="color" value={selectedSlide.accentColor} onChange={(event) => gallerySlideField("accentColor", event.target.value)} /><code>{selectedSlide.accentColor}</code></span></label></div>
+                <label className="mural-range-label"><span><strong>Profundidad 3D</strong><small>Nivel {selectedSlide.depth}</small></span><input type="range" min="1" max="3" value={selectedSlide.depth} onChange={(event) => gallerySlideField("depth", Number(event.target.value))} /></label>
+                <label className="mural-range-label"><span><strong>Enfoque horizontal</strong><small>{selectedSlide.imagePositionX}%</small></span><input type="range" min="0" max="100" value={selectedSlide.imagePositionX} onChange={(event) => gallerySlideField("imagePositionX", Number(event.target.value))} /></label>
+                <label className="mural-range-label"><span><strong>Enfoque vertical</strong><small>{selectedSlide.imagePositionY}%</small></span><input type="range" min="0" max="100" value={selectedSlide.imagePositionY} onChange={(event) => gallerySlideField("imagePositionY", Number(event.target.value))} /></label>
+              </div>
+            )}
           </aside>
           <section className="mural-studio-preview">
             <div className="mural-preview-heading"><span>VISTA PREVIA EN VIVO</span><small>{previewEdition.periodLabel} · {previewEdition.group}</small></div>
-            <MuralEditionCover edition={previewEdition} imagePreview={imagePreview} preview />
+            {tab === "gallery" && selectedSlide ? (
+              <div className="mural-gallery-editor-preview"><Mural3DGallerySlide slide={{ ...selectedSlide, imageUrl: galleryPreviews[selectedSlide.id] }} index={selectedSlideIndex + 1} total={draft.gallerySlides.length} preview /></div>
+            ) : <MuralEditionCover edition={previewEdition} imagePreview={imagePreview} preview />}
             <div className="mural-preview-devices"><span><i />Escritorio</span><span><i />Adaptable a móvil</span></div>
           </section>
         </div>
         <footer className="mural-studio-footer">
           <span><CheckCircle2 size={16} />Los cambios se verán para toda la comunidad.</span>
-          <div><button type="button" className="secondary-button" onClick={onClose} disabled={busy}>Cancelar</button><button className="primary-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}Guardar y publicar portada</button></div>
+          <div><button type="button" className="secondary-button" onClick={onClose} disabled={busy}>Cancelar</button><button className="primary-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}Guardar y publicar edición</button></div>
         </footer>
       </motion.form>
     </motion.div>
@@ -1106,10 +1257,6 @@ export function WallNewspaperPage({
     const realIds = new Set(workspace.published.map((story) => story.id));
     return [...workspace.published, ...curatedPublished.filter((story) => !realIds.has(story.id))];
   }, [curatedPublished, workspace.published]);
-  const immersiveStories = useMemo(() => {
-    const currentEditionStories = publishedStories.filter((story) => story.editionId === edition.id);
-    return currentEditionStories.length ? currentEditionStories : publishedStories;
-  }, [edition.id, publishedStories]);
   const mine = firebaseReady
     ? workspace.mine
     : state.wallPosts.filter((story) => story.authorId === profile.uid && story.status !== "published");
@@ -1211,11 +1358,11 @@ export function WallNewspaperPage({
     setPage(1);
   };
 
-  const saveEdition = async (input: MuralEditionInput, image: File | null) => {
+  const saveEdition = async (input: MuralEditionInput, image: File | null, galleryImages: Record<string, File>) => {
     setEditionSaving(true);
     try {
       if (firebaseReady) {
-        await saveMuralEdition(profile, input, image);
+        await saveMuralEdition(profile, input, image, galleryImages);
       } else {
         let imageUrl = input.cover.imagePath ? edition.cover.imageUrl : "";
         if (image) {
@@ -1226,6 +1373,20 @@ export function WallNewspaperPage({
             reader.readAsDataURL(image);
           });
         }
+        const gallerySlides = await Promise.all(input.gallerySlides.map(async (slide) => {
+          const galleryImage = galleryImages[slide.id];
+          if (!galleryImage) {
+            const currentSlide = edition.gallerySlides?.find((item) => item.id === slide.id);
+            return { ...slide, imageUrl: slide.imagePath ? currentSlide?.imageUrl : "" };
+          }
+          const slideImageUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result ?? ""));
+            reader.onerror = () => reject(new Error("No pudimos leer una imagen de la galería."));
+            reader.readAsDataURL(galleryImage);
+          });
+          return { ...slide, imageUrl: slideImageUrl };
+        }));
         const teacher = accounts.find((account) => account.uid === input.teacherId);
         const periodLabel = input.periodType === "month" ? muralMonthLabel(input.month) : input.seasonName;
         const nextEdition: MuralEdition = {
@@ -1241,6 +1402,7 @@ export function WallNewspaperPage({
           teacherId: input.teacherId,
           teacherName: teacher?.name ?? input.teacherName,
           cover: { ...input.cover, imageUrl },
+          gallerySlides,
           updatedAt: new Date().toISOString(),
           updatedBy: profile.uid,
           updatedByName: profile.name,
@@ -1250,7 +1412,7 @@ export function WallNewspaperPage({
         updateState((previous) => ({ ...previous, muralEdition: nextEdition }));
       }
       setEditionEditorOpen(false);
-      toast.success("Edición y portada actualizadas", {
+      toast.success("Edición y galería actualizadas", {
         description: profile.role === "director"
           ? "La asignación y el diseño ya están visibles para la comunidad."
           : "El nuevo diseño ya está visible para la comunidad.",
@@ -1449,7 +1611,7 @@ export function WallNewspaperPage({
         <div className="proposal-note"><Sparkles size={21} /><div><strong>¿Tienes una historia para compartir?</strong><p>Envíala al equipo editorial. {edition.teacherName} o Dirección la revisará antes de publicarla.</p></div><button className="secondary-button" onClick={() => { setEditingStory(null); setSubmissionOpen(true); }}>Proponer historia</button></div>
       )}
 
-      <AnimatePresence>{immersiveOpen && <MuralImmersiveView edition={edition} stories={immersiveStories} onClose={closeImmersive} onReadStory={(story) => { closeImmersive(); setReaderPost(story); }} />}</AnimatePresence>
+      <AnimatePresence>{immersiveOpen && <MuralImmersiveView edition={edition} onClose={closeImmersive} />}</AnimatePresence>
       <AnimatePresence>{readerPost && <WallStoryReader post={readerPost} onClose={() => setReaderPost(null)} onFavorite={() => toggleFavorite(readerPost.id)} />}</AnimatePresence>
       <AnimatePresence>{submissionOpen && <MuralSubmissionModal story={editingStory} busy={saving} onClose={() => { if (!saving) { setSubmissionOpen(false); setEditingStory(null); } }} onSubmit={submitStory} />}</AnimatePresence>
       <AnimatePresence>{changesStory && <ReviewRequestModal story={changesStory} busy={reviewBusy === changesStory.id} onClose={() => { if (!reviewBusy) setChangesStory(null); }} onSubmit={(note) => reviewStory(changesStory, "request_changes", note)} />}</AnimatePresence>

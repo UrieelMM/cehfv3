@@ -731,6 +731,22 @@ export type MuralEditionCover = {
   overlayOpacity: number;
 };
 
+export type MuralGalleryLayout = "focus" | "split" | "cinematic";
+
+export type MuralGallerySlide = {
+  id: string;
+  kicker: string;
+  title: string;
+  caption: string;
+  imagePath: string;
+  imageUrl?: string;
+  accentColor: string;
+  layout: MuralGalleryLayout;
+  depth: number;
+  imagePositionX: number;
+  imagePositionY: number;
+};
+
 export type MuralEdition = {
   id: string;
   institutionId: string;
@@ -744,6 +760,7 @@ export type MuralEdition = {
   teacherId: string;
   teacherName: string;
   cover: MuralEditionCover;
+  gallerySlides: MuralGallerySlide[];
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
