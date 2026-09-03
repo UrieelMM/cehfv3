@@ -438,7 +438,7 @@ export function WhatsAppAdminPanel({
                           void run(
                             `test-${contact.id}`,
                             () => sendWhatsAppTest(contact.id),
-                            "Mensaje de prueba enviado a Meta",
+                            "Meta aceptó el mensaje de prueba",
                           ).catch(() => undefined)
                         }
                       >

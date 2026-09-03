@@ -4956,12 +4956,13 @@ export const sendWhatsAppTest = onCall(
         "El alumno no tiene un WhatsApp válido y autorizado en Gestión de accesos.",
       );
     }
-    const delivery = await sendWhatsAppOutboxDocument(
-      db.doc(`messageOutbox/${outboxId}`),
-    );
+    const outboxReference = db.doc(`messageOutbox/${outboxId}`);
+    const delivery = await sendWhatsAppOutboxDocument(outboxReference);
     await db.collection("auditEvents").add({
       institutionId: director.institutionId,
-      action: "whatsapp_test_sent",
+      action: delivery.status === "sent"
+        ? "whatsapp_test_sent"
+        : "whatsapp_test_not_sent",
       actorUid: director.uid,
       actorName: director.name,
       studentId,
@@ -4969,6 +4970,17 @@ export const sendWhatsAppTest = onCall(
       deliveryStatus: delivery.status,
       createdAt: FieldValue.serverTimestamp(),
     });
+    if (delivery.status !== "sent") {
+      const outbox = (await outboxReference.get()).data();
+      const providerMessage = String(outbox?.lastErrorMessage ?? "").trim();
+      throw new HttpsError(
+        delivery.status === "queued" ? "unavailable" : "failed-precondition",
+        providerMessage ||
+          (delivery.status === "queued"
+            ? "Meta no aceptó el mensaje todavía; quedó pendiente de reintento."
+            : "Meta rechazó el mensaje de prueba. Revisa la plantilla configurada."),
+      );
+    }
     return { outboxId, status: delivery.status };
   },
 );
