@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import {
@@ -2575,6 +2575,14 @@ function compactMuralText(value: unknown) {
     .trim();
 }
 
+function muralGroupKey(value: unknown) {
+  return compactMuralText(value)
+    .toLocaleLowerCase("es-MX")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.º°\s_-]/g, "");
+}
+
 function muralText(
   value: unknown,
   label: string,
@@ -2903,6 +2911,8 @@ function muralStoryResponse(id: string, story: DocumentData) {
     accent: String(story.accent ?? "violet"),
     status: String(story.status ?? "submitted"),
     favorite: false,
+    likeCount: Math.max(0, Number(story.likeCount ?? 0) || 0),
+    likedByCurrentUser: false,
     section: String(story.section ?? ""),
     lead: String(story.lead ?? ""),
     paragraphs: Array.isArray(story.paragraphs) ? story.paragraphs.map(String) : [],
@@ -3015,6 +3025,32 @@ export const saveMuralEdition = onCall(async (request) => {
   const targetReference = db.doc(`muralEditions/${targetId}`);
   const targetSnapshot = await targetReference.get();
   const targetData = targetSnapshot.data();
+  if (
+    targetData &&
+    !reuseCurrent &&
+    muralGroupKey(targetData.group) !== muralGroupKey(input.group)
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Ese periodo ya pertenece a otro grupo. Elige un periodo distinto para no mezclar contenidos.",
+    );
+  }
+  if (
+    reuseCurrent &&
+    muralGroupKey(currentData?.group) !== muralGroupKey(input.group)
+  ) {
+    const existingStories = await db.collection("wallPosts")
+      .where("institutionId", "==", actor.institutionId)
+      .where("editionId", "==", targetId)
+      .limit(1)
+      .get();
+    if (!existingStories.empty) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Esta edición ya tiene historias. Crea un periodo nuevo para asignar otro grupo.",
+      );
+    }
+  }
   const pendingStoriesSnapshot = reuseCurrent && currentData?.teacherId !== input.teacherId
     ? await db.collection("wallPosts")
         .where("institutionId", "==", actor.institutionId)
@@ -3104,6 +3140,18 @@ export const submitWallStory = onCall(async (request) => {
     .get();
   const activeEditionDocument = editionSnapshot.docs[0];
   const activeEdition = activeEditionDocument?.data();
+  if (!activeEditionDocument || !activeEdition) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Dirección debe publicar y asignar una edición antes de recibir historias.",
+    );
+  }
+  if (muralGroupKey(activeEdition.group) !== muralGroupKey(student.group)) {
+    throw new HttpsError(
+      "permission-denied",
+      `La edición actual está a cargo del grupo ${String(activeEdition.group ?? "asignado")}.`,
+    );
+  }
   const content = {
     title: submission.title,
     excerpt: submission.lead,
@@ -3131,6 +3179,12 @@ export const submitWallStory = onCall(async (request) => {
         throw new HttpsError(
           "failed-precondition",
           "Esta historia ya no está disponible para correcciones.",
+        );
+      }
+      if (previous.editionId !== activeEditionDocument.id) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Esta historia pertenece a una edición anterior y ya no puede mezclarse con la actual.",
         );
       }
       const nextStory = {
@@ -3164,11 +3218,11 @@ export const submitWallStory = onCall(async (request) => {
       author: student.name,
       authorId: student.uid,
       group: student.group,
-      editionId: activeEditionDocument?.id ?? "",
-      editionLabel: String(activeEdition?.periodLabel ?? ""),
-      editionGroup: String(activeEdition?.group ?? ""),
-      assignedTeacherId: String(activeEdition?.teacherId ?? ""),
-      assignedTeacherName: String(activeEdition?.teacherName ?? ""),
+      editionId: activeEditionDocument.id,
+      editionLabel: String(activeEdition.periodLabel ?? ""),
+      editionGroup: String(activeEdition.group ?? ""),
+      assignedTeacherId: String(activeEdition.teacherId ?? ""),
+      assignedTeacherName: String(activeEdition.teacherName ?? ""),
       accent: muralAccent(storyReference.id),
       status: "submitted",
       version: 1,
@@ -3179,6 +3233,7 @@ export const submitWallStory = onCall(async (request) => {
       approvedById: "",
       approvedByName: "",
       approvedByRole: "",
+      likeCount: 0,
       createdAt: now,
       createdBy: student.uid,
       submittedAt: now,
@@ -3238,12 +3293,31 @@ export const reviewWallStory = onCall(async (request) => {
   }
 
   const storyReference = db.doc(`wallPosts/${storyId}`);
+  const activeEditionSnapshot = await db.collection("muralEditions")
+    .where("institutionId", "==", reviewer.institutionId)
+    .where("active", "==", true)
+    .limit(1)
+    .get();
+  const activeEditionReference = activeEditionSnapshot.docs[0]?.ref;
+  if (!activeEditionReference) {
+    throw new HttpsError("failed-precondition", "No hay una edición activa para revisar historias.");
+  }
   const now = Timestamp.now();
   const savedStory = await db.runTransaction(async (transaction) => {
-    const snapshot = await transaction.get(storyReference);
+    const [snapshot, activeEditionDocument] = await Promise.all([
+      transaction.get(storyReference),
+      transaction.get(activeEditionReference),
+    ]);
     const previous = snapshot.data();
+    const activeEdition = activeEditionDocument.data();
     if (!snapshot.exists || previous?.institutionId !== reviewer.institutionId) {
       throw new HttpsError("not-found", "La historia ya no está disponible.");
+    }
+    if (!activeEditionDocument.exists || activeEdition?.active !== true || previous.editionId !== activeEditionDocument.id) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Esta historia pertenece a otra edición del Periódico mural.",
+      );
     }
     if (previous.status !== "submitted") {
       throw new HttpsError(
@@ -3253,8 +3327,9 @@ export const reviewWallStory = onCall(async (request) => {
     }
     if (
       reviewer.role === "teacher" &&
-      previous.assignedTeacherId &&
-      previous.assignedTeacherId !== reviewer.uid
+      (activeEdition.teacherId !== reviewer.uid || (
+        previous.assignedTeacherId && previous.assignedTeacherId !== reviewer.uid
+      ))
     ) {
       throw new HttpsError(
         "permission-denied",
@@ -3305,6 +3380,77 @@ export const reviewWallStory = onCall(async (request) => {
     decision,
   });
   return { story: muralStoryResponse(storyId, savedStory) };
+});
+
+export const toggleWallStoryLike = onCall(async (request) => {
+  const actor = await requireMuralUser(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const storyId = muralStoryId(input.storyId);
+  const activeEditionSnapshot = await db.collection("muralEditions")
+    .where("institutionId", "==", actor.institutionId)
+    .where("active", "==", true)
+    .limit(1)
+    .get();
+  const activeEditionReference = activeEditionSnapshot.docs[0]?.ref;
+  if (!activeEditionReference) {
+    throw new HttpsError(
+      "failed-precondition",
+      "No hay una edición activa para registrar este me gusta.",
+    );
+  }
+
+  const storyReference = db.doc(`wallPosts/${storyId}`);
+  const likeId = createHash("sha256")
+    .update(`${actor.institutionId}:${storyId}:${actor.uid}`)
+    .digest("hex");
+  const likeReference = db.doc(`wallPostLikes/${likeId}`);
+  const now = Timestamp.now();
+
+  return db.runTransaction(async (transaction) => {
+    const [storySnapshot, likeSnapshot, activeEditionDocument] = await Promise.all([
+      transaction.get(storyReference),
+      transaction.get(likeReference),
+      transaction.get(activeEditionReference),
+    ]);
+    const story = storySnapshot.data();
+    const activeEdition = activeEditionDocument.data();
+    if (
+      !storySnapshot.exists ||
+      story?.institutionId !== actor.institutionId ||
+      story.status !== "published"
+    ) {
+      throw new HttpsError("not-found", "La historia ya no está disponible.");
+    }
+    if (
+      !activeEditionDocument.exists ||
+      activeEdition?.active !== true ||
+      story.editionId !== activeEditionDocument.id
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Los me gusta sólo están disponibles en la edición actual.",
+      );
+    }
+
+    const currentCount = Math.max(0, Number(story.likeCount ?? 0) || 0);
+    if (likeSnapshot.exists) {
+      const nextCount = Math.max(0, currentCount - 1);
+      transaction.delete(likeReference);
+      transaction.update(storyReference, { likeCount: nextCount, likesUpdatedAt: now });
+      return { storyId, likeCount: nextCount, liked: false };
+    }
+
+    const nextCount = currentCount + 1;
+    transaction.create(likeReference, {
+      institutionId: actor.institutionId,
+      editionId: activeEditionDocument.id,
+      storyId,
+      userId: actor.uid,
+      createdAt: now,
+    });
+    transaction.update(storyReference, { likeCount: nextCount, likesUpdatedAt: now });
+    return { storyId, likeCount: nextCount, liked: true };
+  });
 });
 
 async function muralReviewers(institutionId: string, assignedTeacherId = "") {

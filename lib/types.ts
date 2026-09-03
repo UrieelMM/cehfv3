@@ -655,6 +655,8 @@ export type WallPost = {
   accent: "violet" | "coral" | "mint" | "gold";
   status: "draft" | "submitted" | "changes_requested" | "published" | "archived";
   favorite: boolean;
+  likeCount?: number;
+  likedByCurrentUser?: boolean;
   section?: string;
   lead?: string;
   paragraphs?: string[];

@@ -38,6 +38,12 @@ type ReviewMuralStoryPayload = {
   reviewNote: string;
 };
 
+type ToggleMuralStoryLikeResponse = {
+  storyId: string;
+  likeCount: number;
+  liked: boolean;
+};
+
 export const defaultMuralCover: MuralEditionCover = {
   kicker: "PERIÓDICO MURAL · CAMPUS CEHF",
   title: "Ideas que dejan huella",
@@ -105,7 +111,10 @@ function dateFromData(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-function wallPostFromSnapshot(snapshot: QueryDocumentSnapshot<DocumentData>): WallPost {
+function wallPostFromSnapshot(
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+  likedStoryIds: ReadonlySet<string> = new Set(),
+): WallPost {
   const data = snapshot.data();
   const publishedAt = dateFromData(data.publishedAt);
   const createdAt = dateFromData(data.createdAt);
@@ -139,7 +148,9 @@ function wallPostFromSnapshot(snapshot: QueryDocumentSnapshot<DocumentData>): Wa
       ? (String(data.accent) as WallPost["accent"])
       : "violet",
     status,
-    favorite: false,
+    favorite: likedStoryIds.has(snapshot.id),
+    likeCount: Math.max(0, Number(data.likeCount ?? 0) || 0),
+    likedByCurrentUser: likedStoryIds.has(snapshot.id),
     section: String(data.section ?? category),
     lead: String(data.lead ?? data.excerpt ?? ""),
     paragraphs,
@@ -294,10 +305,11 @@ function newestFirst(items: WallPost[]) {
 
 export function watchMuralWorkspace(
   profile: UserProfile,
+  editionId: string,
   callback: (workspace: MuralWorkspace) => void,
   onError?: (error: Error) => void,
 ): Unsubscribe {
-  if (!firebase.db) {
+  if (!firebase.db || !editionId) {
     callback({ published: [], mine: [], reviewQueue: [] });
     return () => undefined;
   }
@@ -305,10 +317,49 @@ export function watchMuralWorkspace(
   let published: WallPost[] = [];
   let mine: WallPost[] = [];
   let reviewQueue: WallPost[] = [];
+  let likedStoryIds = new Set<string>();
   const emit = () => callback({ published, mine, reviewQueue });
+  const applyLikeState = (story: WallPost): WallPost => ({
+    ...story,
+    favorite: likedStoryIds.has(story.id),
+    likedByCurrentUser: likedStoryIds.has(story.id),
+  });
   const muralCollection = collection(firebase.db, "wallPosts");
   const stops: Unsubscribe[] = [];
   const handleError = (error: Error) => onError?.(error);
+
+  stops.push(onSnapshot(
+    query(
+      collection(firebase.db, "wallPostLikes"),
+      where("institutionId", "==", profile.institutionId),
+      where("editionId", "==", editionId),
+      where("userId", "==", profile.uid),
+      limit(500),
+    ),
+    (snapshot) => {
+      likedStoryIds = new Set(snapshot.docs.map((entry) => String(entry.data().storyId ?? "")).filter(Boolean));
+      published = published.map(applyLikeState);
+      mine = mine.map(applyLikeState);
+      emit();
+    },
+    handleError,
+  ));
+
+  stops.push(onSnapshot(
+    query(
+      muralCollection,
+      where("institutionId", "==", profile.institutionId),
+      where("editionId", "==", editionId),
+      where("status", "==", "published"),
+      orderBy("updatedAt", "desc"),
+      limit(500),
+    ),
+    (snapshot) => {
+      published = newestFirst(snapshot.docs.map((entry) => wallPostFromSnapshot(entry, likedStoryIds)));
+      emit();
+    },
+    handleError,
+  ));
 
   if (profile.role === "student") {
     stops.push(
@@ -316,26 +367,13 @@ export function watchMuralWorkspace(
         query(
           muralCollection,
           where("institutionId", "==", profile.institutionId),
-          where("status", "==", "published"),
-          orderBy("updatedAt", "desc"),
-          limit(500),
-        ),
-        (snapshot) => {
-          published = newestFirst(snapshot.docs.map(wallPostFromSnapshot));
-          emit();
-        },
-        handleError,
-      ),
-      onSnapshot(
-        query(
-          muralCollection,
-          where("institutionId", "==", profile.institutionId),
+          where("editionId", "==", editionId),
           where("authorId", "==", profile.uid),
           orderBy("updatedAt", "desc"),
           limit(100),
         ),
         (snapshot) => {
-          mine = newestFirst(snapshot.docs.map(wallPostFromSnapshot));
+          mine = newestFirst(snapshot.docs.map((entry) => wallPostFromSnapshot(entry, likedStoryIds)));
           emit();
         },
         handleError,
@@ -347,18 +385,17 @@ export function watchMuralWorkspace(
         query(
           muralCollection,
           where("institutionId", "==", profile.institutionId),
+          where("editionId", "==", editionId),
+          where("status", "==", "submitted"),
           orderBy("updatedAt", "desc"),
-          limit(500),
+          limit(200),
         ),
         (snapshot) => {
-          const stories = newestFirst(snapshot.docs.map(wallPostFromSnapshot));
-          published = stories.filter((story) => story.status === "published");
+          const stories = newestFirst(snapshot.docs.map((entry) => wallPostFromSnapshot(entry, likedStoryIds)));
           reviewQueue = stories.filter((story) =>
-            story.status === "submitted" && (
-              profile.role === "director" ||
-              !story.assignedTeacherId ||
-              story.assignedTeacherId === profile.uid
-            ),
+            profile.role === "director" ||
+            !story.assignedTeacherId ||
+            story.assignedTeacherId === profile.uid,
           );
           emit();
         },
@@ -368,6 +405,60 @@ export function watchMuralWorkspace(
   }
 
   return () => stops.forEach((stop) => stop());
+}
+
+export function watchMuralEditionArchive(
+  profile: UserProfile,
+  callback: (editions: MuralEdition[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db) {
+    callback([]);
+    return () => undefined;
+  }
+  let revision = 0;
+  return onSnapshot(
+    query(
+      collection(firebase.db, "muralEditions"),
+      where("institutionId", "==", profile.institutionId),
+      orderBy("updatedAt", "desc"),
+      limit(80),
+    ),
+    (snapshot) => {
+      const currentRevision = ++revision;
+      void Promise.all(snapshot.docs
+        .filter((entry) => entry.data().active !== true)
+        .map((entry) => muralEditionFromData(entry.id, entry.data())))
+        .then((editions) => {
+          if (currentRevision === revision) callback(editions);
+        });
+    },
+    (error) => onError?.(error),
+  );
+}
+
+export function watchPublishedMuralStories(
+  profile: UserProfile,
+  editionId: string,
+  callback: (stories: WallPost[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db || !editionId) {
+    callback([]);
+    return () => undefined;
+  }
+  return onSnapshot(
+    query(
+      collection(firebase.db, "wallPosts"),
+      where("institutionId", "==", profile.institutionId),
+      where("editionId", "==", editionId),
+      where("status", "==", "published"),
+      orderBy("updatedAt", "desc"),
+      limit(500),
+    ),
+    (snapshot) => callback(newestFirst(snapshot.docs.map((entry) => wallPostFromSnapshot(entry)))),
+    (error) => onError?.(error),
+  );
 }
 
 export function watchActiveMuralEdition(
@@ -479,6 +570,16 @@ export async function reviewMuralStory(
   );
   const result = await callable({ storyId, decision, reviewNote });
   return result.data.story;
+}
+
+export async function toggleMuralStoryLike(storyId: string) {
+  if (!firebase.functions) throw new Error("Firebase no está configurado.");
+  const callable = httpsCallable<{ storyId: string }, ToggleMuralStoryLikeResponse>(
+    firebase.functions,
+    "toggleWallStoryLike",
+  );
+  const result = await callable({ storyId });
+  return result.data;
 }
 
 export function reviewerRoleLabel(role: Role | undefined) {

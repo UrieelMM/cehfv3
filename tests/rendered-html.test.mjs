@@ -476,3 +476,29 @@ test("ships a configurable virtual exhibition for the mural", async () => {
   assert.match(css, /@keyframes mural-transition-wipe/);
   assert.match(storageRules, /wall\/\{postId\}\/\{assetId\}/);
 });
+
+test("keeps mural stories, likes and archives scoped to their edition", async () => {
+  const [muralSource, muralFirebase, functionsSource, firestoreRules, indexes, css] = await Promise.all([
+    readFile(new URL("components/wall-newspaper-page.tsx", projectRoot), "utf8"),
+    readFile(new URL("lib/mural-firebase.ts", projectRoot), "utf8"),
+    readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
+    readFile(new URL("firestore.rules", projectRoot), "utf8"),
+    readFile(new URL("firestore.indexes.json", projectRoot), "utf8"),
+    readFile(new URL("app/globals.css", projectRoot), "utf8"),
+  ]);
+
+  assert.match(muralSource, /Periódicos murales anteriores/);
+  assert.match(muralSource, /role="button"/);
+  assert.match(muralSource, /second\.likeCount/);
+  assert.match(muralSource, /studentCanSubmit/);
+  assert.match(muralFirebase, /watchMuralEditionArchive/);
+  assert.match(muralFirebase, /watchPublishedMuralStories/);
+  assert.match(muralFirebase, /where\("editionId", "==", editionId\)/);
+  assert.match(functionsSource, /toggleWallStoryLike/);
+  assert.match(functionsSource, /wallPostLikes/);
+  assert.match(functionsSource, /muralGroupKey\(activeEdition\.group\)/);
+  assert.match(firestoreRules, /match \/wallPostLikes\/\{likeId\}/);
+  assert.match(indexes, /"collectionGroup": "wallPostLikes"/);
+  assert.match(css, /\.mural-archive-grid/);
+  assert.match(css, /\.wall-card\[role="button"\]:focus-visible/);
+});

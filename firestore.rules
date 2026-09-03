@@ -1304,6 +1304,14 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /wallPostLikes/{likeId} {
+      // Cada persona sólo consulta sus propios me gusta. El contador global
+      // y la escritura del voto se actualizan de forma atómica en Cloud Functions.
+      allow read: if sameInstitution(resource.data)
+        && request.auth.uid == resource.data.userId;
+      allow create, update, delete: if false;
+    }
+
     match /forums/{forumId} {
       allow read: if sameInstitution(resource.data) && (
         isStaff() ||
