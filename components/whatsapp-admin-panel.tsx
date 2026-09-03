@@ -14,6 +14,7 @@ import {
   Send,
   ShieldCheck,
   UserRoundCheck,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -116,6 +117,7 @@ export function WhatsAppAdminPanel({
   const [pageIndex, setPageIndex] = useState(0);
   const [nextPageToken, setNextPageToken] = useState<string>();
   const [busy, setBusy] = useState<string | null>(null);
+  const [contactsOpen, setContactsOpen] = useState(false);
   const registeredStudentCount = useMemo(
     () => accounts.filter((account) => account.role === "student" && account.active).length,
     [accounts],
@@ -175,6 +177,20 @@ export function WhatsAppAdminPanel({
     };
   }, [firebaseReady, institutionId, isDirector]);
 
+  useEffect(() => {
+    if (!contactsOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContactsOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [contactsOpen]);
+
   function applyLogFilters() {
     const next = { ...logFilters };
     setAppliedLogFilters(next);
@@ -222,6 +238,85 @@ export function WhatsAppAdminPanel({
     } finally {
       setBusy(null);
     }
+  }
+
+  async function runTestAndRefreshLog(studentId: string) {
+    try {
+      await sendWhatsAppTest(studentId);
+    } finally {
+      setPageTokens([""]);
+      setPageIndex(0);
+      await loadLog(appliedLogFilters);
+    }
+  }
+
+  function renderContactCard(contact: GuardianContact) {
+    return (
+      <article className="whatsapp-contact-card" key={contact.id}>
+        <div className="whatsapp-contact-main">
+          <span className="whatsapp-contact-icon">
+            <UserRoundCheck size={18} />
+          </span>
+          <div>
+            <strong>{contact.name}</strong>
+            <span>{contact.phoneMasked}</span>
+            <small>Alumno: {contact.studentNames.join(", ") || "Sin alumno activo"}</small>
+          </div>
+          <span className={`whatsapp-status ${contact.status}`}>
+            {contactStatusLabels[contact.status]}
+          </span>
+        </div>
+        <div className="whatsapp-contact-actions">
+          {contact.status === "active" ? (
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() =>
+                void run(
+                  `pause-${contact.id}`,
+                  () => setStudentWhatsAppAuthorized(contact.id, false),
+                  "Envíos desactivados para este contacto",
+                ).catch(() => undefined)
+              }
+            >
+              <Pause size={14} /> Pausar
+            </button>
+          ) : contact.status === "paused" ? (
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() =>
+                void run(
+                  `activate-${contact.id}`,
+                  () => setStudentWhatsAppAuthorized(contact.id, true),
+                  "Envíos activados para este contacto",
+                ).catch(() => undefined)
+              }
+            >
+              <Play size={14} /> Reactivar
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={Boolean(busy) || contact.status !== "active"}
+            onClick={() =>
+              void run(
+                `test-${contact.id}`,
+                () => runTestAndRefreshLog(contact.id),
+                "Meta aceptó el mensaje de prueba",
+              ).catch(() => undefined)
+            }
+          >
+            {busy === `test-${contact.id}` ? (
+              <RefreshCw size={14} className="spin" />
+            ) : (
+              <Send size={14} />
+            )}{" "}
+            Probar
+          </button>
+        </div>
+      </article>
+    );
   }
 
   if (!firebaseReady) {
@@ -375,7 +470,7 @@ export function WhatsAppAdminPanel({
                 </div>
               </details>
 
-            <div className="whatsapp-contact-list">
+            <div className="whatsapp-contact-list whatsapp-contact-preview">
               <div className="whatsapp-subheading">
                 <div>
                   <h3>Contactos autorizados</h3>
@@ -384,69 +479,18 @@ export function WhatsAppAdminPanel({
                     {registeredStudentCount ? ` de ${registeredStudentCount} alumnos` : ""}. Los números provienen de Gestión de accesos.
                   </p>
                 </div>
+                {contacts.length > 0 && (
+                  <button
+                    className="secondary-button whatsapp-view-all"
+                    onClick={() => setContactsOpen(true)}
+                    type="button"
+                  >
+                    Ver todos ({contacts.length})
+                  </button>
+                )}
               </div>
               {contacts.length ? (
-                contacts.map((contact) => (
-                  <article className="whatsapp-contact-card" key={contact.id}>
-                    <div className="whatsapp-contact-main">
-                      <span className="whatsapp-contact-icon">
-                        <UserRoundCheck size={18} />
-                      </span>
-                      <div>
-                        <strong>{contact.name}</strong>
-                        <span>{contact.phoneMasked}</span>
-                        <small>Alumno: {contact.studentNames.join(", ") || "Sin alumno activo"}</small>
-                      </div>
-                      <span className={`whatsapp-status ${contact.status}`}>
-                        {contactStatusLabels[contact.status]}
-                      </span>
-                    </div>
-                    <div className="whatsapp-contact-actions">
-                      {contact.status === "active" ? (
-                        <button
-                          type="button"
-                          disabled={Boolean(busy)}
-                          onClick={() =>
-                            void run(
-                              `pause-${contact.id}`,
-                              () => setStudentWhatsAppAuthorized(contact.id, false),
-                              "Envíos desactivados para este contacto",
-                            ).catch(() => undefined)
-                          }
-                        >
-                          <Pause size={14} /> Pausar
-                        </button>
-                      ) : contact.status === "paused" ? (
-                        <button
-                          type="button"
-                          disabled={Boolean(busy)}
-                          onClick={() =>
-                            void run(
-                              `activate-${contact.id}`,
-                              () => setStudentWhatsAppAuthorized(contact.id, true),
-                              "Envíos activados para este contacto",
-                            ).catch(() => undefined)
-                          }
-                        >
-                          <Play size={14} /> Reactivar
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        disabled={Boolean(busy) || contact.status !== "active"}
-                        onClick={() =>
-                          void run(
-                            `test-${contact.id}`,
-                            () => sendWhatsAppTest(contact.id),
-                            "Meta aceptó el mensaje de prueba",
-                          ).catch(() => undefined)
-                        }
-                      >
-                        {busy === `test-${contact.id}` ? <RefreshCw size={14} className="spin" /> : <Send size={14} />} Probar
-                      </button>
-                    </div>
-                  </article>
-                ))
+                contacts.slice(0, 2).map(renderContactCard)
               ) : (
                 <div className="empty-state whatsapp-empty">
                   <MessageCircle size={24} />
@@ -661,7 +705,7 @@ export function WhatsAppAdminPanel({
                 onClick={openPreviousLogPage}
                 type="button"
               >
-                <ChevronLeft size={16} /> Anterior
+                <ChevronLeft size={16} /> Atrás
               </button>
               <span>Página {pageIndex + 1}</span>
               <button
@@ -674,6 +718,41 @@ export function WhatsAppAdminPanel({
             </div>
           </div>
         </>
+      )}
+      {contactsOpen && (
+        <div
+          className="whatsapp-contact-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setContactsOpen(false);
+          }}
+        >
+          <section
+            aria-labelledby="whatsapp-contacts-title"
+            aria-modal="true"
+            className="whatsapp-contact-modal"
+            role="dialog"
+          >
+            <header>
+              <div>
+                <span className="eyebrow">DESTINATARIOS DE WHATSAPP</span>
+                <h2 id="whatsapp-contacts-title">Contactos autorizados</h2>
+                <p>{contacts.length} contactos registrados desde Gestión de accesos.</p>
+              </div>
+              <button
+                aria-label="Cerrar contactos autorizados"
+                autoFocus
+                className="plain-icon"
+                onClick={() => setContactsOpen(false)}
+                type="button"
+              >
+                <X size={19} />
+              </button>
+            </header>
+            <div className="whatsapp-contact-modal-list">
+              {contacts.map(renderContactCard)}
+            </div>
+          </section>
+        </div>
       )}
     </section>
   );

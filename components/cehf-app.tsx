@@ -200,9 +200,38 @@ const routes: Record<SectionKey, string> = {
   forum: "/forum",
   workshops: "/workshops",
   users: "/users",
-  settings: "/settings",
+  settings: "/settings/appearance",
   profile: "/profile",
 };
+
+type SettingsTabId =
+  | "appearance"
+  | "notifications"
+  | "grading"
+  | "whatsapp"
+  | "academic";
+
+const settingsRoutes: Record<SettingsTabId, string> = {
+  appearance: "/settings/appearance",
+  notifications: "/settings/notifications",
+  grading: "/settings/grading",
+  whatsapp: "/settings/whatsapp",
+  academic: "/settings/academic",
+};
+
+function settingsTabFromPath(path: string): SettingsTabId {
+  const [section, tab] = path.split("/").filter(Boolean);
+  return section === "settings" && tab && tab in settingsRoutes
+    ? (tab as SettingsTabId)
+    : "appearance";
+}
+
+function canOpenSettingsTab(tab: SettingsTabId, role: Role) {
+  if (tab === "grading") return role === "teacher";
+  if (tab === "whatsapp") return role === "director" || role === "teacher";
+  if (tab === "academic") return role === "director";
+  return true;
+}
 
 const sectionFromPath = (path: string): SectionKey => {
   const name = path.split("/").filter(Boolean)[0] as
@@ -2632,18 +2661,36 @@ function SettingsPage({
   managedAccounts: ManagedAccount[];
   firebaseReady: boolean;
 }) {
-  type SettingsTabId =
-    | "appearance"
-    | "notifications"
-    | "grading"
-    | "whatsapp"
-    | "academic";
-
   const [activeSettingsTab, setActiveSettingsTab] =
-    useState<SettingsTabId>("appearance");
+    useState<SettingsTabId>(() =>
+      typeof window === "undefined"
+        ? "appearance"
+        : settingsTabFromPath(window.location.pathname),
+    );
   const [demoSeedLoading, setDemoSeedLoading] = useState(false);
   const [demoSeedClearing, setDemoSeedClearing] = useState(false);
   const [demoSeedCounts, setDemoSeedCounts] = useState<DemoSeedCounts | null>(null);
+
+  useEffect(() => {
+    const syncSettingsRoute = () => {
+      const requestedTab = settingsTabFromPath(window.location.pathname);
+      const nextTab = canOpenSettingsTab(requestedTab, role)
+        ? requestedTab
+        : "appearance";
+      setActiveSettingsTab(nextTab);
+      if (window.location.pathname !== settingsRoutes[nextTab]) {
+        window.history.replaceState({}, "", settingsRoutes[nextTab]);
+      }
+    };
+    syncSettingsRoute();
+    window.addEventListener("popstate", syncSettingsRoute);
+    return () => window.removeEventListener("popstate", syncSettingsRoute);
+  }, [role]);
+
+  const openSettingsTab = (tab: SettingsTabId) => {
+    window.history.pushState({}, "", settingsRoutes[tab]);
+    setActiveSettingsTab(tab);
+  };
 
   const handleDemoSeed = async () => {
     if (demoSeedLoading) return;
@@ -2740,7 +2787,7 @@ function SettingsPage({
             className={activeSettingsTab === tab.id ? "active" : ""}
             id={`settings-tab-${tab.id}`}
             key={tab.id}
-            onClick={() => setActiveSettingsTab(tab.id)}
+            onClick={() => openSettingsTab(tab.id)}
             onKeyDown={(event) => {
               if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
                 return;
@@ -2750,7 +2797,7 @@ function SettingsPage({
               const nextIndex =
                 (index + direction + settingsTabs.length) % settingsTabs.length;
               const nextTab = settingsTabs[nextIndex];
-              setActiveSettingsTab(nextTab.id);
+              openSettingsTab(nextTab.id);
               document.getElementById(`settings-tab-${nextTab.id}`)?.focus();
             }}
             role="tab"

@@ -1,0 +1,146 @@
+/* Compact WhatsApp settings controls and authorized-contact modal. */
+.whatsapp-admin-panel .whatsapp-config-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.62fr);
+}
+
+.whatsapp-admin-panel .whatsapp-check-card,
+.whatsapp-admin-panel .whatsapp-time-field {
+  border-radius: 11px;
+  min-height: 72px;
+  padding: 12px 13px;
+}
+
+.whatsapp-admin-panel .whatsapp-check-card {
+  align-items: center;
+  gap: 9px;
+}
+
+.whatsapp-admin-panel .whatsapp-check-card input {
+  height: 15px;
+  margin: 0;
+  width: 15px;
+}
+
+.whatsapp-admin-panel .whatsapp-check-card strong,
+.whatsapp-admin-panel .whatsapp-time-field > span {
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.whatsapp-admin-panel .whatsapp-check-card small,
+.whatsapp-admin-panel .whatsapp-time-field small {
+  font-size: 0.7rem;
+  line-height: 1.3;
+  margin-left: 0;
+}
+
+.whatsapp-admin-panel .whatsapp-time-field {
+  gap: 4px;
+}
+
+.whatsapp-admin-panel .whatsapp-time-field input {
+  font-size: 0.78rem;
+  min-height: 34px;
+  padding: 6px 9px;
+  width: min(100%, 150px);
+}
+
+.whatsapp-admin-panel .whatsapp-actions-row button,
+.whatsapp-admin-panel .whatsapp-log-refresh,
+.whatsapp-admin-panel .whatsapp-view-all {
+  font-size: 0.75rem;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.whatsapp-admin-panel .whatsapp-log-pagination button {
+  border-radius: 8px;
+  font-size: 0.72rem;
+  min-height: 31px;
+  padding: 5px 8px;
+}
+
+.whatsapp-contact-preview .whatsapp-subheading {
+  align-items: center;
+}
+
+.whatsapp-contact-modal-backdrop {
+  align-items: center;
+  background: rgb(9 13 28 / 0.62);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 300;
+}
+
+.whatsapp-contact-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: 0 28px 90px rgb(5 10 24 / 0.3);
+  display: grid;
+  gap: 16px;
+  max-height: min(82dvh, 760px);
+  max-width: 920px;
+  overflow: hidden;
+  padding: 18px;
+  width: min(100%, 920px);
+}
+
+.whatsapp-contact-modal > header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.whatsapp-contact-modal h2 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  margin: 3px 0;
+}
+
+.whatsapp-contact-modal header p {
+  color: var(--muted);
+  font-size: 0.76rem;
+  margin: 0;
+}
+
+.whatsapp-contact-modal-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1px 4px 4px 1px;
+}
+
+@media (max-width: 720px) {
+  .whatsapp-admin-panel .whatsapp-config-grid,
+  .whatsapp-contact-modal-list {
+    grid-template-columns: 1fr;
+  }
+
+  .whatsapp-contact-preview .whatsapp-subheading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .whatsapp-admin-panel .whatsapp-view-all {
+    width: auto;
+  }
+
+  .whatsapp-contact-modal-backdrop {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .whatsapp-contact-modal {
+    border-radius: 16px;
+    max-height: 88dvh;
+    padding: 15px;
+  }
+}

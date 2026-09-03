@@ -8,6 +8,7 @@ import "./materials.css";
 import "./reviews.css";
 import "./grades.css";
 import "./landing.css";
+import "./whatsapp-settings.css";
 
 const themeBootstrapScript = `
   (() => {
