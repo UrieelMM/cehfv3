@@ -207,6 +207,10 @@ export function buildDailyReportTemplateParameters(
   ];
 }
 
+export function templateParameterValues(value: unknown) {
+  return Array.isArray(value) ? value.map(String) : [];
+}
+
 export function dailyOutboxId(
   businessDate: string,
   contactId: string,

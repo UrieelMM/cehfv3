@@ -39,6 +39,7 @@ import {
   normalizeMexicanPhone,
   retryDelayMinutes,
   shouldRunDailySummary,
+  templateParameterValues,
   type DailyAttendanceStatus,
   type DailyHomeworkStatus,
   type DailyParticipationStatus,
@@ -4809,7 +4810,7 @@ async function sendWhatsAppOutboxDocument(reference: DocumentReference) {
             components: [
               {
                 type: "body",
-                parameters: notificationRecipients(message.templateParameters).map(
+                parameters: templateParameterValues(message.templateParameters).map(
                   (parameter) => ({ type: "text", text: parameter }),
                 ),
               },

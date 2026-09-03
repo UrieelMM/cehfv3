@@ -13,6 +13,7 @@ import {
   normalizeMexicanPhone,
   retryDelayMinutes,
   shouldRunDailySummary,
+  templateParameterValues,
 } from "../lib/whatsapp-core.js";
 
 test("normaliza teléfonos mexicanos sin conservar el prefijo móvil antiguo", () => {
@@ -67,6 +68,13 @@ test("genera los seis parámetros del reporte diario con emojis", () => {
       "😐",
       "❌",
     ],
+  );
+});
+
+test("conserva parámetros repetidos de la plantilla y su orden", () => {
+  assert.deepEqual(
+    templateParameterValues(["María", "Mateo", "fecha", "✅", "😊", "✅"]),
+    ["María", "Mateo", "fecha", "✅", "😊", "✅"],
   );
 });
 
