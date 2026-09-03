@@ -2523,8 +2523,8 @@ const MURAL_COVER_LAYOUTS = ["split", "editorial", "immersive"] as const;
 const MURAL_COVER_FONTS = ["modern", "editorial", "classic"] as const;
 const MURAL_COVER_GRADIENTS = ["campus", "aurora", "coral", "cobalt"] as const;
 const MURAL_GALLERY_LAYOUTS = ["focus", "split", "cinematic"] as const;
-const MURAL_SCENE_STYLES = ["aurora", "constellation", "museum"] as const;
-const MURAL_SCENE_TRANSITIONS = ["orbit", "zoom", "lift"] as const;
+const MURAL_SCENE_STYLES = ["aurora", "constellation", "museum", "archive", "ocean", "festival"] as const;
+const MURAL_SCENE_TRANSITIONS = ["orbit", "zoom", "lift", "flip", "wipe", "drift"] as const;
 const MURAL_REVEAL_MODES = ["all", "steps"] as const;
 const MURAL_COVER_MOTIFS = [
   "orbits",

@@ -29,8 +29,8 @@ export const muralCoverLayouts = ["split", "editorial", "immersive"] as const;
 export const muralCoverFonts = ["modern", "editorial", "classic"] as const;
 export const muralCoverGradients = ["campus", "aurora", "coral", "cobalt"] as const;
 export const muralGalleryLayouts = ["focus", "split", "cinematic"] as const;
-export const muralSceneStyles = ["aurora", "constellation", "museum"] as const;
-export const muralSceneTransitions = ["orbit", "zoom", "lift"] as const;
+export const muralSceneStyles = ["aurora", "constellation", "museum", "archive", "ocean", "festival"] as const;
+export const muralSceneTransitions = ["orbit", "zoom", "lift", "flip", "wipe", "drift"] as const;
 export const muralRevealModes = ["all", "steps"] as const;
 export const muralCoverMotifs = [
   "orbits",

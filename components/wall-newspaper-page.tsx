@@ -21,9 +21,7 @@ import {
   Maximize2,
   Palette,
   Newspaper,
-  Pause,
   Pencil,
-  Play,
   Presentation,
   RotateCcw,
   Search,
@@ -82,6 +80,7 @@ import type {
   MuralCoverGradientPreset,
   MuralEdition,
   MuralGallerySlide,
+  MuralSceneTransition,
   PortalState,
   UserProfile,
   WallPost,
@@ -168,12 +167,18 @@ const muralSceneStyleLabels = {
   aurora: { name: "Aurora", description: "Luz suave y profundidad contemporánea." },
   constellation: { name: "Constelación", description: "Puntos de luz para temas históricos o científicos." },
   museum: { name: "Museo", description: "Iluminación editorial cálida y sobria." },
+  archive: { name: "Archivo", description: "Texturas de papel y luz ámbar para memoria e historia." },
+  ocean: { name: "Océano", description: "Capas turquesa y movimiento sereno para explorar ideas." },
+  festival: { name: "Festival", description: "Destellos de color para celebraciones, arte y proyectos." },
 } as const;
 
 const muralTransitionLabels = {
   orbit: { name: "Órbita", description: "Entrada tridimensional lateral." },
   zoom: { name: "Acercamiento", description: "La escena aparece desde la profundidad." },
   lift: { name: "Ascenso", description: "Movimiento vertical tipo escenario." },
+  flip: { name: "Giro", description: "La escena se abre como un panel tridimensional." },
+  wipe: { name: "Revelado", description: "Un barrido descubre el contenido de izquierda a derecha." },
+  drift: { name: "Diagonal", description: "Entrada inclinada con energía y profundidad." },
 } as const;
 
 const MURAL_GRAPHIC_PARTS = 14;
@@ -317,6 +322,91 @@ function MuralEditionCover({
   );
 }
 
+function muralSceneMotion(transition: MuralSceneTransition, reduceMotion: boolean) {
+  const animate = {
+    opacity: 1,
+    x: 0,
+    y: 0,
+    rotateX: 0,
+    rotateY: 0,
+    rotateZ: 0,
+    skewX: 0,
+    z: 0,
+    scale: 1,
+    filter: "blur(0px)",
+    clipPath: "inset(0% 0% 0% 0% round 28px)",
+  };
+  if (reduceMotion) return { initial: animate, animate, exit: { ...animate, opacity: 0 }, duration: 0 };
+
+  const transitions = {
+    orbit: {
+      initial: { ...animate, opacity: 0, x: 180, rotateY: -48, z: -280, scale: 0.76 },
+      exit: { ...animate, opacity: 0, x: -150, rotateY: 38, z: -220, scale: 0.84 },
+    },
+    zoom: {
+      initial: { ...animate, opacity: 0, scale: 0.38, filter: "blur(22px)" },
+      exit: { ...animate, opacity: 0, scale: 1.22, filter: "blur(14px)" },
+    },
+    lift: {
+      initial: { ...animate, opacity: 0, y: 150, rotateX: 18, scale: 0.9 },
+      exit: { ...animate, opacity: 0, y: -120, rotateX: -13, scale: 0.94 },
+    },
+    flip: {
+      initial: { ...animate, opacity: 0, rotateX: -78, y: 34, scale: 0.82, transformOrigin: "50% 100%" },
+      exit: { ...animate, opacity: 0, rotateX: 72, y: -28, scale: 0.84, transformOrigin: "50% 0%" },
+    },
+    wipe: {
+      initial: { ...animate, opacity: 1, x: -54, clipPath: "inset(0% 100% 0% 0% round 28px)" },
+      exit: { ...animate, opacity: 1, x: 54, clipPath: "inset(0% 0% 0% 100% round 28px)" },
+    },
+    drift: {
+      initial: { ...animate, opacity: 0, x: 150, y: -110, rotateZ: 8, skewX: -5, scale: 0.74 },
+      exit: { ...animate, opacity: 0, x: -130, y: 100, rotateZ: -7, skewX: 4, scale: 0.82 },
+    },
+  } as const;
+
+  return { ...transitions[transition], animate, duration: transition === "wipe" ? 0.82 : 0.72 };
+}
+
+function MuralSceneTitle({ title, layout }: { title: string; layout: MuralGallerySlide["layout"] }) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const titleNode = titleRef.current;
+    const slideNode = titleNode?.closest<HTMLElement>(".mural-3d-gallery-slide");
+    if (!titleNode || !slideNode) return;
+    let animationFrame = 0;
+
+    const fitTitle = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        titleNode.style.removeProperty("font-size");
+        const maximum = Number.parseFloat(window.getComputedStyle(titleNode).fontSize);
+        if (!Number.isFinite(maximum) || titleNode.clientWidth === 0) return;
+        const compact = slideNode.clientWidth < 680;
+        const minimum = compact ? 26 : 38;
+        const maximumHeight = slideNode.clientHeight * (layout === "cinematic" ? (compact ? 0.27 : 0.43) : (compact ? 0.48 : 0.56));
+        let size = maximum;
+        titleNode.style.fontSize = `${size}px`;
+        while ((titleNode.scrollWidth > titleNode.clientWidth + 1 || titleNode.scrollHeight > maximumHeight) && size > minimum) {
+          size -= 1;
+          titleNode.style.fontSize = `${size}px`;
+        }
+      });
+    };
+
+    fitTitle();
+    const observer = new ResizeObserver(fitTitle);
+    observer.observe(slideNode);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+    };
+  }, [layout, title]);
+
+  return <h2 ref={titleRef}>{title}</h2>;
+}
+
 function Mural3DGallerySlide({
   slide,
   index,
@@ -333,11 +423,11 @@ function Mural3DGallerySlide({
     .split(/\n\s*\n/)
     .filter(Boolean);
   const facts = slide.facts ?? [];
-  const [revealedCount, setRevealedCount] = useState(1);
+  const [activeIdea, setActiveIdea] = useState(0);
   const [imageDetailsOpen, setImageDetailsOpen] = useState(false);
-  const visibleParagraphs = preview || (slide.revealMode ?? "all") !== "steps"
-    ? paragraphs
-    : paragraphs.slice(0, revealedCount);
+  const guidedReading = (slide.revealMode ?? "all") === "steps" && paragraphs.length > 1;
+  const visibleIdea = Math.min(activeIdea, paragraphs.length - 1);
+  const visibleParagraphs = guidedReading ? [paragraphs[visibleIdea] ?? paragraphs[0]] : paragraphs;
   const sceneStyle = {
     "--gallery-accent": slide.accentColor,
     "--gallery-image-x": `${slide.imagePositionX}%`,
@@ -359,12 +449,12 @@ function Mural3DGallerySlide({
             <div className="mural-3d-placeholder" aria-hidden="true"><Layers3 /><span>CEHF</span></div>
           )}
           <i aria-hidden="true" />
-          {slide.layout === "split" && !preview && (slide.caption || facts.length > 0) && <button type="button" className="mural-image-explore-button" onClick={() => setImageDetailsOpen((current) => !current)} aria-expanded={imageDetailsOpen}><Eye size={16} />{imageDetailsOpen ? "Cerrar detalle" : "Explorar imagen"}</button>}
+          {slide.layout === "split" && (slide.caption || facts.length > 0) && <button type="button" className="mural-image-explore-button" onClick={() => setImageDetailsOpen((current) => !current)} aria-expanded={imageDetailsOpen}><Eye size={16} />{imageDetailsOpen ? "Cerrar detalle" : "Explorar imagen"}</button>}
           <AnimatePresence>{slide.layout === "split" && imageDetailsOpen && <motion.aside className="mural-image-detail-panel" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: reduceMotion ? 0 : 0.28 }}><strong>{slide.title}</strong>{slide.caption && <p>{slide.caption}</p>}{facts.length > 0 && <div>{facts.map((fact, factIndex) => <span key={`${factIndex}-${fact}`}>{fact}</span>)}</div>}</motion.aside>}</AnimatePresence>
         </div>}
       <div className="mural-3d-copy">
         <span className="mural-3d-kicker"><i />{slide.kicker || "EXPOSICIÓN CEHF"}</span>
-        <h2>{slide.title}</h2>
+        <MuralSceneTitle title={slide.title} layout={slide.layout} />
         {slide.caption && <p>{slide.caption}</p>}
       </div>
       {slide.layout === "focus" && facts.length > 0 && <div className="mural-scene-facts" aria-label="Ideas clave">{facts.map((fact, factIndex) => <motion.span key={`${factIndex}-${fact}`} initial={{ opacity: 0, y: reduceMotion ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reduceMotion ? 0 : 0.32 + factIndex * 0.08 }}>{fact}</motion.span>)}</div>}
@@ -373,9 +463,10 @@ function Mural3DGallerySlide({
           {slide.contentKicker && <span>{slide.contentKicker}</span>}
           <h3>{slide.contentTitle || "Desarrolla el tema"}</h3>
           {slide.contentSubtitle && <h4>{slide.contentSubtitle}</h4>}
-          <div className="mural-3d-editorial-body"><AnimatePresence initial={false}>{visibleParagraphs.map((paragraph, paragraphIndex) => <motion.p key={`${paragraphIndex}-${paragraph}`} initial={{ opacity: 0, y: reduceMotion ? 0 : 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : 0.32 }}>{paragraph}</motion.p>)}</AnimatePresence></div>
+          {guidedReading && <div className="mural-guided-status"><span>IDEA {visibleIdea + 1} DE {paragraphs.length}</span><div>{paragraphs.map((_, ideaIndex) => <i key={ideaIndex} className={ideaIndex === visibleIdea ? "active" : ""} />)}</div></div>}
+          <div className="mural-3d-editorial-body"><AnimatePresence mode="wait" initial={false}>{visibleParagraphs.map((paragraph, paragraphIndex) => <motion.p key={guidedReading ? `${visibleIdea}-${paragraph}` : `${paragraphIndex}-${paragraph}`} initial={{ opacity: 0, x: reduceMotion ? 0 : 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduceMotion ? 0 : -10 }} transition={{ duration: reduceMotion ? 0 : 0.28 }}>{paragraph}</motion.p>)}</AnimatePresence></div>
           {facts.length > 0 && <div className="mural-editorial-facts">{facts.map((fact, factIndex) => <span key={`${factIndex}-${fact}`}>{fact}</span>)}</div>}
-          {!preview && (slide.revealMode ?? "all") === "steps" && paragraphs.length > 1 && <button type="button" className="mural-reveal-next" onClick={() => setRevealedCount((current) => current >= paragraphs.length ? 1 : current + 1)}><ListChecks size={16} />{revealedCount >= paragraphs.length ? "Volver a empezar" : `Mostrar idea ${revealedCount + 1}`}<small>{Math.min(revealedCount, paragraphs.length)}/{paragraphs.length}</small></button>}
+          {guidedReading && <div className="mural-guided-controls"><button type="button" onClick={() => setActiveIdea(Math.max(0, visibleIdea - 1))} disabled={visibleIdea === 0}><ChevronLeft size={15} />Idea anterior</button><button type="button" className="primary" onClick={() => setActiveIdea(visibleIdea >= paragraphs.length - 1 ? 0 : visibleIdea + 1)}><ListChecks size={15} />{visibleIdea >= paragraphs.length - 1 ? "Reiniciar recorrido" : "Siguiente idea"}<ChevronRight size={15} /></button></div>}
         </section>
       )}
       <div className="mural-3d-number" aria-hidden="true"><span>{String(index).padStart(2, "0")}</span><i />{String(total).padStart(2, "0")}</div>
@@ -392,7 +483,6 @@ function MuralImmersiveView({
   onClose: () => void;
 }) {
   const [activeSlide, setActiveSlide] = useState(0);
-  const [playing, setPlaying] = useState(false);
   const reduceMotion = useReducedMotion();
   const gallerySlides = edition.gallerySlides?.length ? edition.gallerySlides : defaultMuralGallerySlides;
   const slideCount = gallerySlides.length + 1;
@@ -429,12 +519,6 @@ function MuralImmersiveView({
   }, [move, onClose]);
 
   useEffect(() => {
-    if (!playing || reduceMotion) return;
-    const timer = window.setInterval(() => move(1), 6500);
-    return () => window.clearInterval(timer);
-  }, [move, playing, reduceMotion]);
-
-  useEffect(() => {
     let enteredNativeFullscreen = Boolean(document.fullscreenElement);
     const onFullscreenChange = () => {
       if (document.fullscreenElement) enteredNativeFullscreen = true;
@@ -445,20 +529,7 @@ function MuralImmersiveView({
   }, [onClose]);
 
   const activeGallerySlide = activeSlide > 0 ? gallerySlides[activeSlide - 1] : undefined;
-  const galleryEntrance = reduceMotion || !activeGallerySlide
-    ? { opacity: 1 }
-    : (activeGallerySlide.transition ?? "orbit") === "zoom"
-      ? { opacity: 0, scale: 0.72, filter: "blur(12px)" }
-      : (activeGallerySlide.transition ?? "orbit") === "lift"
-        ? { opacity: 0, y: 88, rotateX: 9, scale: 0.94 }
-        : { opacity: 0, rotateY: 22, z: -190, scale: 0.86 };
-  const galleryExit = reduceMotion || !activeGallerySlide
-    ? { opacity: 0 }
-    : (activeGallerySlide.transition ?? "orbit") === "zoom"
-      ? { opacity: 0, scale: 1.12, filter: "blur(9px)" }
-      : (activeGallerySlide.transition ?? "orbit") === "lift"
-        ? { opacity: 0, y: -70, rotateX: -7, scale: 0.96 }
-        : { opacity: 0, rotateY: -17, z: -150, scale: 0.9 };
+  const galleryMotion = muralSceneMotion(activeGallerySlide?.transition ?? "orbit", Boolean(reduceMotion));
   const closeImmersive = () => {
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
@@ -481,9 +552,6 @@ function MuralImmersiveView({
         <div className="mural-immersive-brand"><span>CE</span><i /><div><strong>Exposición virtual</strong><small>{edition.periodLabel} · {edition.group}</small></div></div>
         <div className="mural-immersive-progress"><span>{activeSlide + 1} / {slideCount}</span><div><i style={{ width: `${((activeSlide + 1) / slideCount) * 100}%` }} /></div></div>
         <div className="mural-immersive-header-actions">
-          <button type="button" className={playing ? "active" : ""} onClick={() => setPlaying((current) => !current)} disabled={Boolean(reduceMotion)} aria-label={playing ? "Pausar presentación" : "Reproducir presentación automáticamente"}>
-            {playing ? <Pause size={16} /> : <Play size={16} />}{playing ? "Pausar" : "Reproducir"}
-          </button>
           <button type="button" onClick={closeImmersive} aria-label="Salir del modo inmersivo"><X size={18} />Salir</button>
         </div>
       </header>
@@ -511,10 +579,10 @@ function MuralImmersiveView({
               onDragEnd={(_, info) => {
                 if (Math.abs(info.offset.x) > 70) move(info.offset.x < 0 ? 1 : -1);
               }}
-              initial={galleryEntrance}
-              animate={{ opacity: 1, x: 0, y: 0, rotateX: 0, rotateY: 0, z: 0, scale: 1, filter: "blur(0px)" }}
-              exit={galleryExit}
-              transition={{ duration: reduceMotion ? 0 : 0.68, ease: [0.16, 1, 0.3, 1] }}
+              initial={galleryMotion.initial}
+              animate={galleryMotion.animate}
+              exit={galleryMotion.exit}
+              transition={{ duration: galleryMotion.duration, ease: [0.16, 1, 0.3, 1] }}
             >
               <Mural3DGallerySlide slide={activeGallerySlide} index={activeSlide} total={gallerySlides.length} />
             </motion.div>
@@ -554,6 +622,7 @@ function MuralEditionEditor({
   onSave: (input: MuralEditionInput, image: File | null, galleryImages: Record<string, File>) => Promise<void>;
 }) {
   const canAssign = profile.role === "director";
+  const reduceMotion = useReducedMotion();
   const [tab, setTab] = useState<"assignment" | "content" | "design" | "image" | "gallery">(
     canAssign ? "assignment" : "content",
   );
@@ -563,6 +632,7 @@ function MuralEditionEditor({
   const [galleryImages, setGalleryImages] = useState<Record<string, File>>({});
   const [galleryPreviews, setGalleryPreviews] = useState<Record<string, string>>(() => Object.fromEntries((edition.gallerySlides ?? []).map((slide) => [slide.id, slide.imageUrl ?? ""])));
   const [selectedSlideId, setSelectedSlideId] = useState(() => draft.gallerySlides[0]?.id ?? "");
+  const [transitionPreviewRun, setTransitionPreviewRun] = useState(0);
   const generatedPreviewUrls = useRef(new Set<string>());
   const [error, setError] = useState("");
   const teachers = accounts.filter((account) => account.role === "teacher" && account.active);
@@ -576,6 +646,7 @@ function MuralEditionEditor({
   const selectedTeacher = teachers.find((teacher) => teacher.uid === draft.teacherId);
   const selectedSlideIndex = Math.max(0, draft.gallerySlides.findIndex((slide) => slide.id === selectedSlideId));
   const selectedSlide = draft.gallerySlides[selectedSlideIndex];
+  const galleryPreviewMotion = muralSceneMotion(selectedSlide?.transition ?? "orbit", Boolean(reduceMotion));
   const gallerySlideField = <Key extends keyof MuralEditionInput["gallerySlides"][number]>(
     key: Key,
     value: MuralEditionInput["gallerySlides"][number][Key],
@@ -814,17 +885,17 @@ function MuralEditionEditor({
 
                 <div className="mural-exhibit-section-label"><span>02</span><div><strong>Dirección escénica</strong><small>Personaliza la atmósfera y la forma de presentar el contenido.</small></div></div>
                 <label>Atmósfera visual<div className="mural-scene-style-grid">{muralSceneStyles.map((sceneStyle) => <button type="button" key={sceneStyle} className={`${selectedSlide.sceneStyle === sceneStyle ? "active" : ""} scene-${sceneStyle}`} onClick={() => gallerySlideField("sceneStyle", sceneStyle)}><i /><span><strong>{muralSceneStyleLabels[sceneStyle].name}</strong><small>{muralSceneStyleLabels[sceneStyle].description}</small></span></button>)}</div></label>
-                <label>Transición de entrada<div className="mural-transition-grid">{muralSceneTransitions.map((transition) => <button type="button" key={transition} className={selectedSlide.transition === transition ? "active" : ""} onClick={() => gallerySlideField("transition", transition)}><i className={transition} /><span><strong>{muralTransitionLabels[transition].name}</strong><small>{muralTransitionLabels[transition].description}</small></span></button>)}</div></label>
-                {selectedSlide.layout === "cinematic" && <label>Lectura del contenido<div className="mural-choice-row">{muralRevealModes.map((mode) => <button type="button" key={mode} className={selectedSlide.revealMode === mode ? "active" : ""} onClick={() => gallerySlideField("revealMode", mode)}>{mode === "all" ? "Mostrar completo" : "Descubrir por pasos"}</button>)}</div><small>{selectedSlide.revealMode === "steps" ? "El visitante revela una idea a la vez." : "Todo el contenido aparece al entrar."}</small></label>}
+                <label>Transición de entrada<div className="mural-transition-grid">{muralSceneTransitions.map((transition) => <button type="button" key={transition} className={selectedSlide.transition === transition ? "active" : ""} onClick={() => { gallerySlideField("transition", transition); setTransitionPreviewRun((current) => current + 1); }}><i className={transition} /><span><strong>{muralTransitionLabels[transition].name}</strong><small>{muralTransitionLabels[transition].description}</small></span></button>)}</div></label>
+                {selectedSlide.layout === "cinematic" && <label>Forma de recorrer el contenido<div className="mural-choice-row">{muralRevealModes.map((mode) => <button type="button" key={mode} className={selectedSlide.revealMode === mode ? "active" : ""} onClick={() => gallerySlideField("revealMode", mode)}>{mode === "all" ? "Lectura completa" : "Recorrido guiado"}</button>)}</div><small>{selectedSlide.revealMode === "steps" ? "Presenta una idea a la vez con avance, retroceso y progreso visible." : "Muestra todos los párrafos juntos desde el inicio."}</small></label>}
                 <div className="mural-color-row single"><label>Color de la escena<span><input type="color" value={selectedSlide.accentColor} onChange={(event) => gallerySlideField("accentColor", event.target.value)} /><code>{selectedSlide.accentColor}</code></span></label></div>
                 {selectedSlide.layout !== "cinematic" && galleryPreviews[selectedSlide.id] && <label>Punto focal de la imagen<div className="mural-focus-picker" role="group" aria-label="Punto focal de la imagen">{[20, 50, 80].flatMap((vertical) => [20, 50, 80].map((horizontal) => <button type="button" key={`${horizontal}-${vertical}`} className={selectedSlide.imagePositionX === horizontal && selectedSlide.imagePositionY === vertical ? "active" : ""} onClick={() => setDraft((previous) => ({ ...previous, gallerySlides: previous.gallerySlides.map((slide) => slide.id === selectedSlide.id ? { ...slide, imagePositionX: horizontal, imagePositionY: vertical } : slide) }))} aria-label={`Enfocar imagen en ${horizontal === 20 ? "izquierda" : horizontal === 50 ? "centro" : "derecha"}, ${vertical === 20 ? "arriba" : vertical === 50 ? "centro" : "abajo"}`}><i /></button>))}</div><small>El punto marcado será el centro visible de la fotografía.</small></label>}
               </div>
             )}
           </aside>
           <section className="mural-studio-preview">
-            <div className="mural-preview-heading"><span>{tab === "gallery" ? "VISTA PREVIA · EXPOSICIÓN" : "VISTA PREVIA · PORTADA"}</span><small>{previewEdition.periodLabel} · {previewEdition.group}</small></div>
+            <div className="mural-preview-heading"><span>{tab === "gallery" ? "VISTA PREVIA · EXPOSICIÓN" : "VISTA PREVIA · PORTADA"}</span><div className="mural-preview-meta"><small>{previewEdition.periodLabel} · {previewEdition.group}</small>{tab === "gallery" && <button type="button" onClick={() => setTransitionPreviewRun((current) => current + 1)}><RotateCcw size={13} />Repetir transición</button>}</div></div>
             {tab === "gallery" && selectedSlide ? (
-              <div className="mural-gallery-editor-preview"><Mural3DGallerySlide slide={{ ...selectedSlide, imageUrl: galleryPreviews[selectedSlide.id] }} index={selectedSlideIndex + 1} total={draft.gallerySlides.length} preview /></div>
+              <div className="mural-gallery-editor-preview"><AnimatePresence mode="wait"><motion.div className="mural-gallery-preview-transition" key={`${selectedSlide.id}-${selectedSlide.transition}-${transitionPreviewRun}`} initial={galleryPreviewMotion.initial} animate={galleryPreviewMotion.animate} exit={galleryPreviewMotion.exit} transition={{ duration: galleryPreviewMotion.duration, ease: [0.16, 1, 0.3, 1] }}><Mural3DGallerySlide slide={{ ...selectedSlide, imageUrl: galleryPreviews[selectedSlide.id] }} index={selectedSlideIndex + 1} total={draft.gallerySlides.length} preview /></motion.div></AnimatePresence></div>
             ) : <MuralEditionCover edition={previewEdition} imagePreview={imagePreview} preview />}
             <div className="mural-preview-devices"><span><i />Escritorio</span><span><i />Adaptable a móvil</span></div>
           </section>

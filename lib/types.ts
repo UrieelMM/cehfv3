@@ -732,8 +732,8 @@ export type MuralEditionCover = {
 };
 
 export type MuralGalleryLayout = "focus" | "split" | "cinematic";
-export type MuralSceneStyle = "aurora" | "constellation" | "museum";
-export type MuralSceneTransition = "orbit" | "zoom" | "lift";
+export type MuralSceneStyle = "aurora" | "constellation" | "museum" | "archive" | "ocean" | "festival";
+export type MuralSceneTransition = "orbit" | "zoom" | "lift" | "flip" | "wipe" | "drift";
 export type MuralRevealMode = "all" | "steps";
 
 export type MuralGallerySlide = {
