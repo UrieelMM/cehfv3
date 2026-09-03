@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertTriangle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -9,9 +8,7 @@ import {
   Filter,
   MessageCircle,
   Pause,
-  Pencil,
   Play,
-  Plus,
   RefreshCw,
   Search,
   Send,
@@ -33,10 +30,9 @@ import {
   defaultWhatsAppConfiguration,
   listWhatsAppMessageLog,
   queueDailyWhatsAppSummaries,
-  saveGuardianContact,
   saveWhatsAppConfiguration,
   sendWhatsAppTest,
-  setGuardianContactStatus,
+  setStudentWhatsAppAuthorized,
   watchGuardianContacts,
   watchWhatsAppConfiguration,
 } from "@/lib/whatsapp-firebase";
@@ -120,18 +116,8 @@ export function WhatsAppAdminPanel({
   const [pageIndex, setPageIndex] = useState(0);
   const [nextPageToken, setNextPageToken] = useState<string>();
   const [busy, setBusy] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | undefined>();
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [relationship, setRelationship] = useState("Madre");
-  const [studentIds, setStudentIds] = useState<string[]>([]);
-  const [consentConfirmed, setConsentConfirmed] = useState(false);
-
-  const students = useMemo(
-    () =>
-      accounts
-        .filter((account) => account.role === "student" && account.active)
-        .sort((first, second) => first.name.localeCompare(second.name, "es")),
+  const registeredStudentCount = useMemo(
+    () => accounts.filter((account) => account.role === "student" && account.active).length,
     [accounts],
   );
 
@@ -182,7 +168,7 @@ export function WhatsAppAdminPanel({
           report,
         )
       : () => undefined;
-    void loadLog(EMPTY_LOG_FILTERS);
+    queueMicrotask(() => void loadLog(EMPTY_LOG_FILTERS));
     return () => {
       stopConfiguration();
       stopContacts();
@@ -219,27 +205,6 @@ export function WhatsAppAdminPanel({
     const previousToken = pageTokens[previousIndex] || undefined;
     setPageIndex(previousIndex);
     void loadLog(appliedLogFilters, previousToken);
-  }
-
-  function resetContactForm() {
-    setEditingId(undefined);
-    setName("");
-    setPhone("");
-    setRelationship("Madre");
-    setStudentIds([]);
-    setConsentConfirmed(false);
-  }
-
-  function editContact(contact: GuardianContact) {
-    setEditingId(contact.id);
-    setName(contact.name);
-    setPhone(contact.phoneE164);
-    setRelationship(contact.relationship);
-    setStudentIds(contact.studentIds);
-    setConsentConfirmed(false);
-    document
-      .getElementById("whatsapp-contact-form")
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function run(
@@ -327,7 +292,7 @@ export function WhatsAppAdminPanel({
               </span>
             </label>
             <label className="whatsapp-time-field">
-              <span>Hora del resumen</span>
+              <span>Hora del reporte diario</span>
               <input
                 type="time"
                 step="900"
@@ -380,154 +345,44 @@ export function WhatsAppAdminPanel({
                       `${result.queued} en cola · ${result.skipped} omitidos`,
                     );
                   },
-                  "Resumen de hoy preparado",
+                  "Reporte de hoy preparado",
                 ).catch(() => undefined)
               }
             >
               {busy === "queue-today" ? <RefreshCw size={16} className="spin" /> : <Send size={16} />}
-              Preparar resumen de hoy
+              Preparar reporte de hoy
             </button>
             <span className="whatsapp-last-send">
               <Clock3 size={15} /> Último envío correcto: {displayDate(configuration.lastSuccessfulSendAt)}
             </span>
               </div>
 
-              <div className="whatsapp-template-preview">
-            <strong>Plantilla requerida en Meta: {configuration.templateName}</strong>
-            <code>
-              {"Hola {{1}}, te enviamos el reporte de {{2}} del día {{3}}.\n\nAsistencia: {{4}}\nParticipación: {{5}}\nTarea: {{6}}\n\nCentro Educativo Héroes de la Fe\nEste es un mensaje informativo. Favor de no responder."}
-            </code>
+              <div className="whatsapp-source-note">
+                <CheckCircle2 size={17} />
+                <div>
+                  <strong>Reportes basados en calificaciones diarias</strong>
+                  <span>Se prepara un reporte sólo cuando el docente registró calificaciones ese día.</span>
+                </div>
               </div>
 
-              <div className="whatsapp-admin-columns">
-            <form
-              id="whatsapp-contact-form"
-              className="whatsapp-contact-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void run(
-                  "save-contact",
-                  () =>
-                    saveGuardianContact({
-                      id: editingId,
-                      name,
-                      phone,
-                      relationship,
-                      studentIds,
-                      consentConfirmed,
-                    }),
-                  editingId ? "Contacto actualizado" : "Contacto agregado",
-                )
-                  .then(resetContactForm)
-                  .catch(() => undefined);
-              }}
-            >
-              <div className="whatsapp-subheading">
+              <details className="whatsapp-template-preview">
+                <summary>Ejemplo real de plantilla de Meta</summary>
                 <div>
-                  <h3>{editingId ? "Editar contacto" : "Nuevo contacto familiar"}</h3>
-                  <p>El número sólo será visible para Dirección.</p>
+                  <small>{configuration.templateName}</small>
+                  <code>
+                    {"Hola {{1}}, te enviamos el reporte de {{2}} del día {{3}}.\nAsistencia: {{4}} · Participación: {{5}} · Tarea: {{6}}"}
+                  </code>
                 </div>
-                {editingId && (
-                  <button className="text-button" type="button" onClick={resetContactForm}>
-                    Cancelar
-                  </button>
-                )}
-              </div>
-              <label>
-                Nombre del tutor
-                <input
-                  required
-                  minLength={2}
-                  maxLength={100}
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Ej. Laura Hernández"
-                />
-              </label>
-              <div className="whatsapp-two-fields">
-                <label>
-                  Teléfono de México
-                  <input
-                    required
-                    inputMode="tel"
-                    value={phone}
-                    onChange={(event) => setPhone(event.target.value)}
-                    placeholder="55 1234 5678"
-                  />
-                </label>
-                <label>
-                  Parentesco
-                  <select
-                    value={relationship}
-                    onChange={(event) => setRelationship(event.target.value)}
-                  >
-                    <option>Madre</option>
-                    <option>Padre</option>
-                    <option>Tutor</option>
-                    <option>Abuela</option>
-                    <option>Abuelo</option>
-                  </select>
-                </label>
-              </div>
-              <fieldset className="whatsapp-student-picker">
-                <legend>Estudiantes vinculados</legend>
-                {students.length ? (
-                  students.map((student) => (
-                    <label key={student.uid}>
-                      <input
-                        type="checkbox"
-                        checked={studentIds.includes(student.uid)}
-                        onChange={(event) =>
-                          setStudentIds((current) =>
-                            event.target.checked
-                              ? [...new Set([...current, student.uid])]
-                              : current.filter((id) => id !== student.uid),
-                          )
-                        }
-                      />
-                      <span>
-                        {student.name}
-                        <small>{student.grade} {student.group}</small>
-                      </span>
-                    </label>
-                  ))
-                ) : (
-                  <p className="empty-inline">Primero registra alumnos activos.</p>
-                )}
-              </fieldset>
-              <label className="whatsapp-consent">
-                <input
-                  required
-                  type="checkbox"
-                  checked={consentConfirmed}
-                  onChange={(event) => setConsentConfirmed(event.target.checked)}
-                />
-                <span>
-                  Confirmo que este tutor proporcionó su teléfono y autorizó recibir
-                  resúmenes académicos por WhatsApp.
-                </span>
-              </label>
-              <button
-                className="primary-button"
-                type="submit"
-                disabled={
-                  Boolean(busy) ||
-                  !name.trim() ||
-                  !phone.trim() ||
-                  !studentIds.length ||
-                  !consentConfirmed
-                }
-              >
-                {busy === "save-contact" ? <RefreshCw size={16} className="spin" /> : editingId ? <Pencil size={16} /> : <Plus size={16} />}
-                {editingId ? "Guardar cambios" : "Agregar contacto"}
-              </button>
-            </form>
+              </details>
 
             <div className="whatsapp-contact-list">
               <div className="whatsapp-subheading">
                 <div>
                   <h3>Contactos autorizados</h3>
-                  <p>{contacts.filter((contact) => contact.status === "active").length} activos de {contacts.length}</p>
+                  <p>
+                    {contacts.filter((contact) => contact.status === "active").length} activos
+                    {registeredStudentCount ? ` de ${registeredStudentCount} alumnos` : ""}. Los números provienen de Gestión de accesos.
+                  </p>
                 </div>
               </div>
               {contacts.length ? (
@@ -539,17 +394,14 @@ export function WhatsAppAdminPanel({
                       </span>
                       <div>
                         <strong>{contact.name}</strong>
-                        <span>{contact.relationship} · {contact.phoneMasked}</span>
-                        <small>{contact.studentNames.join(", ") || "Sin alumno activo"}</small>
+                        <span>{contact.phoneMasked}</span>
+                        <small>Alumno: {contact.studentNames.join(", ") || "Sin alumno activo"}</small>
                       </div>
                       <span className={`whatsapp-status ${contact.status}`}>
                         {contactStatusLabels[contact.status]}
                       </span>
                     </div>
                     <div className="whatsapp-contact-actions">
-                      <button type="button" onClick={() => editContact(contact)} disabled={Boolean(busy)}>
-                        <Pencil size={14} /> Editar
-                      </button>
                       {contact.status === "active" ? (
                         <button
                           type="button"
@@ -557,8 +409,8 @@ export function WhatsAppAdminPanel({
                           onClick={() =>
                             void run(
                               `pause-${contact.id}`,
-                              () => setGuardianContactStatus(contact.id, "paused"),
-                              "Contacto pausado",
+                              () => setStudentWhatsAppAuthorized(contact.id, false),
+                              "Envíos desactivados para este contacto",
                             ).catch(() => undefined)
                           }
                         >
@@ -571,8 +423,8 @@ export function WhatsAppAdminPanel({
                           onClick={() =>
                             void run(
                               `activate-${contact.id}`,
-                              () => setGuardianContactStatus(contact.id, "active"),
-                              "Contacto reactivado",
+                              () => setStudentWhatsAppAuthorized(contact.id, true),
+                              "Envíos activados para este contacto",
                             ).catch(() => undefined)
                           }
                         >
@@ -593,22 +445,16 @@ export function WhatsAppAdminPanel({
                         {busy === `test-${contact.id}` ? <RefreshCw size={14} className="spin" /> : <Send size={14} />} Probar
                       </button>
                     </div>
-                    {contact.status === "opted_out" && (
-                      <div className="whatsapp-optout-note">
-                        <AlertTriangle size={14} /> Para reactivar una baja se debe editar el contacto y registrar un nuevo consentimiento.
-                      </div>
-                    )}
                   </article>
                 ))
               ) : (
                 <div className="empty-state whatsapp-empty">
                   <MessageCircle size={24} />
-                  <strong>Aún no hay contactos</strong>
-                  <span>Agrega un tutor para realizar la primera prueba.</span>
+                  <strong>Aún no hay alumnos activos</strong>
+                  <span>Registra al alumno y el WhatsApp de su tutor en Gestión de accesos.</span>
                 </div>
               )}
             </div>
-              </div>
             </>
           ) : (
             <div className="whatsapp-readonly-summary">
@@ -616,9 +462,9 @@ export function WhatsAppAdminPanel({
               <div>
                 <strong>Envío programado: {configuration.sendTime}</strong>
                 <p>
-                  Hora de Ciudad de México, de lunes a viernes. Sólo Dirección
-                  puede cambiar el horario, administrar contactos o hacer envíos
-                  manuales.
+                  Hora de Ciudad de México, de lunes a viernes. Los reportes se
+                  generan con las calificaciones diarias capturadas por el docente;
+                  sólo Dirección administra destinatarios y envíos manuales.
                 </p>
               </div>
             </div>

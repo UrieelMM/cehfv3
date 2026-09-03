@@ -30,6 +30,7 @@ export type ManagedAccount = {
   group?: string;
   guardianName?: string;
   guardianWhatsApp?: string;
+  guardianWhatsAppAuthorized?: boolean;
   subjects: string[];
   teacherIds: string[];
   photoURL?: string;

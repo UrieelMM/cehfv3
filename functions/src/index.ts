@@ -358,6 +358,7 @@ function serializeManagedAccount(uid: string, data: DocumentData) {
           ...(data.guardianWhatsApp
             ? { guardianWhatsApp: String(data.guardianWhatsApp) }
             : {}),
+          guardianWhatsAppAuthorized: data.guardianWhatsAppAuthorized !== false,
         }
       : {}),
     subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
@@ -3846,11 +3847,6 @@ type WhatsAppConfiguration = {
   graphApiVersion: string;
 };
 
-type SummaryStudent = {
-  uid: string;
-  name: string;
-};
-
 type DailyStudentReport = {
   studentId: string;
   studentName: string;
@@ -4173,6 +4169,47 @@ export const setGuardianContactStatus = onCall(async (request) => {
   return { id: contactId, status };
 });
 
+export const setStudentWhatsAppAuthorized = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const studentId = accountUid(input.studentId);
+  if (typeof input.authorized !== "boolean") {
+    throw new HttpsError("invalid-argument", "La autorización solicitada no es válida.");
+  }
+  const student = await managedAccountTarget(studentId, director.institutionId);
+  if (student.data.role !== "student") {
+    throw new HttpsError("failed-precondition", "El destinatario debe ser un alumno.");
+  }
+  try {
+    normalizeMexicanPhone(student.data.guardianWhatsApp);
+  } catch {
+    throw new HttpsError(
+      "failed-precondition",
+      "Corrige el WhatsApp del tutor en Gestión de accesos antes de autorizarlo.",
+    );
+  }
+  const now = FieldValue.serverTimestamp();
+  const batch = db.batch();
+  batch.update(student.reference, {
+    guardianWhatsAppAuthorized: input.authorized,
+    guardianWhatsAppAuthorizationUpdatedAt: now,
+    guardianWhatsAppAuthorizationUpdatedBy: director.uid,
+    updatedAt: now,
+  });
+  batch.set(db.collection("auditEvents").doc(), {
+    institutionId: director.institutionId,
+    action: input.authorized
+      ? "student_whatsapp_authorized"
+      : "student_whatsapp_paused",
+    studentId,
+    actorUid: director.uid,
+    actorName: director.name,
+    createdAt: now,
+  });
+  await batch.commit();
+  return { studentId, authorized: input.authorized };
+});
+
 export const saveWhatsAppConfiguration = onCall(async (request) => {
   const director = await requireAccountDirector(request.auth);
   const input = (request.data ?? {}) as Record<string, unknown>;
@@ -4225,38 +4262,6 @@ export const saveWhatsAppConfiguration = onCall(async (request) => {
   await batch.commit();
   return { configuration };
 });
-
-async function loadSummaryStudents(
-  institutionId: string,
-  studentIds: string[],
-) {
-  if (!studentIds.length) return new Map<string, SummaryStudent>();
-  const snapshots = await db.getAll(
-    ...studentIds.map((studentId) => db.doc(`users/${studentId}`)),
-  );
-  return new Map(
-    snapshots
-      .filter((snapshot) => {
-        const student = snapshot.data();
-        return (
-          snapshot.exists &&
-          student?.institutionId === institutionId &&
-          student?.role === "student" &&
-          student?.active === true
-        );
-      })
-      .map((snapshot) => {
-        const student = snapshot.data() as DocumentData;
-        return [
-          snapshot.id,
-          {
-            uid: snapshot.id,
-            name: String(student.name ?? "Alumno"),
-          } satisfies SummaryStudent,
-        ];
-      }),
-  );
-}
 
 function whatsappDailyScore(value: unknown) {
   const score = Number(value);
@@ -4341,60 +4346,57 @@ async function loadDailyStudentGradeReports(
 async function createDailySummaryOutbox(
   institutionId: string,
   businessDate: string,
-  options: { contactId?: string; test?: boolean } = {},
+  options: { studentId?: string; test?: boolean } = {},
 ) {
   const configuration = await readWhatsAppConfiguration(institutionId);
-  const contactsSnapshot = options.contactId
-    ? await db.getAll(db.doc(`guardianContacts/${options.contactId}`))
+  const studentSnapshots = options.studentId
+    ? await db.getAll(db.doc(`users/${options.studentId}`))
     : (
         await db
-          .collection("guardianContacts")
+          .collection("users")
           .where("institutionId", "==", institutionId)
           .get()
       ).docs;
-  const contacts = contactsSnapshot.filter((snapshot) => {
-    const contact = snapshot.data();
+  const activeStudents = studentSnapshots.filter((snapshot) => {
+    const student = snapshot.data();
     return (
       snapshot.exists &&
-      contact?.institutionId === institutionId &&
-      contact?.status === "active" &&
-      contact?.consentStatus === "active" &&
-      Array.isArray(contact?.categories) &&
-      contact.categories.includes("daily_task_summary")
+      student?.institutionId === institutionId &&
+      student?.role === "student" &&
+      student?.active === true
     );
   });
-  const studentIds = [
-    ...new Set(
-      contacts.flatMap((contact) => notificationRecipients(contact.data()?.studentIds)),
-    ),
-  ];
-  const students = await loadSummaryStudents(institutionId, studentIds);
+  const recipients = activeStudents.flatMap((snapshot) => {
+    const student = snapshot.data() as DocumentData;
+    if (student.guardianWhatsAppAuthorized === false) return [];
+    try {
+      return [{
+        id: snapshot.id,
+        studentName: String(student.name ?? "Alumno"),
+        guardianName: String(student.guardianName ?? "Familia CEHF"),
+        phoneE164: normalizeMexicanPhone(student.guardianWhatsApp),
+      }];
+    } catch {
+      return [];
+    }
+  });
   const dailyReports = await loadDailyStudentGradeReports(
     institutionId,
     businessDate,
-    [...students.keys()],
+    recipients.map((recipient) => recipient.id),
   );
   let queued = 0;
-  let skipped = 0;
+  let skipped = activeStudents.length - recipients.length;
   const outboxIds: string[] = [];
-  for (const contactSnapshot of contacts) {
-    const contact = contactSnapshot.data() as DocumentData;
-    const contactStudents = notificationRecipients(contact.studentIds)
-      .map((studentId) => students.get(studentId))
-      .filter((student): student is SummaryStudent => Boolean(student));
-    if (!contactStudents.length) {
-      skipped += 1;
-      continue;
-    }
-    for (const student of contactStudents) {
-      const recordedReport = dailyReports.get(student.uid);
+  for (const recipient of recipients) {
+      const recordedReport = dailyReports.get(recipient.id);
       if (!recordedReport && options.test !== true) {
         skipped += 1;
         continue;
       }
       const report = recordedReport ?? {
-        studentId: student.uid,
-        studentName: student.name,
+        studentId: recipient.id,
+        studentName: recipient.studentName,
         attendance: "present" as const,
         participation: "positive" as const,
         homework: "complete" as const,
@@ -4403,11 +4405,11 @@ async function createDailySummaryOutbox(
         subjects: ["Datos de prueba"],
       };
       const outboxId = options.test
-        ? `test_${Date.now()}_${contactSnapshot.id}_${student.uid}`
-        : dailyOutboxId(businessDate, contactSnapshot.id, student.uid);
+        ? `test_${Date.now()}_${recipient.id}`
+        : dailyOutboxId(businessDate, recipient.id);
       const parameters = buildDailyReportTemplateParameters({
-        guardianName: String(contact.name ?? "Familia CEHF"),
-        studentName: student.name,
+        guardianName: recipient.guardianName,
+        studentName: recipient.studentName,
         businessDate,
         attendance: report.attendance,
         participation: report.participation,
@@ -4417,19 +4419,18 @@ async function createDailySummaryOutbox(
       try {
         await db.doc(`messageOutbox/${outboxId}`).create({
           institutionId,
-          guardianContactId: contactSnapshot.id,
-          recipientName: String(contact.name ?? "Familia CEHF"),
-          to: String(contact.phoneE164),
-          toMasked: String(
-            contact.phoneMasked ?? maskPhone(String(contact.phoneE164)),
-          ),
+          guardianContactId: recipient.id,
+          recipientStudentId: recipient.id,
+          recipientName: recipient.guardianName,
+          to: recipient.phoneE164,
+          toMasked: maskPhone(recipient.phoneE164),
           messageKind: options.test
             ? "daily_task_summary_test"
             : "daily_task_summary",
           businessDate,
-          studentIds: [student.uid],
-          studentNames: [student.name],
-          studentName: student.name,
+          studentIds: [recipient.id],
+          studentNames: [recipient.studentName],
+          studentName: recipient.studentName,
           dailyIndicators: {
             attendance: report.attendance,
             participation: report.participation,
@@ -4459,7 +4460,6 @@ async function createDailySummaryOutbox(
         if (!["6", "already-exists"].includes(code)) throw error;
         skipped += 1;
       }
-    }
   }
   return { queued, skipped, outboxIds, businessDate };
 }
@@ -4738,6 +4738,48 @@ async function claimWhatsAppOutbox(reference: DocumentReference) {
 async function sendWhatsAppOutboxDocument(reference: DocumentReference) {
   const message = await claimWhatsAppOutbox(reference);
   if (!message) return { id: reference.id, status: "skipped" };
+  const recipientStudentId = String(message.recipientStudentId ?? "");
+  if (recipientStudentId) {
+    const studentSnapshot = await db.doc(`users/${recipientStudentId}`).get();
+    const student = studentSnapshot.data();
+    if (
+      !studentSnapshot.exists ||
+      student?.role !== "student" ||
+      student?.active !== true ||
+      student?.institutionId !== message.institutionId ||
+      student?.guardianWhatsAppAuthorized === false
+    ) {
+      await reference.update({
+        status: "cancelled",
+        nextAttemptAt: FieldValue.delete(),
+        lastErrorCode: "recipient_not_authorized",
+        lastErrorMessage: "El contacto ya no está autorizado para recibir WhatsApp.",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { id: reference.id, status: "cancelled" };
+    }
+    try {
+      const currentPhone = normalizeMexicanPhone(student.guardianWhatsApp);
+      if (currentPhone !== message.to) {
+        message.to = currentPhone;
+        message.toMasked = maskPhone(currentPhone);
+        await reference.update({
+          to: currentPhone,
+          toMasked: maskPhone(currentPhone),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    } catch {
+      await reference.update({
+        status: "cancelled",
+        nextAttemptAt: FieldValue.delete(),
+        lastErrorCode: "recipient_phone_invalid",
+        lastErrorMessage: "El WhatsApp registrado en Gestión de accesos no es válido.",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { id: reference.id, status: "cancelled" };
+    }
+  }
   const token = whatsappAccessToken.value().trim();
   const phoneNumberId = whatsappPhoneNumberId.value().trim();
   try {
@@ -4901,17 +4943,17 @@ export const sendWhatsAppTest = onCall(
   async (request) => {
     const director = await requireAccountDirector(request.auth);
     const input = (request.data ?? {}) as Record<string, unknown>;
-    const contactId = whatsappContactId(input.contactId);
+    const studentId = accountUid(input.studentId);
     const result = await createDailySummaryOutbox(
       director.institutionId,
       localDateKey(new Date(), WHATSAPP_TIMEZONE),
-      { contactId, test: true },
+      { studentId, test: true },
     );
     const outboxId = result.outboxIds[0];
     if (!outboxId) {
       throw new HttpsError(
         "failed-precondition",
-        "El contacto no está activo o no tiene consentimiento vigente.",
+        "El alumno no tiene un WhatsApp válido y autorizado en Gestión de accesos.",
       );
     }
     const delivery = await sendWhatsAppOutboxDocument(
@@ -4922,7 +4964,7 @@ export const sendWhatsAppTest = onCall(
       action: "whatsapp_test_sent",
       actorUid: director.uid,
       actorName: director.name,
-      contactId,
+      studentId,
       outboxId,
       deliveryStatus: delivery.status,
       createdAt: FieldValue.serverTimestamp(),
@@ -5035,25 +5077,25 @@ async function applyWhatsAppOptOut(message: Record<string, unknown>) {
     return true;
   });
   if (!created) return;
-  const contacts = await db
-    .collection("guardianContacts")
-    .where("phoneE164", "==", `+${from}`)
+  const students = await db
+    .collection("users")
+    .where("guardianWhatsApp", "==", `+${from}`)
     .get();
-  if (contacts.empty) return;
+  if (students.empty) return;
   const now = FieldValue.serverTimestamp();
   const batch = db.batch();
-  contacts.docs.forEach((contact) => {
-    batch.update(contact.ref, {
-      status: "opted_out",
-      consentStatus: "withdrawn",
-      optedOutAt: now,
-      optOutSource: "whatsapp",
+  students.docs.forEach((student) => {
+    if (student.data().role !== "student") return;
+    batch.update(student.ref, {
+      guardianWhatsAppAuthorized: false,
+      guardianWhatsAppAuthorizationUpdatedAt: now,
+      guardianWhatsAppAuthorizationSource: "whatsapp",
       updatedAt: now,
     });
     batch.set(db.collection("auditEvents").doc(), {
-      institutionId: String(contact.data().institutionId ?? ""),
-      action: "guardian_contact_opted_out",
-      contactId: contact.id,
+      institutionId: String(student.data().institutionId ?? ""),
+      action: "student_whatsapp_opted_out",
+      studentId: student.id,
       source: "whatsapp",
       createdAt: now,
     });

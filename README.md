@@ -92,32 +92,41 @@ el alumno únicamente puede consultar reportes publicados.
 
 La integración usa directamente WhatsApp Cloud API de Meta y está aislada del
 flujo académico: una falla del proveedor no bloquea tareas ni entregas. Dirección
-puede administrar contactos, consentimiento, hora de envío, pruebas y
-entregabilidad desde **Configuración → WhatsApp para familias**.
+puede administrar la hora de envío, autorización de destinatarios, pruebas y
+entregabilidad desde **Configuración → WhatsApp para familias**. Los
+destinatarios se toman exclusivamente del campo obligatorio **WhatsApp del
+padre o tutor** del alumno en **Gestión de accesos**; los teléfonos mexicanos
+se guardan en formato internacional `+52` y nacen autorizados.
 
-El resumen se ejecuta de lunes a viernes, agrupa hermanos en un solo mensaje y
-considera las tareas académicas y de talleres que vencen ese día. Los mensajes
-no incluyen calificaciones, materias ni observaciones privadas. La cola
-`messageOutbox` usa una clave determinista por fecha y contacto para evitar
+El reporte se ejecuta de lunes a viernes y sólo se prepara cuando existen
+calificaciones diarias capturadas por el docente. Antes de encolar y justo antes
+de enviar, el backend vuelve a validar que el alumno siga activo, que el número
+sea válido y que `guardianWhatsAppAuthorized` no sea `false`. La cola
+`messageOutbox` usa una clave determinista por fecha y alumno para evitar
 duplicados; el webhook registra envío, entrega, lectura, fallos y la palabra
-`BAJA`.
+`BAJA`, que desactiva futuros mensajes.
 
 ### Plantilla de Meta
 
 Crea y aprueba en WhatsApp Manager una plantilla de **utilidad** con idioma
-`Spanish (MEX)` y nombre `cehf_resumen_tareas_diario_v1`:
+`Spanish (MEX)` y nombre `cehf_reporte_diario_alumno_v1`:
 
 ```text
-CEHF Primaria — resumen diario del {{1}}:
-{{2}}
-Este aviso no incluye calificaciones. Responde BAJA para dejar de recibirlo.
+Hola {{1}}, te enviamos el reporte de {{2}} del día {{3}}.
+Asistencia: {{4}}
+Participación: {{5}}
+Tarea: {{6}}
 ```
 
 Ejemplos de variables para la revisión:
 
 ```text
-{{1}} = miércoles, 19 de agosto
-{{2}} = Mateo: 3 de 4 entregadas; 1 pendiente.
+{{1}} = Patricia Hernández
+{{2}} = Mateo García
+{{3}} = miércoles, 19 de agosto de 2026
+{{4}} = ✅ Asistió
+{{5}} = 😊 Participación positiva
+{{6}} = ✅ Cumplió
 ```
 
 ### Secretos y webhook

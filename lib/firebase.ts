@@ -278,6 +278,8 @@ export async function listManagedAccounts(
         role === "student" && data.guardianWhatsApp
           ? String(data.guardianWhatsApp)
           : undefined,
+      guardianWhatsAppAuthorized:
+        role === "student" ? data.guardianWhatsAppAuthorized !== false : undefined,
       subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
       teacherIds: Array.isArray(data.teacherIds)
         ? data.teacherIds.map(String)
@@ -399,6 +401,8 @@ export async function createManagedAccount(
       group: input.role === "student" ? group : undefined,
       guardianName,
       guardianWhatsApp,
+      guardianWhatsAppAuthorized:
+        input.role === "student" ? true : undefined,
       subjects: input.subjects,
       teacherIds: input.role === "student" ? input.teacherIds : [],
       photoURL,
@@ -422,7 +426,14 @@ export async function createManagedAccount(
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       ...(input.role === "student"
-        ? { schoolLevel, grade, group, guardianName, guardianWhatsApp }
+        ? {
+            schoolLevel,
+            grade,
+            group,
+            guardianName,
+            guardianWhatsApp,
+            guardianWhatsAppAuthorized: true,
+          }
         : {}),
     });
     return { account, password };

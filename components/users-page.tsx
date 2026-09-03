@@ -404,6 +404,8 @@ function AccountEditor({
                   group,
                   guardianName: guardianName.trim(),
                   guardianWhatsApp: normalizeGuardianWhatsApp(guardianWhatsApp),
+                  guardianWhatsAppAuthorized:
+                    account.guardianWhatsAppAuthorized !== false,
                 }
               : {}),
             ...(photoPreview ? { photoURL: photoPreview } : {}),
@@ -458,6 +460,10 @@ function AccountEditor({
                     inputMode="tel"
                     value={guardianWhatsApp}
                     onChange={(event) => setGuardianWhatsApp(event.target.value)}
+                    onBlur={() => {
+                      const normalized = normalizeGuardianWhatsApp(guardianWhatsApp);
+                      if (normalized) setGuardianWhatsApp(normalized);
+                    }}
                     placeholder="55 1234 5678"
                     autoComplete="tel"
                     required

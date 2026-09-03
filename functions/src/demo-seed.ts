@@ -73,7 +73,10 @@ export async function seedDemoData(director: Director) {
   }));
   students.forEach((student, index) => put(`users/${student.uid}`, {
     ...student, institutionId: director.institutionId, initials: initials(student.firstName, student.lastName),
-    active: true, schoolLevel: "primary", subjects, guardianWhatsApp: "", createdAt: dateAt(addDays("2026-08-11", index), 15), updatedAt: now,
+    active: true, schoolLevel: "primary", subjects,
+    guardianWhatsApp: `+52550000${String(index + 1).padStart(4, "0")}`,
+    guardianWhatsAppAuthorized: true,
+    createdAt: dateAt(addDays("2026-08-11", index), 15), updatedAt: now,
   }));
 
   const weeks = Array.from({ length: 10 }, (_, index) => {
@@ -265,15 +268,8 @@ export async function seedDemoData(director: Director) {
   }));
 
   students.slice(0, 10).forEach((student, index) => {
-    const contactId = `demo-guardian-${pathId(index)}`;
-    put(`guardianContacts/${contactId}`, {
-      institutionId: director.institutionId, name: student.guardianName, phoneE164: "",
-      phoneMasked: "Número demo", relationship: "Tutor", studentIds: [student.uid], studentNames: [student.name],
-      categories: ["daily_summary"], status: "paused", consentStatus: "withdrawn", consentVersion: "demo-no-consent",
-      createdAt: now, updatedAt: now,
-    });
     put(`messageOutbox/demo-message-${pathId(index)}`, {
-      institutionId: director.institutionId, guardianContactId: contactId, recipientName: student.guardianName,
+      institutionId: director.institutionId, guardianContactId: student.uid, recipientStudentId: student.uid, recipientName: student.guardianName,
       toMasked: "Número demo", messageKind: "daily_task_summary_test", businessDate: "2026-09-01",
       status: "delivered", attemptCount: 1, test: true, createdAt: now, updatedAt: now, sentAt: now, deliveredAt: now,
     });
@@ -319,7 +315,7 @@ export async function seedDemoData(director: Director) {
       dailyGrades: students.length * subjects.length * gradeDates.length,
       weeklyReports: students.length * subjects.length, tasks: taskTitles.length, materials: 10, reviews: 10,
       wallPosts: 10, forumTopics: 10, forumPosts: 10, workshopResources: 10, workshopTasks: 10, notifications: 10,
-      guardianContacts: 10, whatsappHistory: 10,
+      guardianContacts: 0, whatsappHistory: 10,
     },
   };
 }

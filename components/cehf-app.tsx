@@ -3311,6 +3311,8 @@ function AccountRegistrationModal({
                       accountRole === "student"
                         ? normalizeGuardianWhatsApp(guardianWhatsApp)
                         : undefined,
+                    guardianWhatsAppAuthorized:
+                      accountRole === "student" ? true : undefined,
                     subjects,
                     teacherIds: accountRole === "student" ? teacherIds : [],
                     createdAt: new Date().toISOString(),
@@ -3552,6 +3554,10 @@ function AccountRegistrationModal({
                           inputMode="tel"
                           value={guardianWhatsApp}
                           onChange={(event) => setGuardianWhatsApp(event.target.value)}
+                          onBlur={() => {
+                            const normalized = normalizeGuardianWhatsApp(guardianWhatsApp);
+                            if (normalized) setGuardianWhatsApp(normalized);
+                          }}
                           placeholder="55 1234 5678"
                           autoComplete="tel"
                           aria-describedby="guardian-whatsapp-help"

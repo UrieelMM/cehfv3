@@ -11,10 +11,9 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { firebase } from "./firebase";
+import { firebase, normalizeGuardianWhatsApp } from "./firebase";
 import type {
   GuardianContact,
-  GuardianContactStatus,
   WhatsAppConfiguration,
   WhatsAppLogFilters,
   WhatsAppLogPage,
@@ -34,15 +33,6 @@ export const defaultWhatsAppConfiguration: WhatsAppConfiguration = {
   graphApiVersion: "v23.0",
 };
 
-export type GuardianContactInput = {
-  id?: string;
-  name: string;
-  phone: string;
-  relationship: string;
-  studentIds: string[];
-  consentConfirmed: boolean;
-};
-
 function dateValue(value: unknown) {
   if (
     value &&
@@ -60,22 +50,28 @@ function stringList(value: unknown) {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
 }
 
-function contactFromData(id: string, data: DocumentData): GuardianContact {
+function maskGuardianPhone(phoneE164: string) {
+  const digits = phoneE164.replace(/\D/g, "");
+  return digits.length >= 4 ? `•••• ${digits.slice(-4)}` : "Número inválido";
+}
+
+function contactFromStudentData(id: string, data: DocumentData): GuardianContact {
+  const phoneE164 = normalizeGuardianWhatsApp(String(data.guardianWhatsApp ?? ""));
+  const authorized = data.guardianWhatsAppAuthorized !== false;
   return {
     id,
     institutionId: String(data.institutionId ?? ""),
-    name: String(data.name ?? "Familia CEHF"),
-    phoneE164: String(data.phoneE164 ?? ""),
-    phoneMasked: String(data.phoneMasked ?? "••••"),
-    relationship: String(data.relationship ?? "Tutor"),
-    studentIds: stringList(data.studentIds),
-    studentNames: stringList(data.studentNames),
-    categories: stringList(data.categories),
-    status: (data.status ?? "paused") as GuardianContactStatus,
-    consentStatus: data.consentStatus === "active" ? "active" : "withdrawn",
-    consentVersion: String(data.consentVersion ?? ""),
-    consentGrantedAt: dateValue(data.consentGrantedAt),
-    optedOutAt: data.optedOutAt ? dateValue(data.optedOutAt) : undefined,
+    name: String(data.guardianName ?? `Familia de ${String(data.name ?? "Alumno")}`),
+    phoneE164,
+    phoneMasked: maskGuardianPhone(phoneE164),
+    relationship: "Padre, madre o tutor",
+    studentIds: [id],
+    studentNames: [String(data.name ?? "Alumno")],
+    categories: ["daily_grade_report"],
+    status: !phoneE164 ? "invalid" : authorized ? "active" : "paused",
+    consentStatus: authorized ? "active" : "withdrawn",
+    consentVersion: "student-registration",
+    consentGrantedAt: dateValue(data.createdAt),
     createdAt: dateValue(data.createdAt),
     updatedAt: dateValue(data.updatedAt),
   };
@@ -164,13 +160,17 @@ export function watchGuardianContacts(
   }
   return onSnapshot(
     query(
-      collection(firebase.db, "guardianContacts"),
+      collection(firebase.db, "users"),
       where("institutionId", "==", institutionId),
     ),
     (snapshot) =>
       callback(
         snapshot.docs
-          .map((entry) => contactFromData(entry.id, entry.data()))
+          .filter(
+            (entry) =>
+              entry.data().role === "student" && entry.data().active !== false,
+          )
+          .map((entry) => contactFromStudentData(entry.id, entry.data()))
           .sort((first, second) => first.name.localeCompare(second.name, "es")),
       ),
     (error) => onError?.(error),
@@ -222,24 +222,15 @@ function requireWhatsAppFunctions() {
   return firebase.functions;
 }
 
-export async function saveGuardianContact(input: GuardianContactInput) {
-  const callable = httpsCallable<GuardianContactInput, { contact: GuardianContact }>(
-    requireWhatsAppFunctions(),
-    "saveGuardianContact",
-  );
-  return (await callable(input)).data.contact;
-}
-
-export async function setGuardianContactStatus(
-  id: string,
-  status: "active" | "paused" | "opted_out",
-  consentConfirmed = false,
+export async function setStudentWhatsAppAuthorized(
+  studentId: string,
+  authorized: boolean,
 ) {
   const callable = httpsCallable<
-    { id: string; status: string; consentConfirmed: boolean },
-    { id: string; status: GuardianContactStatus }
-  >(requireWhatsAppFunctions(), "setGuardianContactStatus");
-  return (await callable({ id, status, consentConfirmed })).data;
+    { studentId: string; authorized: boolean },
+    { studentId: string; authorized: boolean }
+  >(requireWhatsAppFunctions(), "setStudentWhatsAppAuthorized");
+  return (await callable({ studentId, authorized })).data;
 }
 
 export async function saveWhatsAppConfiguration(
@@ -259,12 +250,12 @@ export async function saveWhatsAppConfiguration(
   return (await callable(configuration)).data.configuration;
 }
 
-export async function sendWhatsAppTest(contactId: string) {
+export async function sendWhatsAppTest(studentId: string) {
   const callable = httpsCallable<
-    { contactId: string },
+    { studentId: string },
     { outboxId: string; status: string }
   >(requireWhatsAppFunctions(), "sendWhatsAppTest");
-  return (await callable({ contactId })).data;
+  return (await callable({ studentId })).data;
 }
 
 export async function queueDailyWhatsAppSummaries(businessDate?: string) {
