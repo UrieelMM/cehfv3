@@ -732,6 +732,9 @@ export type MuralEditionCover = {
 };
 
 export type MuralGalleryLayout = "focus" | "split" | "cinematic";
+export type MuralSceneStyle = "aurora" | "constellation" | "museum";
+export type MuralSceneTransition = "orbit" | "zoom" | "lift";
+export type MuralRevealMode = "all" | "steps";
 
 export type MuralGallerySlide = {
   id: string;
@@ -742,10 +745,14 @@ export type MuralGallerySlide = {
   contentTitle: string;
   contentSubtitle: string;
   body: string;
+  facts: string[];
   imagePath: string;
   imageUrl?: string;
   accentColor: string;
   layout: MuralGalleryLayout;
+  sceneStyle: MuralSceneStyle;
+  transition: MuralSceneTransition;
+  revealMode: MuralRevealMode;
   depth: number;
   imagePositionX: number;
   imagePositionY: number;

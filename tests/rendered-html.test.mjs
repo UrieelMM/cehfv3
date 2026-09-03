@@ -434,7 +434,7 @@ test("supports optional editorial gradients for mural editions", async () => {
   assert.match(css, /background:\s*var\(--mural-cover-surface/);
 });
 
-test("ships a configurable 3D gallery for mural immersive mode", async () => {
+test("ships a configurable virtual exhibition for the mural", async () => {
   const [muralSource, muralContract, muralFirebase, functionsSource, css, storageRules] = await Promise.all([
     readFile(new URL("components/wall-newspaper-page.tsx", projectRoot), "utf8"),
     readFile(new URL("lib/mural-contract.ts", projectRoot), "utf8"),
@@ -444,21 +444,28 @@ test("ships a configurable 3D gallery for mural immersive mode", async () => {
     readFile(new URL("storage.rules", projectRoot), "utf8"),
   ]);
 
-  assert.match(muralSource, /Galería inmersiva 3D/);
+  assert.match(muralSource, /Contenido de la exposición/);
   assert.match(muralSource, /Mural3DGallerySlide/);
   assert.match(muralSource, /dragConstraints/);
-  assert.match(muralSource, /mural-glow-cursor/);
-  assert.match(muralSource, /Tema \+ texto/);
+  assert.doesNotMatch(muralSource, /mural-glow-cursor/);
+  assert.match(muralSource, /Exposición virtual/);
+  assert.match(muralSource, /Descubrir por pasos/);
+  assert.match(muralSource, /Punto focal de la imagen/);
+  assert.match(muralSource, /Periódico Mural/);
   assert.match(muralSource, /Contenido del lado derecho/);
   assert.doesNotMatch(muralSource, /MuralImmersiveView edition=\{edition\} stories=/);
   assert.match(muralContract, /muralGalleryLayouts/);
+  assert.match(muralContract, /muralSceneTransitions/);
+  assert.match(muralContract, /muralRevealModes/);
   assert.match(muralContract, /gallerySlides: z\.array/);
   assert.match(muralFirebase, /wall\/gallery/);
   assert.match(functionsSource, /MURAL_GALLERY_LAYOUTS/);
   assert.match(functionsSource, /gallerySlides: input\.gallerySlides/);
   assert.match(css, /\.mural-3d-gallery-slide/);
   assert.match(css, /@keyframes mural-gallery-orbit/);
-  assert.match(css, /\.mural-glow-cursor/);
+  assert.doesNotMatch(css, /\.mural-glow-cursor/);
   assert.match(css, /\.mural-3d-editorial-panel/);
+  assert.match(css, /\.mural-scene-style-grid/);
+  assert.match(css, /\.mural-reveal-next/);
   assert.match(storageRules, /wall\/\{postId\}\/\{assetId\}/);
 });

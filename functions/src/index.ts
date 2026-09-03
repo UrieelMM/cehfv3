@@ -2523,6 +2523,9 @@ const MURAL_COVER_LAYOUTS = ["split", "editorial", "immersive"] as const;
 const MURAL_COVER_FONTS = ["modern", "editorial", "classic"] as const;
 const MURAL_COVER_GRADIENTS = ["campus", "aurora", "coral", "cobalt"] as const;
 const MURAL_GALLERY_LAYOUTS = ["focus", "split", "cinematic"] as const;
+const MURAL_SCENE_STYLES = ["aurora", "constellation", "museum"] as const;
+const MURAL_SCENE_TRANSITIONS = ["orbit", "zoom", "lift"] as const;
+const MURAL_REVEAL_MODES = ["all", "steps"] as const;
 const MURAL_COVER_MOTIFS = [
   "orbits",
   "grid",
@@ -2751,35 +2754,54 @@ function muralEditionInput(value: unknown, institutionId: string) {
     ? month
     : `${month.slice(0, 4)}-${muralSlug(seasonName)}`;
   if (!Array.isArray(input.gallerySlides) || input.gallerySlides.length < 1 || input.gallerySlides.length > 10) {
-    throw new HttpsError("invalid-argument", "La galería debe tener entre 1 y 10 diapositivas.");
+    throw new HttpsError("invalid-argument", "La exposición debe tener entre 1 y 10 escenas.");
   }
   const escapedInstitutionId = institutionId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const gallerySlides = input.gallerySlides.map((entry, index) => {
     const slide = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
     const id = String(slide.id ?? "").trim();
     if (!/^[A-Za-z0-9_-]{1,80}$/.test(id)) {
-      throw new HttpsError("invalid-argument", `La diapositiva ${index + 1} no es válida.`);
+      throw new HttpsError("invalid-argument", `La escena ${index + 1} no es válida.`);
     }
     const slideImagePath = String(slide.imagePath ?? "").trim();
     if (slideImagePath && !new RegExp(`^institutions/${escapedInstitutionId}/wall/gallery/[A-Za-z0-9._-]{1,260}$`).test(slideImagePath)) {
-      throw new HttpsError("invalid-argument", "Una imagen de la galería no pertenece a esta institución.");
+      throw new HttpsError("invalid-argument", "Una imagen de la exposición no pertenece a esta institución.");
     }
     const galleryLayout = String(slide.layout ?? "focus");
     if (!MURAL_GALLERY_LAYOUTS.includes(galleryLayout as typeof MURAL_GALLERY_LAYOUTS[number])) {
-      throw new HttpsError("invalid-argument", "Selecciona una composición válida para la galería.");
+      throw new HttpsError("invalid-argument", "Selecciona una composición válida para la exposición.");
     }
+    const sceneStyle = String(slide.sceneStyle ?? "aurora");
+    const transition = String(slide.transition ?? "orbit");
+    const revealMode = String(slide.revealMode ?? "all");
+    if (!MURAL_SCENE_STYLES.includes(sceneStyle as typeof MURAL_SCENE_STYLES[number])) {
+      throw new HttpsError("invalid-argument", "Selecciona una atmósfera válida para la exposición.");
+    }
+    if (!MURAL_SCENE_TRANSITIONS.includes(transition as typeof MURAL_SCENE_TRANSITIONS[number])) {
+      throw new HttpsError("invalid-argument", "Selecciona una transición válida para la exposición.");
+    }
+    if (!MURAL_REVEAL_MODES.includes(revealMode as typeof MURAL_REVEAL_MODES[number])) {
+      throw new HttpsError("invalid-argument", "Selecciona una forma válida de presentar el contenido.");
+    }
+    const facts = Array.isArray(slide.facts)
+      ? slide.facts.slice(0, 4).map((fact) => muralText(fact, "Cada dato clave", 1, 90))
+      : [];
     return {
       id,
-      kicker: muralOptionalText(slide.kicker, "El antetítulo de la diapositiva", 42),
-      title: muralText(slide.title, "El título de la diapositiva", 2, 84),
-      caption: muralOptionalText(slide.caption, "El texto de la diapositiva", 220),
+      kicker: muralOptionalText(slide.kicker, "El antetítulo de la escena", 42),
+      title: muralText(slide.title, "El título de la escena", 2, 84),
+      caption: muralOptionalText(slide.caption, "El texto de la escena", 220),
       contentKicker: muralOptionalText(slide.contentKicker, "La sección del contenido", 42),
       contentTitle: muralOptionalText(slide.contentTitle, "El título del contenido", 90),
       contentSubtitle: muralOptionalText(slide.contentSubtitle, "El subtítulo del contenido", 180),
       body: muralParagraphText(slide.body, "El desarrollo del contenido", 1_600),
+      facts,
       imagePath: slideImagePath,
-      accentColor: muralColor(slide.accentColor, "el acento de la diapositiva"),
+      accentColor: muralColor(slide.accentColor, "el acento de la escena"),
       layout: galleryLayout as typeof MURAL_GALLERY_LAYOUTS[number],
+      sceneStyle: sceneStyle as typeof MURAL_SCENE_STYLES[number],
+      transition: transition as typeof MURAL_SCENE_TRANSITIONS[number],
+      revealMode: revealMode as typeof MURAL_REVEAL_MODES[number],
       depth: muralRange(slide.depth, "La profundidad", 1, 3),
       imagePositionX: muralRange(slide.imagePositionX, "El enfoque horizontal", 0, 100),
       imagePositionY: muralRange(slide.imagePositionY, "El enfoque vertical", 0, 100),

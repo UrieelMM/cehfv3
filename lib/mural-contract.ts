@@ -29,6 +29,9 @@ export const muralCoverLayouts = ["split", "editorial", "immersive"] as const;
 export const muralCoverFonts = ["modern", "editorial", "classic"] as const;
 export const muralCoverGradients = ["campus", "aurora", "coral", "cobalt"] as const;
 export const muralGalleryLayouts = ["focus", "split", "cinematic"] as const;
+export const muralSceneStyles = ["aurora", "constellation", "museum"] as const;
+export const muralSceneTransitions = ["orbit", "zoom", "lift"] as const;
+export const muralRevealModes = ["all", "steps"] as const;
 export const muralCoverMotifs = [
   "orbits",
   "grid",
@@ -70,6 +73,8 @@ export const muralGalleryLimits = {
   contentTitle: 90,
   contentSubtitle: 180,
   body: 1_600,
+  facts: 4,
+  fact: 90,
 } as const;
 
 const hexColor = z.string().regex(/^#[0-9a-f]{6}$/i, "Selecciona un color válido.");
@@ -105,21 +110,25 @@ export const muralEditionSchema = z.object({
     overlayOpacity: z.number().min(0).max(85),
   }),
   gallerySlides: z.array(z.object({
-    id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/, "La diapositiva no es válida."),
+    id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/, "La escena no es válida."),
     kicker: z.string().trim().max(muralGalleryLimits.kicker),
-    title: z.string().trim().min(2, "Agrega un título a cada diapositiva.").max(muralGalleryLimits.title),
+    title: z.string().trim().min(2, "Agrega un título a cada escena.").max(muralGalleryLimits.title),
     caption: z.string().trim().max(muralGalleryLimits.caption),
     contentKicker: z.string().trim().max(muralGalleryLimits.contentKicker),
     contentTitle: z.string().trim().max(muralGalleryLimits.contentTitle),
     contentSubtitle: z.string().trim().max(muralGalleryLimits.contentSubtitle),
     body: z.string().trim().max(muralGalleryLimits.body),
+    facts: z.array(z.string().trim().min(1).max(muralGalleryLimits.fact)).max(muralGalleryLimits.facts),
     imagePath: z.string().max(500),
     accentColor: hexColor,
     layout: z.enum(muralGalleryLayouts),
+    sceneStyle: z.enum(muralSceneStyles),
+    transition: z.enum(muralSceneTransitions),
+    revealMode: z.enum(muralRevealModes),
     depth: z.number().int().min(1).max(3),
     imagePositionX: z.number().min(0).max(100),
     imagePositionY: z.number().min(0).max(100),
-  })).min(1, "Agrega al menos una diapositiva a la galería.").max(muralGalleryLimits.slides),
+  })).min(1, "Agrega al menos una escena a la exposición.").max(muralGalleryLimits.slides),
 }).superRefine((input, context) => {
   if (input.periodType === "season" && input.seasonName.trim().length < 3) {
     context.addIssue({

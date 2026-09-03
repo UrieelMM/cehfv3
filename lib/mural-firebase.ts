@@ -62,9 +62,9 @@ export const defaultMuralCover: MuralEditionCover = {
 };
 
 export const defaultMuralGallerySlides: MuralGallerySlide[] = [
-  { id: "gallery-ideas", kicker: "IDEAS EN MOVIMIENTO", title: "Creamos para transformar", caption: "Proyectos, hallazgos y voces que nacen en nuestras aulas.", contentKicker: "", contentTitle: "", contentSubtitle: "", body: "", imagePath: "", accentColor: "#aeb5ff", layout: "focus", depth: 3, imagePositionX: 50, imagePositionY: 50 },
-  { id: "gallery-community", kicker: "COMUNIDAD CEHF", title: "Aprender también es compartir", caption: "Una mirada cercana a los momentos que nos unen como comunidad.", contentKicker: "", contentTitle: "", contentSubtitle: "", body: "", imagePath: "", accentColor: "#ef6b7d", layout: "split", depth: 2, imagePositionX: 50, imagePositionY: 50 },
-  { id: "gallery-future", kicker: "HISTORIA PARA DESCUBRIR", title: "La Independencia de México", caption: "Un tema presentado de forma clara, visual y memorable.", contentKicker: "MOMENTO HISTÓRICO", contentTitle: "El inicio de un nuevo país", contentSubtitle: "Una lucha que transformó nuestra historia y nuestra identidad.", body: "En 1810 comenzó un movimiento que buscaba justicia, libertad y una nueva forma de organizar el territorio.\n\nSus protagonistas, ideas y consecuencias siguen ayudándonos a comprender el México de hoy.", imagePath: "", accentColor: "#8db4ff", layout: "cinematic", depth: 3, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-ideas", kicker: "IDEAS EN MOVIMIENTO", title: "Creamos para transformar", caption: "Proyectos, hallazgos y voces que nacen en nuestras aulas.", contentKicker: "", contentTitle: "", contentSubtitle: "", body: "", facts: ["Curiosidad", "Creatividad", "Comunidad"], imagePath: "", accentColor: "#aeb5ff", layout: "focus", sceneStyle: "aurora", transition: "orbit", revealMode: "all", depth: 3, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-community", kicker: "COMUNIDAD CEHF", title: "Aprender también es compartir", caption: "Una mirada cercana a los momentos que nos unen como comunidad.", contentKicker: "", contentTitle: "", contentSubtitle: "", body: "", facts: ["Observar", "Relacionar", "Descubrir"], imagePath: "", accentColor: "#ef6b7d", layout: "split", sceneStyle: "museum", transition: "zoom", revealMode: "all", depth: 2, imagePositionX: 50, imagePositionY: 50 },
+  { id: "gallery-future", kicker: "HISTORIA PARA DESCUBRIR", title: "La Independencia de México", caption: "Un tema presentado de forma clara, visual y memorable.", contentKicker: "MOMENTO HISTÓRICO", contentTitle: "El inicio de un nuevo país", contentSubtitle: "Una lucha que transformó nuestra historia y nuestra identidad.", body: "En 1810 comenzó un movimiento que buscaba justicia, libertad y una nueva forma de organizar el territorio.\n\nSus protagonistas, ideas y consecuencias siguen ayudándonos a comprender el México de hoy.", facts: ["1810 · Inicio", "1821 · Consumación", "Libertad e identidad"], imagePath: "", accentColor: "#8db4ff", layout: "cinematic", sceneStyle: "constellation", transition: "lift", revealMode: "steps", depth: 3, imagePositionX: 50, imagePositionY: 50 },
 ];
 
 export function defaultMuralEdition(profile: UserProfile): MuralEdition {
@@ -252,10 +252,14 @@ async function muralEditionFromData(id: string, data: DocumentData): Promise<Mur
       contentTitle: String(slide.contentTitle ?? fallback.contentTitle),
       contentSubtitle: String(slide.contentSubtitle ?? fallback.contentSubtitle),
       body: String(slide.body ?? fallback.body),
+      facts: Array.isArray(slide.facts) ? slide.facts.slice(0, 4).map(String) : fallback.facts,
       imagePath: slideImagePath,
       imageUrl: slideImageUrl,
       accentColor: /^#[0-9a-f]{6}$/i.test(String(slide.accentColor ?? "")) ? String(slide.accentColor) : fallback.accentColor,
       layout: ["focus", "split", "cinematic"].includes(String(slide.layout)) ? String(slide.layout) as MuralGallerySlide["layout"] : fallback.layout,
+      sceneStyle: ["aurora", "constellation", "museum"].includes(String(slide.sceneStyle)) ? String(slide.sceneStyle) as MuralGallerySlide["sceneStyle"] : fallback.sceneStyle,
+      transition: ["orbit", "zoom", "lift"].includes(String(slide.transition)) ? String(slide.transition) as MuralGallerySlide["transition"] : fallback.transition,
+      revealMode: ["all", "steps"].includes(String(slide.revealMode)) ? String(slide.revealMode) as MuralGallerySlide["revealMode"] : fallback.revealMode,
       depth: numberInRange(slide.depth, fallback.depth, 1, 3),
       imagePositionX: numberInRange(slide.imagePositionX, 50),
       imagePositionY: numberInRange(slide.imagePositionY, 50),

@@ -12,9 +12,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Eye,
   Heart,
   ImagePlus,
   Layers3,
+  ListChecks,
   LoaderCircle,
   Maximize2,
   Palette,
@@ -22,6 +24,7 @@ import {
   Pause,
   Pencil,
   Play,
+  Presentation,
   RotateCcw,
   Search,
   Settings2,
@@ -54,6 +57,9 @@ import {
   muralEditionSchema,
   muralGalleryLayouts,
   muralGalleryLimits,
+  muralRevealModes,
+  muralSceneStyles,
+  muralSceneTransitions,
   muralLimits,
   muralSubmissionSchema,
   type MuralEditionInput,
@@ -156,6 +162,18 @@ const coverMotifLabels = {
   halftone: "Semitono",
   corners: "Esquinas",
   spiral: "Espiral",
+} as const;
+
+const muralSceneStyleLabels = {
+  aurora: { name: "Aurora", description: "Luz suave y profundidad contemporánea." },
+  constellation: { name: "Constelación", description: "Puntos de luz para temas históricos o científicos." },
+  museum: { name: "Museo", description: "Iluminación editorial cálida y sobria." },
+} as const;
+
+const muralTransitionLabels = {
+  orbit: { name: "Órbita", description: "Entrada tridimensional lateral." },
+  zoom: { name: "Acercamiento", description: "La escena aparece desde la profundidad." },
+  lift: { name: "Ascenso", description: "Movimiento vertical tipo escenario." },
 } as const;
 
 const MURAL_GRAPHIC_PARTS = 14;
@@ -311,58 +329,27 @@ function Mural3DGallerySlide({
   preview?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
-  const glowLayerRef = useRef<HTMLDivElement>(null);
-  const glowLightsRef = useRef<Array<HTMLSpanElement | null>>([]);
-  const glowTarget = useRef({ x: -180, y: -180, active: false });
+  const paragraphs = (slide.body || "Agrega párrafos desde el editor para presentar hechos, ideas y conclusiones de forma clara.")
+    .split(/\n\s*\n/)
+    .filter(Boolean);
+  const facts = slide.facts ?? [];
+  const [revealedCount, setRevealedCount] = useState(1);
+  const [imageDetailsOpen, setImageDetailsOpen] = useState(false);
+  const visibleParagraphs = preview || (slide.revealMode ?? "all") !== "steps"
+    ? paragraphs
+    : paragraphs.slice(0, revealedCount);
   const sceneStyle = {
     "--gallery-accent": slide.accentColor,
     "--gallery-image-x": `${slide.imagePositionX}%`,
     "--gallery-image-y": `${slide.imagePositionY}%`,
     "--gallery-depth": slide.depth,
-    "--gallery-rotate-x": "0deg",
-    "--gallery-rotate-y": "0deg",
   } as CSSProperties;
-
-  useEffect(() => {
-    if (preview || reduceMotion) return;
-    const points = Array.from({ length: 7 }, () => ({ x: -180, y: -180 }));
-    let animationFrame = 0;
-    const animateGlow = () => {
-      points.forEach((point, index) => {
-        const target = index === 0 ? glowTarget.current : points[index - 1];
-        const ease = index === 0 ? 0.24 : 0.19;
-        point.x += (target.x - point.x) * ease;
-        point.y += (target.y - point.y) * ease;
-        const node = glowLightsRef.current[index];
-        if (node) node.style.transform = `translate3d(${point.x}px, ${point.y}px, 0) translate(-50%, -50%) scale(${1 - index * 0.075})`;
-      });
-      if (glowLayerRef.current) glowLayerRef.current.style.opacity = glowTarget.current.active ? "1" : "0";
-      animationFrame = window.requestAnimationFrame(animateGlow);
-    };
-    animationFrame = window.requestAnimationFrame(animateGlow);
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [preview, reduceMotion]);
 
   return (
     <article
-      className={`mural-3d-gallery-slide layout-${slide.layout} depth-${slide.depth} ${slide.imageUrl ? "has-image" : "no-image"} ${preview ? "is-preview" : ""}`}
+      className={`mural-3d-gallery-slide layout-${slide.layout} scene-${slide.sceneStyle ?? "aurora"} depth-${slide.depth} ${slide.imageUrl ? "has-image" : "no-image"} ${preview ? "is-preview" : ""}`}
       style={sceneStyle}
-      onPointerMove={(event) => {
-        if (preview || reduceMotion) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        const x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 2;
-        const y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 2;
-        glowTarget.current = { x: event.clientX - bounds.left, y: event.clientY - bounds.top, active: true };
-        event.currentTarget.style.setProperty("--gallery-rotate-x", `${(-y * 3.5).toFixed(2)}deg`);
-        event.currentTarget.style.setProperty("--gallery-rotate-y", `${(x * 5).toFixed(2)}deg`);
-      }}
-      onPointerLeave={(event) => {
-        glowTarget.current.active = false;
-        event.currentTarget.style.setProperty("--gallery-rotate-x", "0deg");
-        event.currentTarget.style.setProperty("--gallery-rotate-y", "0deg");
-      }}
     >
-      {!preview && !reduceMotion && <div className="mural-glow-cursor" ref={glowLayerRef} aria-hidden="true">{Array.from({ length: 7 }, (_, lightIndex) => <span key={lightIndex} ref={(node) => { glowLightsRef.current[lightIndex] = node; }} />)}</div>}
       <div className="mural-3d-orbit" aria-hidden="true"><i /><i /><i /></div>
       <div className="mural-3d-backdrop" aria-hidden="true"><i /><i /><i /></div>
       {slide.layout !== "cinematic" && <div className="mural-3d-image-plane">
@@ -372,18 +359,23 @@ function Mural3DGallerySlide({
             <div className="mural-3d-placeholder" aria-hidden="true"><Layers3 /><span>CEHF</span></div>
           )}
           <i aria-hidden="true" />
+          {slide.layout === "split" && !preview && (slide.caption || facts.length > 0) && <button type="button" className="mural-image-explore-button" onClick={() => setImageDetailsOpen((current) => !current)} aria-expanded={imageDetailsOpen}><Eye size={16} />{imageDetailsOpen ? "Cerrar detalle" : "Explorar imagen"}</button>}
+          <AnimatePresence>{slide.layout === "split" && imageDetailsOpen && <motion.aside className="mural-image-detail-panel" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }} transition={{ duration: reduceMotion ? 0 : 0.28 }}><strong>{slide.title}</strong>{slide.caption && <p>{slide.caption}</p>}{facts.length > 0 && <div>{facts.map((fact, factIndex) => <span key={`${factIndex}-${fact}`}>{fact}</span>)}</div>}</motion.aside>}</AnimatePresence>
         </div>}
       <div className="mural-3d-copy">
-        <span className="mural-3d-kicker"><i />{slide.kicker || "GALERÍA CEHF"}</span>
+        <span className="mural-3d-kicker"><i />{slide.kicker || "EXPOSICIÓN CEHF"}</span>
         <h2>{slide.title}</h2>
         {slide.caption && <p>{slide.caption}</p>}
       </div>
+      {slide.layout === "focus" && facts.length > 0 && <div className="mural-scene-facts" aria-label="Ideas clave">{facts.map((fact, factIndex) => <motion.span key={`${factIndex}-${fact}`} initial={{ opacity: 0, y: reduceMotion ? 0 : 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reduceMotion ? 0 : 0.32 + factIndex * 0.08 }}>{fact}</motion.span>)}</div>}
       {slide.layout === "cinematic" && (
         <section className="mural-3d-editorial-panel">
           {slide.contentKicker && <span>{slide.contentKicker}</span>}
           <h3>{slide.contentTitle || "Desarrolla el tema"}</h3>
           {slide.contentSubtitle && <h4>{slide.contentSubtitle}</h4>}
-          <div>{(slide.body || "Agrega párrafos desde el editor para presentar hechos, ideas y conclusiones de forma clara.").split(/\n\s*\n/).map((paragraph, paragraphIndex) => <p key={paragraphIndex}>{paragraph}</p>)}</div>
+          <div className="mural-3d-editorial-body"><AnimatePresence initial={false}>{visibleParagraphs.map((paragraph, paragraphIndex) => <motion.p key={`${paragraphIndex}-${paragraph}`} initial={{ opacity: 0, y: reduceMotion ? 0 : 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : 0.32 }}>{paragraph}</motion.p>)}</AnimatePresence></div>
+          {facts.length > 0 && <div className="mural-editorial-facts">{facts.map((fact, factIndex) => <span key={`${factIndex}-${fact}`}>{fact}</span>)}</div>}
+          {!preview && (slide.revealMode ?? "all") === "steps" && paragraphs.length > 1 && <button type="button" className="mural-reveal-next" onClick={() => setRevealedCount((current) => current >= paragraphs.length ? 1 : current + 1)}><ListChecks size={16} />{revealedCount >= paragraphs.length ? "Volver a empezar" : `Mostrar idea ${revealedCount + 1}`}<small>{Math.min(revealedCount, paragraphs.length)}/{paragraphs.length}</small></button>}
         </section>
       )}
       <div className="mural-3d-number" aria-hidden="true"><span>{String(index).padStart(2, "0")}</span><i />{String(total).padStart(2, "0")}</div>
@@ -453,6 +445,20 @@ function MuralImmersiveView({
   }, [onClose]);
 
   const activeGallerySlide = activeSlide > 0 ? gallerySlides[activeSlide - 1] : undefined;
+  const galleryEntrance = reduceMotion || !activeGallerySlide
+    ? { opacity: 1 }
+    : (activeGallerySlide.transition ?? "orbit") === "zoom"
+      ? { opacity: 0, scale: 0.72, filter: "blur(12px)" }
+      : (activeGallerySlide.transition ?? "orbit") === "lift"
+        ? { opacity: 0, y: 88, rotateX: 9, scale: 0.94 }
+        : { opacity: 0, rotateY: 22, z: -190, scale: 0.86 };
+  const galleryExit = reduceMotion || !activeGallerySlide
+    ? { opacity: 0 }
+    : (activeGallerySlide.transition ?? "orbit") === "zoom"
+      ? { opacity: 0, scale: 1.12, filter: "blur(9px)" }
+      : (activeGallerySlide.transition ?? "orbit") === "lift"
+        ? { opacity: 0, y: -70, rotateX: -7, scale: 0.96 }
+        : { opacity: 0, rotateY: -17, z: -150, scale: 0.9 };
   const closeImmersive = () => {
     if (document.fullscreenElement) {
       void document.exitFullscreen().catch(() => undefined);
@@ -466,13 +472,13 @@ function MuralImmersiveView({
       style={immersiveStyle}
       role="dialog"
       aria-modal="true"
-      aria-label={`Presentación inmersiva del Periódico mural · ${edition.periodLabel}`}
+      aria-label={`Exposición virtual del Periódico mural · ${edition.periodLabel}`}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: reduceMotion ? 0 : 0.28 }}
     >
       <div className="mural-immersive-ambient" aria-hidden="true"><i /><i /><i /></div>
       <header className="mural-immersive-header">
-        <div className="mural-immersive-brand"><span>CE</span><i /><div><strong>Entre líneas</strong><small>{edition.periodLabel} · {edition.group}</small></div></div>
+        <div className="mural-immersive-brand"><span>CE</span><i /><div><strong>Exposición virtual</strong><small>{edition.periodLabel} · {edition.group}</small></div></div>
         <div className="mural-immersive-progress"><span>{activeSlide + 1} / {slideCount}</span><div><i style={{ width: `${((activeSlide + 1) / slideCount) * 100}%` }} /></div></div>
         <div className="mural-immersive-header-actions">
           <button type="button" className={playing ? "active" : ""} onClick={() => setPlaying((current) => !current)} disabled={Boolean(reduceMotion)} aria-label={playing ? "Pausar presentación" : "Reproducir presentación automáticamente"}>
@@ -505,9 +511,9 @@ function MuralImmersiveView({
               onDragEnd={(_, info) => {
                 if (Math.abs(info.offset.x) > 70) move(info.offset.x < 0 ? 1 : -1);
               }}
-              initial={{ opacity: 0, rotateY: reduceMotion ? 0 : 18, z: reduceMotion ? 0 : -180, scale: reduceMotion ? 1 : 0.86 }}
-              animate={{ opacity: 1, rotateY: 0, z: 0, scale: 1 }}
-              exit={{ opacity: 0, rotateY: reduceMotion ? 0 : -16, z: reduceMotion ? 0 : -140, scale: reduceMotion ? 1 : 0.9 }}
+              initial={galleryEntrance}
+              animate={{ opacity: 1, x: 0, y: 0, rotateX: 0, rotateY: 0, z: 0, scale: 1, filter: "blur(0px)" }}
+              exit={galleryExit}
               transition={{ duration: reduceMotion ? 0 : 0.68, ease: [0.16, 1, 0.3, 1] }}
             >
               <Mural3DGallerySlide slide={activeGallerySlide} index={activeSlide} total={gallerySlides.length} />
@@ -518,9 +524,9 @@ function MuralImmersiveView({
 
       <footer className="mural-immersive-controls">
         <button type="button" onClick={() => move(-1)} aria-label="Diapositiva anterior"><ChevronLeft size={19} />Anterior</button>
-        <nav aria-label="Diapositivas del mural">
+        <nav aria-label="Escenas de la exposición">
           {Array.from({ length: slideCount }, (_, index) => (
-            <button type="button" key={index} className={activeSlide === index ? "active" : ""} onClick={() => setActiveSlide(index)} aria-label={index === 0 ? "Ver portada" : `Ver diapositiva ${index}`} aria-current={activeSlide === index ? "true" : undefined}><i /></button>
+            <button type="button" key={index} className={activeSlide === index ? "active" : ""} onClick={() => setActiveSlide(index)} aria-label={index === 0 ? "Ver portada" : `Ver escena ${index}`} aria-current={activeSlide === index ? "true" : undefined}><i /></button>
           ))}
         </nav>
         <button type="button" onClick={() => move(1)}>Siguiente<ChevronRight size={19} /></button>
@@ -649,12 +655,11 @@ function MuralEditionEditor({
     setSelectedSlideId(nextSlides[Math.min(selectedSlideIndex, nextSlides.length - 1)].id);
   };
 
-  const tabs = [
+  const coverTabs = [
     ...(canAssign ? [{ id: "assignment" as const, label: "Edición", icon: CalendarDays }] : []),
     { id: "content" as const, label: "Textos", icon: Type },
     { id: "design" as const, label: "Diseño", icon: Palette },
     { id: "image" as const, label: "Imagen", icon: Camera },
-    { id: "gallery" as const, label: "Galería 3D", icon: Layers3 },
   ];
 
   return (
@@ -667,7 +672,7 @@ function MuralEditionEditor({
         className="mural-studio"
         role="dialog"
         aria-modal="true"
-        aria-label="Estudio de portada"
+        aria-label="Estudio del Periódico mural"
         initial={{ opacity: 0, y: 20, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
         onSubmit={(event) => {
           event.preventDefault();
@@ -682,15 +687,18 @@ function MuralEditionEditor({
         }}
       >
         <header className="mural-studio-header">
-          <div><span className="eyebrow">ESTUDIO DEL MURAL</span><h2>Diseña la edición</h2><p>Personaliza la portada y su galería inmersiva en tiempo real.</p></div>
+          <div><span className="eyebrow">ESTUDIO DEL MURAL</span><h2>Portada y exposición</h2><p>Diseña la entrada del periódico y construye una exposición virtual por escenas.</p></div>
           <button className="plain-icon" type="button" onClick={onClose} disabled={busy} aria-label="Cerrar"><X size={20} /></button>
         </header>
         <div className="mural-studio-body">
           <aside className="mural-studio-controls">
-            <nav className="mural-studio-tabs" aria-label="Herramientas de portada">
-              {tabs.map(({ id, label, icon: Icon }) => (
-                <button type="button" key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><Icon size={15} />{label}</button>
-              ))}
+            <nav className="mural-studio-tabs" aria-label="Áreas del estudio del mural">
+              <div className={`mural-studio-tab-group mural-studio-cover-tabs ${canAssign ? "" : "three"}`}><span>PORTADA</span><div>
+                {coverTabs.map(({ id, label, icon: Icon }) => (
+                  <button type="button" key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><Icon size={15} />{label}</button>
+                ))}
+              </div></div>
+              <div className="mural-studio-tab-group mural-studio-exhibit-tab"><span>CONTENIDO INMERSIVO</span><button type="button" className={tab === "gallery" ? "active" : ""} onClick={() => setTab("gallery")}><Presentation size={15} />Exposición virtual</button></div>
             </nav>
             {error && <div className="mural-form-error" role="alert"><AlertCircle size={16} />{error}</div>}
 
@@ -768,30 +776,31 @@ function MuralEditionEditor({
 
             {tab === "gallery" && selectedSlide && (
               <div className="mural-studio-panel mural-gallery-editor">
-                <div className="mural-control-heading"><Layers3 size={17} /><div><strong>Galería inmersiva 3D</strong><span>Portada + diapositivas visuales; las historias permanecen en el mural normal.</span></div></div>
-                <div className="mural-gallery-slide-rail" aria-label="Diapositivas de la galería">
+                <div className="mural-exhibit-intro"><Presentation size={22} /><div><strong>Contenido de la exposición</strong><span>Construye un recorrido virtual para presentar historia, ciencia, celebraciones, arte o proyectos.</span></div></div>
+                <div className="mural-gallery-slide-rail" aria-label="Escenas de la exposición">
                   {draft.gallerySlides.map((slide, index) => (
                     <button type="button" key={slide.id} className={slide.id === selectedSlide.id ? "active" : ""} onClick={() => setSelectedSlideId(slide.id)}>
                       <span style={galleryPreviews[slide.id] ? { backgroundImage: `url(${galleryPreviews[slide.id]})` } : { background: `linear-gradient(145deg, #111744, ${slide.accentColor})` }}>{index + 1}</span>
-                      <small>{slide.title || `Slide ${index + 1}`}</small>
+                      <small>{slide.title || `Escena ${index + 1}`}</small>
                     </button>
                   ))}
                   <button type="button" className="add" onClick={addGallerySlide} disabled={draft.gallerySlides.length >= muralGalleryLimits.slides}><ImagePlus size={17} /><small>Agregar</small></button>
                 </div>
                 <div className="mural-gallery-editor-actions">
-                  <span>Slide {selectedSlideIndex + 1} de {draft.gallerySlides.length}</span>
+                  <span>Escena {selectedSlideIndex + 1} de {draft.gallerySlides.length}</span>
                   <div>
                     <button type="button" onClick={() => moveGallerySlide(-1)} disabled={selectedSlideIndex === 0} aria-label="Mover antes"><ChevronLeft size={15} /></button>
                     <button type="button" onClick={() => moveGallerySlide(1)} disabled={selectedSlideIndex === draft.gallerySlides.length - 1} aria-label="Mover después"><ChevronRight size={15} /></button>
-                    <button type="button" className="danger" onClick={removeGallerySlide} disabled={draft.gallerySlides.length === 1} aria-label="Eliminar diapositiva"><Trash2 size={15} /></button>
+                    <button type="button" className="danger" onClick={removeGallerySlide} disabled={draft.gallerySlides.length === 1} aria-label="Eliminar escena"><Trash2 size={15} /></button>
                   </div>
                 </div>
+                <div className="mural-exhibit-section-label"><span>01</span><div><strong>Historia de la escena</strong><small>Define qué aprenderá o descubrirá el visitante.</small></div></div>
                 <label>Antetítulo<input value={selectedSlide.kicker} maxLength={muralGalleryLimits.kicker} onChange={(event) => gallerySlideField("kicker", event.target.value)} /><small>{selectedSlide.kicker.length}/{muralGalleryLimits.kicker}</small></label>
-                <label>Título visual<textarea value={selectedSlide.title} maxLength={muralGalleryLimits.title} onChange={(event) => gallerySlideField("title", event.target.value)} /><small>{selectedSlide.title.length}/{muralGalleryLimits.title}</small></label>
-                <label>Texto breve<textarea value={selectedSlide.caption} maxLength={muralGalleryLimits.caption} onChange={(event) => gallerySlideField("caption", event.target.value)} /><small>{selectedSlide.caption.length}/{muralGalleryLimits.caption}</small></label>
-                <label>Tipo de diapositiva<div className="mural-option-grid three mural-gallery-type-grid">{muralGalleryLayouts.map((layout) => <button type="button" key={layout} className={selectedSlide.layout === layout ? "active" : ""} onClick={() => gallerySlideField("layout", layout)}><span className={`gallery-layout-icon ${layout}`}><i /><i /></span><small>{layout === "focus" ? "Visual 3D" : layout === "split" ? "Título + imagen" : "Tema + texto"}</small></button>)}</div></label>
+                <label>Título principal<textarea value={selectedSlide.title} maxLength={muralGalleryLimits.title} onChange={(event) => gallerySlideField("title", event.target.value)} /><small>{selectedSlide.title.length}/{muralGalleryLimits.title}</small></label>
+                <label>Introducción breve<textarea value={selectedSlide.caption} maxLength={muralGalleryLimits.caption} onChange={(event) => gallerySlideField("caption", event.target.value)} /><small>{selectedSlide.caption.length}/{muralGalleryLimits.caption}</small></label>
+                <label>Tipo de escena<div className="mural-option-grid three mural-gallery-type-grid">{muralGalleryLayouts.map((layout) => <button type="button" key={layout} className={selectedSlide.layout === layout ? "active" : ""} onClick={() => gallerySlideField("layout", layout)}><span className={`gallery-layout-icon ${layout}`}><i /><i /></span><small>{layout === "focus" ? "Apertura visual" : layout === "split" ? "Imagen comentada" : "Tema desarrollado"}</small></button>)}</div></label>
                 {selectedSlide.layout !== "cinematic" && <>
-                  <label className="mural-image-drop compact"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseGalleryImage(event.target.files?.[0])} /><Upload size={20} /><strong>{galleryPreviews[selectedSlide.id] ? "Cambiar imagen del slide" : "Subir imagen del slide"}</strong><span>JPG, PNG o WEBP · máximo 8 MB</span></label>
+                  <label className="mural-image-drop compact"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseGalleryImage(event.target.files?.[0])} /><Upload size={20} /><strong>{galleryPreviews[selectedSlide.id] ? "Cambiar imagen de la escena" : "Subir imagen a la escena"}</strong><span>JPG, PNG o WEBP · máximo 8 MB</span></label>
                   {galleryPreviews[selectedSlide.id] && <button type="button" className="mural-gallery-remove-image" onClick={() => { setGalleryImages((previous) => { const next = { ...previous }; delete next[selectedSlide.id]; return next; }); setGalleryPreviews((previous) => ({ ...previous, [selectedSlide.id]: "" })); gallerySlideField("imagePath", ""); }}><X size={13} />Quitar imagen</button>}
                 </>}
                 {selectedSlide.layout === "cinematic" && <div className="mural-gallery-content-fields">
@@ -801,15 +810,19 @@ function MuralEditionEditor({
                   <label>Subtítulo<textarea value={selectedSlide.contentSubtitle} maxLength={muralGalleryLimits.contentSubtitle} onChange={(event) => gallerySlideField("contentSubtitle", event.target.value)} placeholder="Una frase que introduzca el tema." /><small>{selectedSlide.contentSubtitle.length}/{muralGalleryLimits.contentSubtitle}</small></label>
                   <label>Párrafos<textarea className="mural-gallery-body-input" value={selectedSlide.body} maxLength={muralGalleryLimits.body} onChange={(event) => gallerySlideField("body", event.target.value)} placeholder={"Escribe el desarrollo del tema.\n\nSepara cada párrafo con una línea en blanco."} /><small>{selectedSlide.body.length}/{muralGalleryLimits.body}</small></label>
                 </div>}
-                <div className="mural-color-row single"><label>Color de luz<span><input type="color" value={selectedSlide.accentColor} onChange={(event) => gallerySlideField("accentColor", event.target.value)} /><code>{selectedSlide.accentColor}</code></span></label></div>
-                <label className="mural-range-label"><span><strong>Profundidad 3D</strong><small>Nivel {selectedSlide.depth}</small></span><input type="range" min="1" max="3" value={selectedSlide.depth} onChange={(event) => gallerySlideField("depth", Number(event.target.value))} /></label>
-                <label className="mural-range-label"><span><strong>Enfoque horizontal</strong><small>{selectedSlide.imagePositionX}%</small></span><input type="range" min="0" max="100" value={selectedSlide.imagePositionX} onChange={(event) => gallerySlideField("imagePositionX", Number(event.target.value))} /></label>
-                <label className="mural-range-label"><span><strong>Enfoque vertical</strong><small>{selectedSlide.imagePositionY}%</small></span><input type="range" min="0" max="100" value={selectedSlide.imagePositionY} onChange={(event) => gallerySlideField("imagePositionY", Number(event.target.value))} /></label>
+                <label>Datos clave · uno por línea<textarea value={selectedSlide.facts.join("\n")} maxLength={muralGalleryLimits.facts * muralGalleryLimits.fact} onChange={(event) => gallerySlideField("facts", event.target.value.split("\n").map((fact) => fact.trim().slice(0, muralGalleryLimits.fact)).filter(Boolean).slice(0, muralGalleryLimits.facts))} placeholder={"1810 · Inicio del movimiento\n1821 · Consumación\nLibertad e identidad"} /><small>{selectedSlide.facts.length}/{muralGalleryLimits.facts} datos</small></label>
+
+                <div className="mural-exhibit-section-label"><span>02</span><div><strong>Dirección escénica</strong><small>Personaliza la atmósfera y la forma de presentar el contenido.</small></div></div>
+                <label>Atmósfera visual<div className="mural-scene-style-grid">{muralSceneStyles.map((sceneStyle) => <button type="button" key={sceneStyle} className={`${selectedSlide.sceneStyle === sceneStyle ? "active" : ""} scene-${sceneStyle}`} onClick={() => gallerySlideField("sceneStyle", sceneStyle)}><i /><span><strong>{muralSceneStyleLabels[sceneStyle].name}</strong><small>{muralSceneStyleLabels[sceneStyle].description}</small></span></button>)}</div></label>
+                <label>Transición de entrada<div className="mural-transition-grid">{muralSceneTransitions.map((transition) => <button type="button" key={transition} className={selectedSlide.transition === transition ? "active" : ""} onClick={() => gallerySlideField("transition", transition)}><i className={transition} /><span><strong>{muralTransitionLabels[transition].name}</strong><small>{muralTransitionLabels[transition].description}</small></span></button>)}</div></label>
+                {selectedSlide.layout === "cinematic" && <label>Lectura del contenido<div className="mural-choice-row">{muralRevealModes.map((mode) => <button type="button" key={mode} className={selectedSlide.revealMode === mode ? "active" : ""} onClick={() => gallerySlideField("revealMode", mode)}>{mode === "all" ? "Mostrar completo" : "Descubrir por pasos"}</button>)}</div><small>{selectedSlide.revealMode === "steps" ? "El visitante revela una idea a la vez." : "Todo el contenido aparece al entrar."}</small></label>}
+                <div className="mural-color-row single"><label>Color de la escena<span><input type="color" value={selectedSlide.accentColor} onChange={(event) => gallerySlideField("accentColor", event.target.value)} /><code>{selectedSlide.accentColor}</code></span></label></div>
+                {selectedSlide.layout !== "cinematic" && galleryPreviews[selectedSlide.id] && <label>Punto focal de la imagen<div className="mural-focus-picker" role="group" aria-label="Punto focal de la imagen">{[20, 50, 80].flatMap((vertical) => [20, 50, 80].map((horizontal) => <button type="button" key={`${horizontal}-${vertical}`} className={selectedSlide.imagePositionX === horizontal && selectedSlide.imagePositionY === vertical ? "active" : ""} onClick={() => setDraft((previous) => ({ ...previous, gallerySlides: previous.gallerySlides.map((slide) => slide.id === selectedSlide.id ? { ...slide, imagePositionX: horizontal, imagePositionY: vertical } : slide) }))} aria-label={`Enfocar imagen en ${horizontal === 20 ? "izquierda" : horizontal === 50 ? "centro" : "derecha"}, ${vertical === 20 ? "arriba" : vertical === 50 ? "centro" : "abajo"}`}><i /></button>))}</div><small>El punto marcado será el centro visible de la fotografía.</small></label>}
               </div>
             )}
           </aside>
           <section className="mural-studio-preview">
-            <div className="mural-preview-heading"><span>VISTA PREVIA EN VIVO</span><small>{previewEdition.periodLabel} · {previewEdition.group}</small></div>
+            <div className="mural-preview-heading"><span>{tab === "gallery" ? "VISTA PREVIA · EXPOSICIÓN" : "VISTA PREVIA · PORTADA"}</span><small>{previewEdition.periodLabel} · {previewEdition.group}</small></div>
             {tab === "gallery" && selectedSlide ? (
               <div className="mural-gallery-editor-preview"><Mural3DGallerySlide slide={{ ...selectedSlide, imageUrl: galleryPreviews[selectedSlide.id] }} index={selectedSlideIndex + 1} total={draft.gallerySlides.length} preview /></div>
             ) : <MuralEditionCover edition={previewEdition} imagePreview={imagePreview} preview />}
@@ -1425,7 +1438,7 @@ export function WallNewspaperPage({
           const slideImageUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = () => resolve(String(reader.result ?? ""));
-            reader.onerror = () => reject(new Error("No pudimos leer una imagen de la galería."));
+            reader.onerror = () => reject(new Error("No pudimos leer una imagen de la exposición."));
             reader.readAsDataURL(galleryImage);
           });
           return { ...slide, imageUrl: slideImageUrl };
@@ -1455,7 +1468,7 @@ export function WallNewspaperPage({
         updateState((previous) => ({ ...previous, muralEdition: nextEdition }));
       }
       setEditionEditorOpen(false);
-      toast.success("Edición y galería actualizadas", {
+      toast.success("Edición y exposición actualizadas", {
         description: profile.role === "director"
           ? "La asignación y el diseño ya están visibles para la comunidad."
           : "El nuevo diseño ya está visible para la comunidad.",
@@ -1560,7 +1573,7 @@ export function WallNewspaperPage({
         </div>
         <div className="mural-edition-team"><span>Grupo responsable<strong>{edition.group}</strong></span><i /><span>Edición y revisión<strong>{edition.teacherName}</strong></span></div>
         <div className="mural-edition-actions">
-          <button className="secondary-button" onClick={openImmersive}><Maximize2 size={15} />Modo inmersivo</button>
+          <button className="secondary-button" onClick={openImmersive}><Maximize2 size={15} />Periódico Mural</button>
           {canManageEdition && <button className="primary-button" onClick={openEditionEditor}><Brush size={15} />{profile.role === "director" ? "Configurar edición" : "Diseñar portada"}</button>}
         </div>
         {profile.role === "director" && !editionConfigured && <span className="mural-edition-alert"><AlertCircle size={15} />Falta publicar la primera asignación</span>}
