@@ -8,7 +8,8 @@
 .staff-workspace-page button,
 .staff-workspace-page a,
 .staff-workspace-page input,
-.staff-workspace-page textarea {
+.staff-workspace-page textarea,
+.staff-workspace-page select {
   outline: none;
 }
 
@@ -18,10 +19,18 @@
 }
 
 .staff-workspace-page button:focus-visible,
-.staff-workspace-page a:focus-visible,
-.staff-workspace-page input:focus-visible,
-.staff-workspace-page textarea:focus-visible {
+.staff-workspace-page a:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 22%, transparent);
+}
+
+.staff-workspace-page input:focus,
+.staff-workspace-page input:focus-visible,
+.staff-workspace-page textarea:focus,
+.staff-workspace-page textarea:focus-visible,
+.staff-workspace-page select:focus,
+.staff-workspace-page select:focus-visible {
+  box-shadow: none;
+  outline: none;
 }
 
 .staff-workspace-hero {
@@ -289,7 +298,6 @@
 .staff-workspace-search:focus-within {
   background: var(--surface);
   border-color: color-mix(in srgb, var(--violet) 45%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 10%, transparent);
 }
 
 .staff-workspace-search input {
@@ -1229,7 +1237,6 @@
 
 .bn-container.staff-workspace-blocknote:focus-within {
   border-color: color-mix(in srgb, var(--violet) 42%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--violet) 9%, transparent);
 }
 
 .bn-container.staff-workspace-blocknote .bn-editor {

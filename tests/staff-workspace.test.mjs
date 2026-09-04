@@ -32,6 +32,10 @@ test("ships the organized and reusable Mi espacio workflow", async () => {
   assert.match(css, /\.staff-workspace-view-tabs/);
   assert.match(css, /\.staff-workspace-advanced-filters/);
   assert.match(css, /\.staff-workspace-draft-banner/);
+  assert.match(css, /\.staff-workspace-page input:focus,[\s\S]*?box-shadow: none;/);
+  assert.match(css, /\.staff-workspace-page select:focus-visible/);
+  assert.doesNotMatch(css, /\.staff-workspace-search:focus-within\s*\{[^}]*box-shadow:/);
+  assert.doesNotMatch(css, /\.bn-container\.staff-workspace-blocknote:focus-within\s*\{[^}]*box-shadow:/);
 });
 
 test("ships collaborative workspace records with scoped Firestore rules", async () => {
