@@ -124,6 +124,7 @@ import {
   createTaskAssignment,
   defaultAcademicCalendar,
   defaultAcademicConfig,
+  isFirebaseTaskAssignment,
   legacyTasksToAssignments,
   markTaskNotificationsRead,
   resolveAcademicConfig,
@@ -2449,7 +2450,9 @@ function Dashboard({
       return;
     }
     queueMicrotask(() => setSubmissionsByTask({}));
-    const stops = scopedTasks.map((task) =>
+    const stops = scopedTasks
+      .filter(isFirebaseTaskAssignment)
+      .map((task) =>
       watchTaskSubmissions(
         task,
         profile,
