@@ -425,7 +425,7 @@ export function AcademicGradesPanel({
       return;
     }
     const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
-    downloadGradeReportPdf({
+    await downloadGradeReportPdf({
       role: profile.role,
       generatedBy: profile.name,
       records: weeklyRecords,

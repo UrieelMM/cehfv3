@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { autoTable } from "jspdf-autotable";
+import logoCehf from "@/assets/img/logoCEHF.png";
 import type { Role, WeeklyGradeRecord } from "@/lib/types";
 
 const BRAND_BLUE: [number, number, number] = [31, 41, 133];
@@ -8,6 +9,7 @@ const INK: [number, number, number] = [25, 39, 68];
 const MUTED: [number, number, number] = [92, 105, 128];
 const BORDER: [number, number, number] = [219, 226, 238];
 const TOTAL_PAGES = "{total_pages_count_string}";
+let brandLogoPromise: Promise<Uint8Array | null> | undefined;
 
 export type GradeReportInput = {
   role: Role;
@@ -61,26 +63,47 @@ function uniqueCount(records: WeeklyGradeRecord[], field: "studentId" | "teacher
   return new Set(records.map((record) => record[field])).size;
 }
 
+async function loadBrandLogoBytes() {
+  brandLogoPromise ??= fetch(logoCehf.src)
+    .then((response) => {
+      if (!response.ok) throw new Error("No pudimos cargar el logo institucional.");
+      return response.arrayBuffer();
+    })
+    .then((buffer) => new Uint8Array(buffer))
+    .catch(() => null);
+  return brandLogoPromise;
+}
+
 function average(records: WeeklyGradeRecord[]) {
   if (!records.length) return 0;
   return records.reduce((sum, record) => sum + record.weightedScore, 0) / records.length;
 }
 
-function addHeader(doc: jsPDF, input: GradeReportInput, pageWidth: number) {
+function addHeader(
+  doc: jsPDF,
+  input: GradeReportInput,
+  pageWidth: number,
+  brandLogo?: Uint8Array | null,
+) {
   doc.setFillColor(...BRAND_BLUE);
   doc.rect(0, 0, pageWidth, 31, "F");
-  doc.setFillColor(255, 255, 255);
-  doc.roundedRect(14, 9, 16, 13, 3, 3, "F");
-  doc.setTextColor(...BRAND_BLUE);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.text("CEHF", 22, 17.5, { align: "center" });
+  if (brandLogo) {
+    doc.addImage(brandLogo, "PNG", 10.5, 3.5, 24, 24, "cehf-logo", "FAST");
+  } else {
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(14, 9, 16, 13, 3, 3, "F");
+    doc.setTextColor(...BRAND_BLUE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.text("CEHF", 22, 17.5, { align: "center" });
+  }
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(13.5);
-  doc.text(input.institutionName ?? "Campus CEHF", 35, 13.5);
+  doc.setFont("helvetica", "bold");
+  doc.text(input.institutionName ?? "Campus CEHF", 37, 13.5);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
-  doc.text(reportTitle(input.role), 35, 19.2);
+  doc.text(reportTitle(input.role), 37, 19.2);
   doc.text(`${input.weekLabel}${input.weekRange ? ` · ${input.weekRange}` : ""}`, pageWidth - 14, 14, {
     align: "right",
   });
@@ -202,7 +225,7 @@ function addSignatures(doc: jsPDF, input: GradeReportInput, pageWidth: number, s
   });
 }
 
-export function buildGradeReportPdf(input: GradeReportInput) {
+export function buildGradeReportPdf(input: GradeReportInput, brandLogo?: Uint8Array | null) {
   const staff = input.role !== "student";
   const doc = new jsPDF({
     orientation: staff ? "landscape" : "portrait",
@@ -300,14 +323,15 @@ export function buildGradeReportPdf(input: GradeReportInput) {
   addSignatures(doc, input, pageWidth, signatureY);
   for (let page = 1; page <= doc.getNumberOfPages(); page += 1) {
     doc.setPage(page);
-    addHeader(doc, input, pageWidth);
+    addHeader(doc, input, pageWidth, brandLogo);
     addFooter(doc, input, pageWidth, pageHeight);
   }
   if (typeof doc.putTotalPages === "function") doc.putTotalPages(TOTAL_PAGES);
   return doc;
 }
 
-export function downloadGradeReportPdf(input: GradeReportInput) {
-  const doc = buildGradeReportPdf(input);
+export async function downloadGradeReportPdf(input: GradeReportInput) {
+  const brandLogo = await loadBrandLogoBytes();
+  const doc = buildGradeReportPdf(input, brandLogo);
   doc.save(reportFileName(input));
 }

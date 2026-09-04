@@ -368,6 +368,9 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradeReportPdfSource, /directorNames/);
   assert.match(gradeReportPdfSource, /teacherNames\[0\]/);
   assert.match(gradeReportPdfSource, /Página \$\{page\} de/);
+  assert.match(gradeReportPdfSource, /loadBrandLogoBytes/);
+  assert.match(gradeReportPdfSource, /doc\.addImage\(brandLogo, "PNG"/);
+  assert.match(appSource, /className="sidebar-brand-logo"/);
   assert.match(workshopSource, /Biblioteca creativa/);
   assert.match(workshopSource, /Laboratorio digital/);
   assert.match(workshopFirebaseSource, /ensureDefaultWorkshops/);

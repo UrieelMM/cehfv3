@@ -1272,7 +1272,7 @@ function GradeExportDialog({
       const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
       const teacherName = teachers.find(([id]) => id === teacherId)?.[1];
       const studentName = students.find(([id]) => id === studentId)?.[1];
-      downloadGradeReportPdf({
+      await downloadGradeReportPdf({
         role: profile.role,
         generatedBy: profile.name,
         records: filteredRecords,
@@ -1512,7 +1512,7 @@ export function WeeklyGradesPanel({
     setStudentExporting(true);
     try {
       const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
-      downloadGradeReportPdf({
+      await downloadGradeReportPdf({
         role: "student",
         generatedBy: profile.name,
         records: pdfVisibleRecords,

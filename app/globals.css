@@ -241,6 +241,16 @@ code {
   padding: 0 6px;
 }
 
+.sidebar-brand-logo {
+  width: 43px;
+  height: 43px;
+  flex: 0 0 43px;
+  object-fit: contain;
+  filter: drop-shadow(0 7px 11px rgb(31 41 133 / 0.22));
+  transform: scale(1.48);
+  transform-origin: center;
+}
+
 .brand-mark {
   position: relative;
   display: grid;

@@ -50,6 +50,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import Image from "next/image";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
@@ -128,6 +129,7 @@ import {
   watchForumWorkspace,
 } from "@/lib/forum-firebase";
 import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
+import logoCehf from "@/assets/img/logoCEHF.png";
 import {
   publishAcademicCalendarImage,
   unpublishAcademicCalendarImage,
@@ -923,9 +925,14 @@ export function CEHFApp() {
       >
         <div className="sidebar-header">
           <div className="brand">
-            <div className="brand-mark" aria-hidden="true">
-              <span>CE</span>
-            </div>
+            <Image
+              className="sidebar-brand-logo"
+              src={logoCehf}
+              alt=""
+              aria-hidden="true"
+              sizes="43px"
+              unoptimized
+            />
             <div className="brand-copy">
               <strong>CEHF</strong>
               <span>Campus</span>
