@@ -32,8 +32,8 @@ test("server-renders the Campus CEHF landing experience", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Campus CEHF<\/title>/i);
-  assert.match(html, /Todo lo que importa/i);
-  assert.match(html, /Entrar al campus/i);
+  assert.match(html, /Tu vida escolar/i);
+  assert.match(html, /Entrar y ponerme al día/i);
   assert.match(html, /manifest\.webmanifest/i);
   assert.match(html, /og-landing\.png/i);
   assert.doesNotMatch(html, /Your site is taking shape|codex-preview/i);

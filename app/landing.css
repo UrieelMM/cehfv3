@@ -62,21 +62,12 @@
   text-decoration: none;
 }
 
-.lp-brand-mark,
-.lp-mini-brand {
-  display: grid;
-  place-items: center;
-  background: var(--lp-blue);
-  color: #fff;
-  font-weight: 750;
-  letter-spacing: -0.04em;
-}
-
 .lp-brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px 11px 16px 11px;
-  box-shadow: 0 10px 24px rgb(31 41 133 / 0.22);
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 13px rgb(31 41 133 / 0.2));
 }
 
 .lp-brand-copy {
@@ -311,8 +302,8 @@
   width: 34px;
   height: 34px;
   margin-bottom: 22px;
-  border-radius: 10px 10px 14px 10px;
-  font-size: 11px;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 7px rgb(31 41 133 / 0.22));
 }
 
 .lp-window-sidebar > span:not(.lp-mini-brand) {

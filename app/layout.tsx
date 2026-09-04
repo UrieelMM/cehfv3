@@ -47,7 +47,7 @@ export async function generateMetadata(): Promise<Metadata> {
     (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const description =
-    "Todo lo que importa, en un mismo lugar. Una experiencia académica clara para aprender, avanzar y conectar.";
+    "Tareas, avances, avisos y tu comunidad en un solo espacio para organizarte, aprender y seguir rompiéndola.";
 
   return {
     title: {
@@ -66,7 +66,7 @@ export async function generateMetadata(): Promise<Metadata> {
       ],
     },
     openGraph: {
-      title: "Campus CEHF · Todo lo que importa, en un mismo lugar",
+      title: "Campus CEHF · Tu vida escolar, más fácil y más cool",
       description,
       type: "website",
       locale: "es_MX",
@@ -76,13 +76,13 @@ export async function generateMetadata(): Promise<Metadata> {
           url: `${origin}/og-landing.png`,
           width: 1734,
           height: 907,
-          alt: "Campus CEHF — Todo lo que importa, en un mismo lugar",
+          alt: "Campus CEHF — Tu vida escolar, más fácil y más cool",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Campus CEHF · Todo lo que importa, en un mismo lugar",
+      title: "Campus CEHF · Tu vida escolar, más fácil y más cool",
       description,
       images: [`${origin}/og-landing.png`],
     },
