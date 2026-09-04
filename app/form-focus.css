@@ -1,0 +1,21 @@
+/* Keep form controls calm on focus while preserving keyboard focus on actions. */
+:where(input, textarea, select, [contenteditable="true"]):focus,
+:where(input, textarea, select, [contenteditable="true"]):focus-visible {
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:where(
+  .materials-search,
+  .reviews-search,
+  .teacher-student-search,
+  .mural-search,
+  .mural-filter,
+  .login-input-wrap,
+  .forum-composer-body,
+  .staff-workspace-search,
+  .staff-workspace-blocknote
+):focus-within {
+  box-shadow: none !important;
+  outline: none !important;
+}
