@@ -57,6 +57,14 @@ export async function generateMetadata(): Promise<Metadata> {
     description,
     applicationName: "Campus CEHF",
     manifest: "/manifest.webmanifest",
+    icons: {
+      icon: [
+        { url: "/icons/favicon-32.png", sizes: "32x32", type: "image/png" },
+      ],
+      apple: [
+        { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+      ],
+    },
     openGraph: {
       title: "Campus CEHF · Todo lo que importa, en un mismo lugar",
       description,
