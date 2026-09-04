@@ -32,6 +32,10 @@ test("ships the organized and reusable Mi espacio workflow", async () => {
   assert.match(css, /\.staff-workspace-view-tabs/);
   assert.match(css, /\.staff-workspace-advanced-filters/);
   assert.match(css, /\.staff-workspace-draft-banner/);
+  assert.doesNotMatch(source, /<h2>Mi espacio<\/h2>/);
+  assert.match(source, /Nuevo documento/);
+  assert.match(css, /\.staff-workspace-editor-form \.staff-workspace-title-field input[\s\S]*?border: 1px solid var\(--border\)/);
+  assert.doesNotMatch(css, /\.staff-workspace-page button, \.staff-workspace-page select \{[^}]*min-height: 44px/);
   assert.match(css, /\.staff-workspace-page input:focus,[\s\S]*?box-shadow: none;/);
   assert.match(css, /\.staff-workspace-page select:focus-visible/);
   assert.doesNotMatch(css, /\.staff-workspace-search:focus-within\s*\{[^}]*box-shadow:/);

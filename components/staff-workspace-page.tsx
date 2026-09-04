@@ -1181,16 +1181,6 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
 
   return (
     <div className="staff-workspace-page">
-      <motion.section animate={{ opacity: 1, y: 0 }} className="staff-workspace-hero" initial={reduceMotion ? false : { opacity: 0, y: 12 }}>
-        <div className="staff-workspace-hero-copy">
-          <h2>Mi espacio</h2>
-          <p>Tus documentos y plantillas, en un solo lugar.</p>
-        </div>
-        <div className="staff-workspace-hero-actions">
-          <button className="primary-button staff-workspace-create-button" onClick={() => openNewItem("note", view === "templates")} type="button"><Plus size={17} /> {view === "templates" ? "Crear plantilla" : "Crear documento"}</button>
-        </div>
-      </motion.section>
-
       {recoverableDraft && !editorOpen && (
         <section className="staff-workspace-draft-banner" role="status">
           <span><RotateCcw size={18} /></span>
@@ -1217,6 +1207,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
         <main className="staff-workspace-main">
           <div className="staff-workspace-toolbar">
             <label className="staff-workspace-search"><Search size={16} /><input aria-label="Buscar en Mi espacio" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar notas, recursos o personas…" value={search} /></label>
+            <button className="primary-button staff-workspace-create-button" onClick={() => openNewItem("note", view === "templates")} type="button"><Plus size={16} /> {view === "templates" ? "Crear plantilla" : "Nuevo documento"}</button>
             <button className="secondary-button" aria-expanded={filtersOpen} aria-controls="workspace-filter-panel" onClick={() => setFiltersOpen((open) => !open)} type="button"><SlidersHorizontal size={16} /> Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}</button>
             {(activeFilterCount > 0 || search) && <button className="secondary-button" onClick={resetFilters} type="button">Limpiar</button>}
           </div>
