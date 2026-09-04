@@ -1960,7 +1960,11 @@ function SectionContent({
       );
     case "weekly-progress":
       return role === "student" ? null : (
-        <StaffWorkspacePage profile={profile} firebaseReady={firebaseReady} />
+        <StaffWorkspacePage
+          profile={profile}
+          accounts={managedAccounts}
+          firebaseReady={firebaseReady}
+        />
       );
     case "reports":
       return (

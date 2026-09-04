@@ -87,6 +87,30 @@ service firebase.storage {
         );
     }
 
+    function staffWorkspaceSafeUpload() {
+      return request.resource.size > 0
+        && request.resource.size <= 25 * 1024 * 1024
+        && request.resource.contentType.matches(
+          "(application/pdf|application/octet-stream|application/msword|application/vnd.openxmlformats-officedocument.*|application/vnd.ms-(excel|powerpoint)|application/(zip|x-zip-compressed)|image/.*|audio/.*|video/.*|text/(plain|csv))"
+        );
+    }
+
+    function canReadStaffWorkspaceItem(institutionId, itemId) {
+      let item = firestore.get(
+        /databases/(default)/documents/institutions/$(institutionId)/staffWorkspace/$(itemId)
+      ).data;
+      return item.institutionId == institutionId
+        && (
+          item.ownerId == request.auth.uid
+          || item.visibility == "staff"
+          || (
+            item.visibility == "selected"
+            && item.sharedWithIds is list
+            && request.auth.uid in item.sharedWithIds
+          )
+        );
+    }
+
     function academicCalendarImageUpload() {
       return request.resource.size > 0
         && request.resource.size <= 10 * 1024 * 1024
@@ -305,6 +329,22 @@ service firebase.storage {
         && sameInstitution(institutionId)
         && taskResourceSafeUpload();
       allow delete: if isDirector() && sameInstitution(institutionId);
+    }
+
+    match /institutions/{institutionId}/staff-workspace/{itemId}/{ownerId}/{assetId} {
+      allow read: if isStaff()
+        && sameInstitution(institutionId)
+        && (
+          request.auth.uid == ownerId
+          || canReadStaffWorkspaceItem(institutionId, itemId)
+        );
+      allow create: if isStaff()
+        && sameInstitution(institutionId)
+        && request.auth.uid == ownerId
+        && staffWorkspaceSafeUpload();
+      allow update: if false;
+      allow delete: if sameInstitution(institutionId)
+        && (request.auth.uid == ownerId || isDirector());
     }
 
     match /institutions/{institutionId}/materials/{materialId}/{assetId} {

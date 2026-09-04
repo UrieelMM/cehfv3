@@ -220,11 +220,13 @@ service cloud.firestore {
           return data.keys().hasAll([
               "institutionId", "ownerId", "ownerName", "type", "title",
               "content", "visibility", "pinned", "eventAt", "resourceUrl",
+              "sharedWithIds", "subject", "group", "location", "attachments",
               "createdAt", "updatedAt"
             ])
             && data.keys().hasOnly([
               "institutionId", "ownerId", "ownerName", "type", "title",
               "content", "visibility", "pinned", "eventAt", "resourceUrl",
+              "sharedWithIds", "subject", "group", "location", "attachments",
               "createdAt", "updatedAt"
             ])
             && data.institutionId == institutionId
@@ -235,11 +237,18 @@ service cloud.firestore {
             && data.title.size() > 0
             && data.title.size() <= 120
             && data.content is string
-            && data.content.size() <= 8000
-            && data.visibility in ["private", "staff"]
+            && data.content.size() <= 200000
+            && data.visibility in ["private", "selected", "staff"]
+            && data.sharedWithIds is list
+            && data.sharedWithIds.size() <= 100
             && data.pinned is bool
             && data.eventAt is string
             && data.resourceUrl is string
+            && data.subject is string
+            && data.group is string
+            && data.location is string
+            && data.attachments is list
+            && data.attachments.size() <= 50
             && data.createdAt is timestamp
             && data.updatedAt is timestamp;
         }
@@ -251,6 +260,11 @@ service cloud.firestore {
             && (
               data.ownerId == request.auth.uid
               || data.visibility == "staff"
+              || (
+                data.visibility == "selected"
+                && data.sharedWithIds is list
+                && request.auth.uid in data.sharedWithIds
+              )
             );
         }
 
@@ -269,7 +283,8 @@ service cloud.firestore {
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "type", "title", "content", "visibility", "pinned", "eventAt",
-            "resourceUrl", "updatedAt"
+            "resourceUrl", "sharedWithIds", "subject", "group", "location",
+            "attachments", "updatedAt"
           ])
           && validWorkspaceItem(request.resource.data);
         allow delete: if isStaff()

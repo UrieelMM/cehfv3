@@ -1096,7 +1096,16 @@ export type StaffWorkspaceItemType =
   | "schedule"
   | "note";
 
-export type StaffWorkspaceVisibility = "private" | "staff";
+export type StaffWorkspaceVisibility = "private" | "selected" | "staff";
+
+export type StaffWorkspaceAttachment = {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  storagePath: string;
+  url: string;
+};
 
 export type StaffWorkspaceItem = {
   id: string;
@@ -1107,16 +1116,31 @@ export type StaffWorkspaceItem = {
   title: string;
   content: string;
   visibility: StaffWorkspaceVisibility;
+  sharedWithIds: string[];
   pinned: boolean;
   eventAt?: string;
   resourceUrl?: string;
+  subject?: string;
+  group?: string;
+  location?: string;
+  attachments: StaffWorkspaceAttachment[];
   createdAt: string;
   updatedAt: string;
 };
 
 export type StaffWorkspaceItemInput = Pick<
   StaffWorkspaceItem,
-  "type" | "title" | "content" | "visibility" | "eventAt" | "resourceUrl"
+  | "type"
+  | "title"
+  | "content"
+  | "visibility"
+  | "sharedWithIds"
+  | "eventAt"
+  | "resourceUrl"
+  | "subject"
+  | "group"
+  | "location"
+  | "attachments"
 >;
 
 export type PortalState = {
