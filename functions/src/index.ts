@@ -64,6 +64,8 @@ const WORKSHOP_RESOURCE_PATH = `${WORKSHOP_PATH}/resources/{resourceId}`;
 const WORKSHOP_TASK_PATH = `${WORKSHOP_PATH}/tasks/{taskId}`;
 const WORKSHOP_SUBMISSION_PATH =
   `${WORKSHOP_TASK_PATH}/submissions/{studentId}`;
+const STAFF_WORKSPACE_PATH =
+  "institutions/{institutionId}/staffWorkspace/{itemId}";
 const ACADEMIC_TIMEZONE = "America/Mexico_City";
 
 type CalendarWeek = {
@@ -1121,6 +1123,99 @@ function notificationRecipients(value: unknown) {
     ? [...new Set(value.map(String).filter(Boolean))]
     : [];
 }
+
+async function activeWorkspaceStaff(institutionId: string) {
+  const snapshot = await db
+    .collection("users")
+    .where("institutionId", "==", institutionId)
+    .get();
+  return snapshot.docs
+    .filter((entry) => {
+      const user = entry.data();
+      return user.active === true && ["director", "teacher"].includes(String(user.role));
+    })
+    .map((entry) => entry.id);
+}
+
+function workspaceAudience(data: DocumentData | null | undefined, staffIds: Set<string>) {
+  if (!data) return [];
+  if (data.visibility === "staff") return [...staffIds];
+  if (data.visibility !== "selected") return [];
+  return notificationRecipients(data.sharedWithIds).filter((userId) => staffIds.has(userId));
+}
+
+function workspaceTypeLabel(value: unknown) {
+  const labels: Record<string, string> = {
+    planning: "Planeación",
+    resource: "Recurso",
+    schedule: "Horario",
+    note: "Nota",
+  };
+  return labels[String(value)] ?? "Mi espacio";
+}
+
+export const onStaffWorkspaceChanged = onDocumentWritten(
+  { document: STAFF_WORKSPACE_PATH, retry: true },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (!after) return;
+
+    const institutionId = String(event.params.institutionId);
+    const itemId = String(event.params.itemId);
+    const ownerId = String(after.ownerId ?? "");
+    const ownerName = String(after.ownerName ?? "Un integrante del equipo");
+    const staffIds = new Set(await activeWorkspaceStaff(institutionId));
+    const previousAudience = new Set(workspaceAudience(before, staffIds));
+    const nextAudience = workspaceAudience(after, staffIds);
+    const previousMentions = new Set(notificationRecipients(before?.mentionedUserIds));
+    const newMentions = notificationRecipients(after.mentionedUserIds).filter(
+      (userId) =>
+        userId !== ownerId &&
+        staffIds.has(userId) &&
+        nextAudience.includes(userId) &&
+        !previousMentions.has(userId),
+    );
+    const mentionSet = new Set(newMentions);
+    const newlyShared = nextAudience.filter(
+      (userId) =>
+        userId !== ownerId &&
+        !previousAudience.has(userId) &&
+        !mentionSet.has(userId),
+    );
+    const itemTitle = String(after.title ?? "Nuevo bloque");
+    const typeLabel = workspaceTypeLabel(after.type);
+
+    await Promise.all([
+      writeNotifications(
+        newMentions,
+        `workspace-mention-${itemId}-${event.id}`,
+        {
+          category: "workspace",
+          title: `${ownerName} te mencionó en Mi espacio`,
+          detail: `${typeLabel} · ${itemTitle}`,
+          workspaceItemId: itemId,
+          url: "/my-space",
+          eventType: "workspace_mention",
+        },
+      ),
+      writeNotifications(
+        newlyShared,
+        `workspace-share-${itemId}-${event.id}`,
+        {
+          category: "workspace",
+          title: `${ownerName} compartió un bloque contigo`,
+          detail: `${typeLabel} · ${itemTitle}`,
+          workspaceItemId: itemId,
+          url: "/my-space",
+          eventType: "workspace_shared",
+        },
+      ),
+    ]);
+  },
+);
 
 type MaterialStaff = {
   uid: string;

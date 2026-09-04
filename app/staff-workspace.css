@@ -12,6 +12,11 @@
   outline: none;
 }
 
+.notification-type.workspace {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
 .staff-workspace-page button:focus-visible,
 .staff-workspace-page a:focus-visible,
 .staff-workspace-page input:focus-visible,
@@ -1357,15 +1362,15 @@
 .staff-workspace-editor-backdrop.is-focus {
   align-items: stretch;
   justify-content: stretch;
-  padding: 0;
+  padding: 10px;
 }
 
 .staff-workspace-editor,
 .is-focus .staff-workspace-editor {
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  height: 100dvh;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 24px 90px rgb(5 8 24 / 0.32);
+  height: calc(100dvh - 20px);
   max-height: none;
   max-width: none;
   width: 100%;
@@ -1411,12 +1416,12 @@
 
 @media (max-width: 720px) {
   .staff-workspace-editor-backdrop,
-  .staff-workspace-editor-backdrop.is-focus { padding: 0; }
+  .staff-workspace-editor-backdrop.is-focus { padding: 10px; }
 
   .staff-workspace-editor,
   .is-focus .staff-workspace-editor {
-    border-radius: 0;
-    height: 100dvh;
+    border-radius: 14px;
+    height: calc(100dvh - 20px);
     max-height: none;
   }
 

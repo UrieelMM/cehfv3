@@ -892,6 +892,7 @@ export type AppNotification = {
     | "wall"
     | "forum"
     | "workshop"
+    | "workspace"
     | "system";
   createdAt: string;
   read: boolean;
@@ -1117,6 +1118,7 @@ export type StaffWorkspaceItem = {
   content: string;
   visibility: StaffWorkspaceVisibility;
   sharedWithIds: string[];
+  mentionedUserIds: string[];
   pinned: boolean;
   eventAt?: string;
   resourceUrl?: string;
@@ -1135,6 +1137,7 @@ export type StaffWorkspaceItemInput = Pick<
   | "content"
   | "visibility"
   | "sharedWithIds"
+  | "mentionedUserIds"
   | "eventAt"
   | "resourceUrl"
   | "subject"

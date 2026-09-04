@@ -63,20 +63,65 @@ const typeDetails: Record<StaffWorkspaceItemType, {
 
 function templateContent(type: StaffWorkspaceItemType) {
   const paragraph = (content: string) => ({ type: "paragraph", content });
-  const heading = (content: string) => ({ type: "heading", props: { level: 2 }, content });
+  const heading = (content: string, level: 2 | 3 = 2) => ({
+    type: "heading",
+    props: { level },
+    content,
+  });
+  const bullet = (content: string) => ({ type: "bulletListItem", content });
+  const task = (content: string) => ({
+    type: "checkListItem",
+    props: { checked: false },
+    content,
+  });
   const templates: Record<StaffWorkspaceItemType, object[]> = {
     planning: [
       heading("Propósito de aprendizaje"),
-      paragraph("Describe qué aprenderán los alumnos y cómo sabrás que lo lograron."),
-      heading("Secuencia"),
-      paragraph("Escribe / para agregar actividades, listas, tablas o archivos."),
+      paragraph("Describe el aprendizaje esperado y la evidencia que permitirá comprobarlo."),
+      heading("Preparación"),
+      bullet("Materiales y recursos:"),
+      bullet("Conocimientos previos:"),
+      bullet("Adecuaciones o apoyos:"),
+      heading("Secuencia didáctica"),
+      heading("Inicio", 3),
+      task("Actividad de apertura y recuperación de saberes previos."),
+      heading("Desarrollo", 3),
+      task("Actividad central, acompañamiento y preguntas guía."),
+      heading("Cierre", 3),
+      task("Síntesis, producto o reflexión final."),
+      heading("Evaluación"),
+      paragraph("Criterios, instrumento y retroalimentación prevista."),
     ],
     resource: [
-      heading("Cómo usar este recurso"),
-      paragraph("Agrega una descripción, indicaciones o ideas para aprovechar el material."),
+      heading("Descripción del recurso"),
+      paragraph("Explica brevemente qué contiene y qué necesidad resuelve."),
+      heading("Uso sugerido"),
+      bullet("Materia o área:"),
+      bullet("Grado o grupo recomendado:"),
+      bullet("Momento de la clase:"),
+      heading("Indicaciones"),
+      paragraph("Agrega pasos, recomendaciones o adaptaciones para aprovechar el archivo."),
     ],
-    schedule: [heading("Agenda"), paragraph("Añade los temas, responsables y acuerdos de este momento.")],
-    note: [paragraph("")],
+    schedule: [
+      heading("Objetivo"),
+      paragraph("Describe el propósito de la reunión, actividad o recordatorio."),
+      heading("Agenda"),
+      task("Tema principal."),
+      task("Responsables o participantes."),
+      task("Material que debe prepararse."),
+      heading("Acuerdos y seguimiento"),
+      bullet("Acuerdo:"),
+      bullet("Responsable y fecha:"),
+    ],
+    note: [
+      heading("Idea principal"),
+      paragraph("Escribe aquí el contexto o la idea que quieres conservar."),
+      heading("Puntos clave"),
+      bullet("Dato, hallazgo o acuerdo importante."),
+      bullet("Referencia o persona relacionada."),
+      heading("Próximos pasos"),
+      task("Acción pendiente."),
+    ],
   };
   return JSON.stringify(templates[type]);
 }
@@ -84,7 +129,7 @@ function templateContent(type: StaffWorkspaceItemType) {
 function emptyDraft(type: StaffWorkspaceItemType = "note"): StaffWorkspaceItemInput {
   return {
     type, title: "", content: templateContent(type), visibility: "private",
-    sharedWithIds: [], eventAt: "", resourceUrl: "", subject: "", group: "",
+    sharedWithIds: [], mentionedUserIds: [], eventAt: "", resourceUrl: "", subject: "", group: "",
     location: "", attachments: [],
   };
 }
@@ -295,6 +340,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     setDraft({
       type: item.type, title: item.title, content: item.content,
       visibility: item.visibility, sharedWithIds: item.sharedWithIds,
+      mentionedUserIds: item.mentionedUserIds,
       eventAt: item.eventAt ?? "", resourceUrl: item.resourceUrl ?? "",
       subject: item.subject ?? "", group: item.group ?? "", location: item.location ?? "",
       attachments: item.attachments,
@@ -356,6 +402,20 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
       sharedWithIds: current.sharedWithIds.includes(memberId)
         ? current.sharedWithIds.filter((id) => id !== memberId)
         : [...current.sharedWithIds, memberId],
+    }));
+  }
+
+  function registerMention(memberId: string) {
+    if (memberId === profile.uid) return;
+    setDraft((current) => ({
+      ...current,
+      visibility: current.visibility === "private" ? "selected" : current.visibility,
+      sharedWithIds: current.visibility === "staff" || current.sharedWithIds.includes(memberId)
+        ? current.sharedWithIds
+        : [...current.sharedWithIds, memberId],
+      mentionedUserIds: current.mentionedUserIds.includes(memberId)
+        ? current.mentionedUserIds
+        : [...current.mentionedUserIds, memberId],
     }));
   }
 
@@ -530,7 +590,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
               <section className="staff-workspace-document-field">
                 <div className="staff-workspace-field-heading"><span>{draft.type === "planning" ? "Desarrollo de la planeación" : draft.type === "resource" ? "Ficha del recurso" : draft.type === "schedule" ? "Agenda y acuerdos" : "Contenido"}</span><small>Editor por bloques</small></div>
                 <WorkspaceEditorHint />
-                <StaffWorkspaceRichEditor content={draft.content} documentKey={draftId} members={teamMembers} onChange={(content) => setDraft((current) => ({ ...current, content }))} onUploadFile={uploadEditorFile} />
+                <StaffWorkspaceRichEditor content={draft.content} documentKey={draftId} members={teamMembers} onChange={(content) => setDraft((current) => ({ ...current, content }))} onMention={registerMention} onUploadFile={uploadEditorFile} />
               </section>
 
               <fieldset className="staff-workspace-visibility-picker"><legend>Compartir</legend>{([

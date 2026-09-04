@@ -24,6 +24,7 @@ type Props = {
   editable?: boolean;
   members: WorkspaceMentionMember[];
   onChange?: (content: string) => void;
+  onMention?: (memberId: string) => void;
   onUploadFile?: (file: File) => Promise<string>;
 };
 
@@ -71,6 +72,7 @@ function MountedWorkspaceEditor({
   editable = true,
   members,
   onChange,
+  onMention,
   onUploadFile,
 }: Props) {
   const theme = useAppTheme();
@@ -95,6 +97,7 @@ function MountedWorkspaceEditor({
           </span>
         ),
         onItemClick: () => {
+          onMention?.(member.id);
           editor.insertInlineContent([
             {
               type: "text",

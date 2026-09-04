@@ -102,6 +102,9 @@ function workspaceItemFromData(id: string, data: DocumentData): StaffWorkspaceIt
     sharedWithIds: Array.isArray(data.sharedWithIds)
       ? data.sharedWithIds.map(String).filter(Boolean)
       : [],
+    mentionedUserIds: Array.isArray(data.mentionedUserIds)
+      ? data.mentionedUserIds.map(String).filter(Boolean)
+      : [],
     pinned: data.pinned === true,
     eventAt: data.eventAt ? String(data.eventAt) : undefined,
     resourceUrl: data.resourceUrl ? String(data.resourceUrl) : undefined,
@@ -126,6 +129,11 @@ function workspacePayload(input: StaffWorkspaceItemInput) {
     sharedWithIds: visibility === "selected"
       ? [...new Set(input.sharedWithIds)].slice(0, 100)
       : [],
+    mentionedUserIds: visibility === "private"
+      ? []
+      : [...new Set(input.mentionedUserIds)].filter((userId) =>
+        visibility === "staff" || input.sharedWithIds.includes(userId),
+      ).slice(0, 100),
     eventAt: input.eventAt?.trim().slice(0, 40) || "",
     resourceUrl: input.resourceUrl?.trim().slice(0, 1_000) || "",
     subject: input.subject?.trim().slice(0, 100) || "",
