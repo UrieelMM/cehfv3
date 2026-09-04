@@ -234,7 +234,13 @@
 .task-timeline header small, .task-event-label { color: var(--muted); font-size: calc(.53rem + 0.125rem); }
 .task-event-label { display: block; margin-top: 2px; color: var(--violet); font-weight: 700; }
 .task-timeline article p { margin: 8px 0 0; color: var(--muted-strong); font-size: calc(.62rem + 0.125rem); line-height: 1.52; white-space: pre-wrap; }
-.task-event-files { gap: 4px; margin-top: 8px; color: var(--muted); font-size: calc(.55rem + 0.125rem); }
+.task-event-files { display: grid; gap: 6px; margin-top: 9px; }
+.task-event-files > button { display: grid; width: 100%; padding: 8px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--muted); grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; text-align: left; }
+.task-event-files > button:hover { border-color: color-mix(in srgb, var(--violet) 32%, var(--border)); color: var(--violet); }
+.task-event-files > button span { min-width: 0; }
+.task-event-files > button strong, .task-event-files > button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-event-files > button strong { color: var(--foreground); font-size: calc(.55rem + 0.125rem); }
+.task-event-files > button small { margin-top: 2px; font-size: calc(.48rem + 0.125rem); }
 .task-timeline-empty, .task-no-submissions { display: flex; min-height: 180px; align-items: center; justify-content: center; color: var(--muted); flex-direction: column; text-align: center; }
 .task-timeline-empty p { max-width: 250px; margin: 9px 0 0; font-size: calc(.63rem + 0.125rem); line-height: 1.5; }
 .task-control-actions, .task-feedback-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

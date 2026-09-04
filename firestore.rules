@@ -491,7 +491,7 @@ service cloud.firestore {
         allow read: if canReadWorkshop(resource.data);
         allow create: if isDirector()
           && profile().institutionId == institutionId
-          && workshopId in ["tics", "club-lectura"]
+          && workshopId in ["tics", "reading", "club-lectura"]
           && request.resource.data.institutionId == institutionId
           && request.resource.data.kind in ["tics", "reading"]
           && validWorkshopAccess(request.resource.data);

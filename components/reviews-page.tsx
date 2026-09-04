@@ -115,6 +115,17 @@ function attemptLimitLabel(maxAttempts: number) {
   return `${maxAttempts} intento${maxAttempts === 1 ? "" : "s"}`;
 }
 
+function answerLabel(
+  review: WeeklyReview,
+  attempt: WeeklyReviewAttempt,
+  questionId: string,
+) {
+  const answer = attempt.answers[questionId]?.trim();
+  if (!answer) return "Sin respuesta";
+  const question = review.questions.find((item) => item.id === questionId);
+  return question?.options.find((option) => option.id === answer)?.label ?? answer;
+}
+
 export function ReviewsPage({
   reviews,
   loading,
@@ -883,6 +894,7 @@ function StaffReviewModal({
 }) {
   const [attempts, setAttempts] = useState<WeeklyReviewAttempt[]>([]);
   const [search, setSearch] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -924,6 +936,8 @@ function StaffReviewModal({
   const completed = audience.filter((student) => student.attempt?.status === "completed").length || review.completedCount;
   const started = audience.filter((student) => student.attempt).length || review.startedCount;
   const denominator = audience.length || review.audienceCount;
+  const selectedAttempt =
+    attemptsByStudent.get(selectedStudentId) ?? attempts[0];
 
   async function changeStatus(status: WeeklyReviewStatus) {
     setBusy(true);
@@ -962,10 +976,10 @@ function StaffReviewModal({
             </div>
             <label className="review-student-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar alumno…" /></label>
             <div className="review-student-table">
-              <div className="review-student-table-head"><span>Alumno</span><span>Avance</span><span>Resultado</span><span>Estado</span></div>
+              <div className="review-student-table-head"><span>Alumno</span><span>Avance</span><span>Resultado</span><span>Estado</span><span>Detalle</span></div>
               {filtered.map((student) => {
                 const attempt = student.attempt;
-                return <div className="review-student-row" key={student.id}><span className="review-student-name"><i>{student.initials}</i><div><strong>{student.name}</strong><small>{student.group || "Alumno asignado"}</small></div></span><span><i className="review-mini-progress"><b style={{ width: `${attempt?.progress ?? 0}%` }} /></i><small>{attempt?.progress ?? 0}%</small></span><span>{attempt?.status === "completed" ? <strong>{attempt.scorePercent ?? 0}%</strong> : <small>—</small>}</span><span className={`review-status is-${attempt?.status ?? "pending"}`}>{attempt?.status === "completed" ? "Completado" : attempt ? "En progreso" : "Pendiente"}</span></div>;
+                return <div className={`review-student-row ${selectedAttempt?.studentId === student.id ? "is-selected" : ""}`} key={student.id}><span className="review-student-name"><i>{student.initials}</i><div><strong>{student.name}</strong><small>{student.group || "Alumno asignado"}</small></div></span><span><i className="review-mini-progress"><b style={{ width: `${attempt?.progress ?? 0}%` }} /></i><small>{attempt?.progress ?? 0}%</small></span><span>{attempt?.status === "completed" ? <strong>{attempt.scorePercent ?? 0}%</strong> : <small>—</small>}</span><span className={`review-status is-${attempt?.status ?? "pending"}`}>{attempt?.status === "completed" ? "Completado" : attempt ? "En progreso" : "Pendiente"}</span><button type="button" className="review-answer-detail-button" disabled={!attempt} onClick={() => setSelectedStudentId(student.id)}>{attempt ? "Ver respuestas" : "Sin respuestas"}</button></div>;
               })}
               {!filtered.length && <p className="review-no-students">Aún no hay alumnos visibles para este repaso.</p>}
             </div>
@@ -977,10 +991,19 @@ function StaffReviewModal({
               <p>{review.description || "Sin descripción adicional."}</p>
               <div><span><ListChecks size={14} /> {review.questions.length} reactivos</span><span><Clock3 size={14} /> {review.duration} min</span><span><RotateCcw size={14} /> {attemptLimitLabel(review.maxAttempts)}</span></div>
             </section>
-            <section className="review-question-preview">
-              <small>Reactivos</small>
-              {review.questions.map((question, index) => <div key={question.id}><i>{index + 1}</i><span><strong>{question.prompt}</strong><small>{questionTypeMeta[question.type].label}</small></span></div>)}
-            </section>
+            {selectedAttempt ? (
+              <section className="review-question-preview review-attempt-answers">
+                <small>Respuestas del alumno</small>
+                <h3>{selectedAttempt.studentName}</h3>
+                <p>{selectedAttempt.status === "completed" ? `Completó el repaso · ${selectedAttempt.scorePercent ?? 0}%` : `En progreso · ${selectedAttempt.progress}%`}</p>
+                {review.questions.map((question, index) => <div key={question.id}><i>{index + 1}</i><span><strong>{question.prompt}</strong><small className={!selectedAttempt.answers[question.id]?.trim() ? "is-empty" : ""}>{answerLabel(review, selectedAttempt, question.id)}</small></span></div>)}
+              </section>
+            ) : (
+              <section className="review-question-preview">
+                <small>Reactivos</small>
+                {review.questions.map((question, index) => <div key={question.id}><i>{index + 1}</i><span><strong>{question.prompt}</strong><small>{questionTypeMeta[question.type].label}</small></span></div>)}
+              </section>
+            )}
             {error && <p className="review-inline-error">{error}</p>}
             <div className="review-status-actions">
               {review.status === "draft" && <button className="primary-button" disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar repaso</button>}

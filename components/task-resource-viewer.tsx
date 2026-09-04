@@ -121,6 +121,7 @@ export function TaskResourceViewer({
   profile,
   accounts,
   firebaseReady,
+  source = "resource",
   onClose,
 }: {
   task: TaskAssignment;
@@ -128,6 +129,7 @@ export function TaskResourceViewer({
   profile: UserProfile;
   accounts: ManagedAccount[];
   firebaseReady: boolean;
+  source?: "resource" | "submission";
   onClose: () => void;
 }) {
   const [resourceUrl, setResourceUrl] = useState("");
@@ -172,23 +174,23 @@ export function TaskResourceViewer({
   }, [resource]);
 
   useEffect(() => {
-    if (profile.role !== "student" || !firebaseReady) return;
+    if (source !== "resource" || profile.role !== "student" || !firebaseReady) return;
     void markTaskResourceViewed(task, resource, profile).catch((viewError) =>
       toast.error("No pudimos registrar la apertura", {
         description: friendlyFirebaseError(viewError),
       }),
     );
-  }, [firebaseReady, profile, resource, task]);
+  }, [firebaseReady, profile, resource, source, task]);
 
   useEffect(() => {
-    if (profile.role === "student" || !firebaseReady) return;
+    if (source !== "resource" || profile.role === "student" || !firebaseReady) return;
     return watchTaskResourceViews(
       task,
       id,
       setViews,
       (viewError) => setError(friendlyFirebaseError(viewError)),
     );
-  }, [firebaseReady, id, profile.role, task]);
+  }, [firebaseReady, id, profile.role, source, task]);
 
   const audience = useMemo(
     () => accounts
@@ -225,12 +227,12 @@ export function TaskResourceViewer({
           <div className={`material-viewer-title is-${type}`}>
             <span><TypeIcon size={22} /></span>
             <div>
-              <small>{details.label} · Recurso de la tarea</small>
+              <small>{details.label} · {source === "submission" ? "Evidencia de la entrega" : "Recurso de la tarea"}</small>
               <h2 id="task-resource-viewer-title">{label}</h2>
               <p>{task.subject} · {task.weekLabel}</p>
             </div>
           </div>
-          <button className="plain-icon" onClick={onClose} aria-label="Cerrar recurso">
+          <button className="plain-icon" onClick={onClose} aria-label="Cerrar archivo">
             <X size={19} />
           </button>
         </header>
@@ -246,7 +248,7 @@ export function TaskResourceViewer({
                   <i />
                 </div>
                 <div className="task-resource-loading-copy">
-                  <small>{details.label} · Recurso de la tarea</small>
+                  <small>{details.label} · {source === "submission" ? "Evidencia de la entrega" : "Recurso de la tarea"}</small>
                   <strong>{loadingMessages[type]}…</strong>
                   <p>Estamos verificando el acceso y preparando una vista segura.</p>
                 </div>
@@ -290,12 +292,12 @@ export function TaskResourceViewer({
 
             {error && <p className="material-inline-error">{error}</p>}
             <section className="material-description">
-              <small>Recurso de la actividad</small>
-              <p>{task.description}</p>
+              <small>{source === "submission" ? "Archivo entregado por el alumno" : "Recurso de la actividad"}</small>
+              <p>{source === "submission" ? "Esta evidencia forma parte del historial de entregas de la tarea." : task.description}</p>
             </section>
             {resourceUrl && (
               <section className="material-resource-list">
-                <h3>Acceso al recurso</h3>
+                <h3>{source === "submission" ? "Acceso al archivo" : "Acceso al recurso"}</h3>
                 <a href={resourceUrl} target="_blank" rel="noreferrer">
                   <span>{type === "link" ? <Link2 size={16} /> : <Paperclip size={16} />}</span>
                   <div>
@@ -318,7 +320,7 @@ export function TaskResourceViewer({
               <span><Users size={15} /><div><small>Grupo</small><strong>{task.targetGroup}</strong></div></span>
               <span><Eye size={15} /><div><small>Tipo</small><strong>{details.label}</strong></div></span>
             </div>
-            {profile.role !== "student" && (
+            {source === "resource" && profile.role !== "student" && (
               <section className="material-reading-panel">
                 <div>
                   <span><Eye size={16} /></span>

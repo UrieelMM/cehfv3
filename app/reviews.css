@@ -138,10 +138,11 @@
 .review-staff-summary strong { margin-top: 2px; font-size: calc(.72rem + 0.125rem); }
 .review-student-search { display: flex; height: 39px; margin-bottom: 12px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-soft); color: var(--muted); align-items: center; gap: 7px; }
 .review-student-search input { width: 100%; border: 0; background: transparent; color: var(--foreground); font-size: calc(.65rem + 0.125rem); }
-.review-student-table { min-width: 570px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
-.review-student-table-head, .review-student-row { display: grid; padding: 9px 12px; grid-template-columns: 1.45fr .8fr .55fr .7fr; align-items: center; gap: 9px; }
+.review-student-table { min-width: 680px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }
+.review-student-table-head, .review-student-row { display: grid; padding: 9px 12px; grid-template-columns: 1.35fr .72fr .5fr .68fr .72fr; align-items: center; gap: 9px; }
 .review-student-table-head { background: var(--surface-soft); color: var(--muted); font-size: calc(.5rem + 0.125rem); font-weight: 790; letter-spacing: .04em; text-transform: uppercase; }
 .review-student-row { min-height: 52px; border-top: 1px solid var(--border); }
+.review-student-row.is-selected { background: color-mix(in srgb, var(--violet-soft) 36%, var(--surface)); }
 .review-student-name { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .review-student-name > i { display: grid; width: 29px; height: 29px; flex: none; border-radius: 9px; background: var(--violet-soft); color: var(--violet); font-size: calc(.49rem + 0.125rem); font-style: normal; font-weight: 820; place-items: center; }
 .review-student-name strong, .review-student-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -151,6 +152,8 @@
 .review-mini-progress { display: block; width: 65px; height: 5px; overflow: hidden; border-radius: 99px; background: var(--surface-soft); }
 .review-mini-progress b { display: block; height: 100%; border-radius: inherit; background: var(--violet); }
 .review-student-row > span:nth-child(3) strong { font-size: calc(.62rem + 0.125rem); }
+.review-answer-detail-button { min-height: 31px; padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--violet) 24%, var(--border)); border-radius: 8px; background: var(--surface); color: var(--violet); font-size: calc(.5rem + 0.125rem); font-weight: 760; }
+.review-answer-detail-button:disabled { border-color: var(--border); color: var(--muted); cursor: default; opacity: .7; }
 .review-no-students { padding: 25px; color: var(--muted); font-size: calc(.61rem + 0.125rem); text-align: center; }
 .review-staff-details, .review-question-preview { padding: 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .review-staff-details > small, .review-question-preview > small { color: var(--violet); font-size: calc(.52rem + 0.125rem); font-weight: 820; letter-spacing: .06em; text-transform: uppercase; }
@@ -166,6 +169,10 @@
 .review-question-preview strong, .review-question-preview div small { display: block; }
 .review-question-preview strong { font-size: calc(.55rem + 0.125rem); line-height: 1.4; }
 .review-question-preview div small { margin-top: 3px; color: var(--muted); font-size: calc(.47rem + 0.125rem); }
+.review-attempt-answers h3 { margin: 6px 0 2px; font-family: var(--font-display); font-size: calc(.88rem + 0.125rem); }
+.review-attempt-answers > p { margin: 0 0 9px; color: var(--muted); font-size: calc(.5rem + 0.125rem); }
+.review-attempt-answers div small { margin-top: 6px; padding: 7px 8px; border-radius: 7px; background: var(--violet-soft); color: var(--foreground); font-size: calc(.53rem + 0.125rem); line-height: 1.45; white-space: pre-wrap; }
+.review-attempt-answers div small.is-empty { background: var(--surface-soft); color: var(--muted); font-style: italic; }
 .review-status-actions { display: grid; margin-top: 11px; }
 .review-status-actions button { justify-content: center; }
 

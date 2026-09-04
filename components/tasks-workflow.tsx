@@ -827,7 +827,10 @@ export function TaskDetailModal({
     !liveFirebaseTask && staff ? demoHistory(demoSubmission(profile)) : [],
   );
   const [taskHistory, setTaskHistory] = useState<TaskHistoryEvent[]>([]);
-  const [selectedResource, setSelectedResource] = useState<TaskResource | null>(null);
+  const [selectedResource, setSelectedResource] = useState<{
+    resource: TaskResource;
+    source: "resource" | "submission";
+  } | null>(null);
   const [viewedResourceIds, setViewedResourceIds] = useState<Set<string>>(new Set());
   const [extension, setExtension] = useState<TaskExtension | null>(null);
   const [response, setResponse] = useState("");
@@ -939,7 +942,14 @@ export function TaskDetailModal({
       ? resource.attachment.id
       : resource.link.id;
     setViewedResourceIds((current) => new Set(current).add(id));
-    setSelectedResource(resource);
+    setSelectedResource({ resource, source: "resource" });
+  }
+
+  function openSubmissionAttachment(attachment: TaskSubmission["attachments"][number]) {
+    setSelectedResource({
+      resource: { kind: "attachment", attachment },
+      source: "submission",
+    });
   }
 
   async function submitResponse() {
@@ -1174,6 +1184,7 @@ export function TaskDetailModal({
               setExtensionStudentId={setExtensionStudentId}
               individualDueAt={individualDueAt}
               setIndividualDueAt={setIndividualDueAt}
+              onOpenAttachment={openSubmissionAttachment}
             />
           ) : (
             <StudentTaskFlow
@@ -1188,6 +1199,7 @@ export function TaskDetailModal({
               setResponseFiles={setResponseFiles}
               submitResponse={submitResponse}
               busy={busy}
+              onOpenAttachment={openSubmissionAttachment}
             />
           )}
         </div>
@@ -1196,7 +1208,8 @@ export function TaskDetailModal({
           {selectedResource && (
             <TaskResourceViewer
               task={task}
-              resource={selectedResource}
+              resource={selectedResource.resource}
+              source={selectedResource.source}
               profile={profile}
               accounts={accounts}
               firebaseReady={liveFirebaseTask}
@@ -1221,6 +1234,7 @@ function StudentTaskFlow({
   setResponseFiles,
   submitResponse,
   busy,
+  onOpenAttachment,
 }: {
   submission?: TaskSubmission;
   history: TaskHistoryEvent[];
@@ -1233,6 +1247,7 @@ function StudentTaskFlow({
   setResponseFiles: (files: File[]) => void;
   submitResponse: () => Promise<void>;
   busy: string;
+  onOpenAttachment: (attachment: TaskSubmission["attachments"][number]) => void;
 }) {
   return (
     <div className="task-flow-grid student-flow">
@@ -1328,7 +1343,11 @@ function StudentTaskFlow({
           </div>
         )}
       </section>
-      <TaskTimeline history={history} emptyLabel="Tu entrega y la respuesta del maestro aparecerán aquí." />
+      <TaskTimeline
+        history={history}
+        emptyLabel="Tu entrega y la respuesta del maestro aparecerán aquí."
+        onOpenAttachment={onOpenAttachment}
+      />
     </div>
   );
 }
@@ -1356,6 +1375,7 @@ function StaffTaskFlow({
   setExtensionStudentId,
   individualDueAt,
   setIndividualDueAt,
+  onOpenAttachment,
 }: {
   task: TaskAssignment;
   profile: UserProfile;
@@ -1379,6 +1399,7 @@ function StaffTaskFlow({
   setExtensionStudentId: (value: string) => void;
   individualDueAt: string;
   setIndividualDueAt: (value: string) => void;
+  onOpenAttachment: (attachment: TaskSubmission["attachments"][number]) => void;
 }) {
   const selectedExtensionStudentId = extensionStudentId || eligibleStudents[0]?.uid || "";
 
@@ -1612,7 +1633,11 @@ function StaffTaskFlow({
             </div>
           )}
         </section>
-        <TaskTimeline history={history} emptyLabel="El intercambio con el alumno aparecerá aquí." />
+        <TaskTimeline
+          history={history}
+          emptyLabel="El intercambio con el alumno aparecerá aquí."
+          onOpenAttachment={onOpenAttachment}
+        />
       </div>
 
       {taskHistory.length > 0 && (
@@ -1646,9 +1671,11 @@ function StaffTaskFlow({
 function TaskTimeline({
   history,
   emptyLabel,
+  onOpenAttachment,
 }: {
   history: TaskHistoryEvent[];
   emptyLabel: string;
+  onOpenAttachment: (attachment: TaskSubmission["attachments"][number]) => void;
 }) {
   return (
     <section className="task-timeline-panel">
@@ -1688,9 +1715,23 @@ function TaskTimeline({
                   </span>
                   {event.message && <p>{event.message}</p>}
                   {event.attachments && event.attachments.length > 0 && (
-                    <span className="task-event-files">
-                      <Paperclip size={13} /> {event.attachments.length} archivos
-                    </span>
+                    <div className="task-event-files">
+                      {event.attachments.map((attachment) => (
+                        <button
+                          type="button"
+                          key={attachment.id}
+                          onClick={() => onOpenAttachment(attachment)}
+                          aria-label={`Abrir ${attachment.name}`}
+                        >
+                          <Paperclip size={13} />
+                          <span>
+                            <strong>{attachment.name}</strong>
+                            <small>{formatBytes(attachment.size)}</small>
+                          </span>
+                          <ArrowRight size={14} />
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
               </article>

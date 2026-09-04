@@ -50,7 +50,7 @@ export const workshopDefinitions: Array<{
       "Explora nuevas herramientas digitales y aprende a usarlas de manera responsable y creativa.",
   },
   {
-    id: "club-lectura",
+    id: "reading",
     kind: "reading",
     title: "Club de lectura",
     shortTitle: "Historias para compartir",
@@ -144,17 +144,25 @@ function workshopCollection(institutionId: string) {
 
 export async function ensureDefaultWorkshops(profile: UserProfile) {
   if (profile.role !== "director" || !firebase.db) return;
-  const references = workshopDefinitions.map((definition) =>
-    doc(firebase.db!, "institutions", profile.institutionId, "workshops", definition.id),
+  const candidates = await Promise.all(
+    workshopDefinitions.map(async (definition) => {
+      const reference = doc(
+        firebase.db!,
+        "institutions",
+        profile.institutionId,
+        "workshops",
+        definition.id,
+      );
+      const aliases = definition.kind === "reading" ? [reference, doc(firebase.db!, "institutions", profile.institutionId, "workshops", "club-lectura")] : [reference];
+      const snapshots = await Promise.all(aliases.map((item) => getDoc(item)));
+      return { reference, definition, exists: snapshots.some((snapshot) => snapshot.exists()) };
+    }),
   );
-  const snapshots = await Promise.all(references.map((reference) => getDoc(reference)));
-  const missing = snapshots
-    .map((snapshot, index) => ({ snapshot, definition: workshopDefinitions[index] }))
-    .filter((item) => !item.snapshot.exists());
+  const missing = candidates.filter((item) => !item.exists);
   if (!missing.length) return;
   const batch = writeBatch(firebase.db);
-  missing.forEach(({ snapshot, definition }) => {
-    batch.set(snapshot.ref, {
+  missing.forEach(({ reference, definition }) => {
+    batch.set(reference, {
       ...definition,
       institutionId: profile.institutionId,
       studentIds: [],
@@ -170,6 +178,25 @@ export async function ensureDefaultWorkshops(profile: UserProfile) {
     });
   });
   await batch.commit();
+}
+
+function uniqueWorkshops(workshops: Workshop[]) {
+  const byKind = new Map<WorkshopKind, Workshop>();
+  workshops.forEach((workshop) => {
+    const current = byKind.get(workshop.kind);
+    const canonicalId = workshopDefinitions.find(
+      (definition) => definition.kind === workshop.kind,
+    )?.id;
+    const priority = (item: Workshop) =>
+      item.memberIds.length * 10 + item.studentIds.length + item.teacherIds.length +
+      (item.id === canonicalId ? 1 : 0);
+    if (!current || priority(workshop) > priority(current)) {
+      byKind.set(workshop.kind, workshop);
+    }
+  });
+  return workshopDefinitions
+    .map((definition) => byKind.get(definition.kind))
+    .filter((workshop): workshop is Workshop => Boolean(workshop));
 }
 
 export function watchWorkshops(
@@ -190,16 +217,7 @@ export function watchWorkshops(
         );
   return onSnapshot(
     source,
-    (snapshot) =>
-      callback(
-        snapshot.docs
-          .map(workshopFromSnapshot)
-          .sort(
-            (first, second) =>
-              workshopDefinitions.findIndex((item) => item.id === first.id) -
-              workshopDefinitions.findIndex((item) => item.id === second.id),
-          ),
-      ),
+    (snapshot) => callback(uniqueWorkshops(snapshot.docs.map(workshopFromSnapshot))),
     (error) => onError?.(error),
   );
 }
