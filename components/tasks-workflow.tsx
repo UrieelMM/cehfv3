@@ -281,17 +281,18 @@ export function TaskListPage({
         <section className="task-modern-grid">
           {visibleTasks.map((task) => {
             const visualStatus = taskVisualStatus(task);
+            const tone = subjectTone[task.subject] ?? "violet";
             return (
               <motion.button
                 type="button"
-                className="task-modern-card"
+                className={`task-modern-card ${tone}`}
                 onClick={() => openDetail(task.id)}
                 whileHover={{ y: -3 }}
                 transition={{ duration: 0.18 }}
                 key={task.id}
               >
                 <span
-                  className={`task-card-accent ${subjectTone[task.subject] ?? "violet"}`}
+                  className={`task-card-accent ${tone}`}
                 />
                 <span className="task-modern-card-head">
                   <span className="task-subject-icon">

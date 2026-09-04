@@ -44,13 +44,20 @@
   border: 1px solid var(--border);
   border-radius: 17px;
   background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--violet) 15%, transparent);
   color: var(--foreground);
   flex-direction: column;
   text-align: left;
   cursor: pointer;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
 }
-.task-modern-card:hover { border-color: color-mix(in srgb, var(--violet) 28%, var(--border)); box-shadow: var(--shadow-md); }
+.task-modern-card.mint { box-shadow: 0 10px 24px color-mix(in srgb, var(--blue) 19%, transparent); }
+.task-modern-card.gold { box-shadow: 0 10px 24px color-mix(in srgb, var(--gold) 20%, transparent); }
+.task-modern-card.coral { box-shadow: 0 10px 24px color-mix(in srgb, var(--coral) 19%, transparent); }
+.task-modern-card:hover { border-color: color-mix(in srgb, var(--violet) 38%, var(--border)); box-shadow: 0 16px 34px color-mix(in srgb, var(--violet) 24%, transparent); }
+.task-modern-card.mint:hover { border-color: color-mix(in srgb, var(--blue) 42%, var(--border)); box-shadow: 0 16px 34px color-mix(in srgb, var(--blue) 27%, transparent); }
+.task-modern-card.gold:hover { border-color: color-mix(in srgb, var(--gold) 42%, var(--border)); box-shadow: 0 16px 34px color-mix(in srgb, var(--gold) 28%, transparent); }
+.task-modern-card.coral:hover { border-color: color-mix(in srgb, var(--coral) 42%, var(--border)); box-shadow: 0 16px 34px color-mix(in srgb, var(--coral) 27%, transparent); }
 .task-card-accent { position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--violet); }
 .task-card-accent.mint { background: var(--mint); }
 .task-card-accent.gold { background: var(--gold); }
