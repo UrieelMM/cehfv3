@@ -1,12 +1,14 @@
 "use client";
 
 import {
-  Archive, ArchiveRestore, AtSign, BellRing, BookOpen, CalendarDays, Check,
+  Archive, ArchiveRestore, AtSign, BookOpen, CalendarDays, Check,
   ClipboardCheck, Clock3, Copy, Download, Eye, FileText, Folder, History,
   Inbox, LayoutGrid, LoaderCircle, LockKeyhole, MapPin, MessageCircle,
   Paperclip, Pencil, Pin, PinOff, Plus, RotateCcw, Save, Search, Sparkles,
-  StickyNote, Tag, Trash2, UploadCloud, UserCheck, UserRound, Users, X,
+  SlidersHorizontal, Maximize2, Minimize2, MoreHorizontal, StickyNote, Tag,
+  Trash2, UploadCloud, UserCheck, UserRound, Users, X,
 } from "lucide-react";
+import { FocusTrap } from "@mantine/core";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { toast } from "sonner";
@@ -14,6 +16,7 @@ import {
   StaffWorkspaceRichEditor, WorkspaceEditorHint,
   type WorkspaceMentionMember,
 } from "@/components/staff-workspace-rich-editor";
+import { workspaceTemplateDraft } from "@/lib/staff-workspace-content";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   createStaffWorkspaceComment, createStaffWorkspaceItem,
@@ -40,7 +43,7 @@ type WorkspaceScope = "all" | "private" | "shared";
 type WorkspaceView = "blocks" | "inbox" | "templates" | "archive";
 type WorkspaceDateFilter = "all" | "today" | "week" | "month" | "without-date";
 type WorkspaceSort = "updated" | "oldest" | "title" | "event";
-type DraftSaveState = "idle" | "saving" | "saved";
+type DraftSaveState = "idle" | "saving" | "saved" | "error";
 type WorkspaceConfirmation = {
   title: string;
   description: string;
@@ -175,7 +178,7 @@ function templateContent(type: StaffWorkspaceItemType) {
 
 function emptyDraft(type: StaffWorkspaceItemType = "note"): StaffWorkspaceItemInput {
   return {
-    type, title: "", content: templateContent(type), visibility: "private",
+    type, title: "", content: "", visibility: "private",
     sharedWithIds: [], mentionedUserIds: [], assigneeIds: [], archived: false,
     isTemplate: false, folder: "", tags: [], eventAt: "", resourceUrl: "",
     subject: "", group: "", location: "", attachments: [],
@@ -419,6 +422,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   const [items, setItems] = useState<StaffWorkspaceItem[]>(() => firebaseReady ? [] : demoWorkspaceItems(profile));
   const [loading, setLoading] = useState(firebaseReady);
   const [view, setView] = useState<WorkspaceView>("blocks");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<WorkspaceFilter>("all");
   const [scope, setScope] = useState<WorkspaceScope>("all");
@@ -435,6 +439,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<StaffWorkspaceItem | null>(null);
   const [draft, setDraft] = useState<StaffWorkspaceItemInput>(() => emptyDraft());
+  const [tagsText, setTagsText] = useState("");
   const [draftId, setDraftId] = useState("");
   const [draftSaveState, setDraftSaveState] = useState<DraftSaveState>("idle");
   const [recoverableDraft, setRecoverableDraft] = useState<StoredWorkspaceDraft | null>(null);
@@ -529,9 +534,13 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
         draft,
         savedAt: new Date().toISOString(),
       };
-      window.localStorage.setItem(workspaceDraftKey(profile.uid), JSON.stringify(stored));
-      setRecoverableDraft(stored);
-      setDraftSaveState("saved");
+      try {
+        window.localStorage.setItem(workspaceDraftKey(profile.uid), JSON.stringify(stored));
+        setRecoverableDraft(stored);
+        setDraftSaveState("saved");
+      } catch {
+        setDraftSaveState("error");
+      }
     }, 650);
     return () => {
       window.clearTimeout(pendingTimer);
@@ -626,8 +635,8 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   }, [dateFilter, filter, folderFilter, groupFilter, items, ownerFilter, profile.uid, scope, search, sort, subjectFilter, tagFilter, view]);
 
   const activeItems = items.filter((item) => !item.archived && !item.isTemplate);
-  const privateCount = activeItems.filter((item) => item.ownerId === profile.uid && item.visibility === "private").length;
-  const sharedCount = activeItems.filter((item) => item.visibility !== "private").length;
+  const ownedCount = activeItems.filter((item) => item.ownerId === profile.uid).length;
+  const activeFilterCount = [filter !== "all", scope !== "all", !!subjectFilter, !!groupFilter, !!ownerFilter, !!folderFilter, !!tagFilter, dateFilter !== "all"].filter(Boolean).length;
   const todayKey = mexicoDateKey();
   const upcomingItems = activeItems.filter((item) =>
     item.type === "schedule" && item.eventAt && item.eventAt.slice(0, 10) >= todayKey,
@@ -636,6 +645,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   function prepareEditor(nextDraft: StaffWorkspaceItemInput, itemId: string, item: StaffWorkspaceItem | null, focused = false, baseline?: string) {
     setSelectedItem(item);
     setDraft(nextDraft);
+    setTagsText(nextDraft.tags.join(", "));
     setDraftId(itemId);
     setDraftBaseline(baseline ?? JSON.stringify(nextDraft));
     setInitialAttachmentPaths(nextDraft.attachments.map((attachment) => attachment.storagePath));
@@ -659,23 +669,24 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     setEditorOpen(true);
   }
 
-  function openNewItem(type: StaffWorkspaceItemType = "note") {
-    const startNewItem = () => {
-      const nextDraft = emptyDraft(type);
-      prepareEditor(nextDraft, workspaceId(), null);
-    };
+  function startNewDraft(nextDraft: StaffWorkspaceItemInput) {
+    const start = () => prepareEditor(nextDraft, workspaceId(), null);
     if (recoverableDraft) {
       setConfirmation({
         title: "¿Reemplazar el borrador guardado?",
-        description: "Al comenzar un bloque nuevo, el borrador anterior se reemplazará cuando guardes contenido. Puedes cancelarlo para continuarlo después.",
-        confirmLabel: "Crear bloque nuevo",
+        description: "Al empezar, el borrador anterior se reemplazará cuando edites contenido. Puedes cancelar y continuar tu borrador primero.",
+        confirmLabel: nextDraft.isTemplate ? "Crear plantilla" : "Crear documento",
         danger: true,
         icon: RotateCcw,
-        onConfirm: startNewItem,
+        onConfirm: start,
       });
       return;
     }
-    startNewItem();
+    start();
+  }
+
+  function openNewItem(type: StaffWorkspaceItemType = "note", isTemplate = false, withStructure = false) {
+    startNewDraft({ ...emptyDraft(type), isTemplate, content: withStructure ? templateContent(type) : "" });
   }
 
   function openItem(item: StaffWorkspaceItem, focused = false, syncRoute = true) {
@@ -720,9 +731,28 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     );
   }
 
+  function persistLocalDraft() {
+    const stored: StoredWorkspaceDraft = { itemId: draftId, selectedItemId: selectedItem?.id ?? null, baseline: draftBaseline, draft, savedAt: new Date().toISOString() };
+    try {
+      window.localStorage.setItem(workspaceDraftKey(profile.uid), JSON.stringify(stored));
+      setRecoverableDraft(stored);
+      return true;
+    } catch {
+      toast.error("No se pudo guardar el borrador en este dispositivo. Guarda el documento antes de cerrar.");
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    if (!editorOpen) return;
+    const trigger = document.activeElement as HTMLElement | null;
+    return () => { trigger?.focus(); };
+  }, [editorOpen]);
+
   function closeEditor() {
-    if (saving) return;
+    if (saving || uploadingFiles > 0) return;
     const finishClosing = () => {
+      if (draftDirty && !persistLocalDraft()) return;
       window.history.pushState({}, "", "/my-space");
       setEditorOpen(false);
     };
@@ -947,6 +977,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   }
 
   async function saveItem() {
+    if (saving) return;
     if (!draft.title.trim()) return void toast.error("Agrega un título para guardar el bloque.");
     if (draft.visibility === "selected" && draft.sharedWithIds.length === 0) {
       return void toast.error("Selecciona al menos una persona para compartir este bloque.");
@@ -970,7 +1001,10 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
           createdAt: now, updatedAt: now,
         }, ...current]);
       }
-      toast.success(selectedItem ? "Bloque actualizado" : "Bloque creado");
+      toast.success(draft.isTemplate ? "Plantilla guardada" : selectedItem ? "Documento actualizado" : "Documento guardado");
+      setView(draft.isTemplate ? "templates" : "blocks");
+      resetFilters();
+      window.history.pushState({}, "", "/my-space");
       window.localStorage.removeItem(workspaceDraftKey(profile.uid));
       setRecoverableDraft(null);
       setDraftBaseline(JSON.stringify(draft));
@@ -1011,37 +1045,17 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
       eventAt: item.type === "schedule" ? "" : item.eventAt ?? "",
       attachments: [],
     };
-    prepareEditor(nextDraft, workspaceId(), null);
+    startNewDraft(nextDraft);
   }
 
   function createFromTemplate(item: StaffWorkspaceItem) {
-    const nextDraft = {
-      ...draftFromItem(item),
-      archived: false,
-      isTemplate: false,
-      visibility: "private" as const,
-      sharedWithIds: [],
-      mentionedUserIds: [],
-      assigneeIds: [],
-      eventAt: "",
-      attachments: [],
-    };
-    prepareEditor(nextDraft, workspaceId(), null);
+    startNewDraft({ ...workspaceTemplateDraft(draftFromItem(item)), isTemplate: false });
   }
 
-  async function saveAsTemplate(item: StaffWorkspaceItem) {
-    const templateDraft: StaffWorkspaceItemInput = {
-      ...draftFromItem(item),
-      title: item.title.replace(/ · copia$/, ""),
-      visibility: "private",
-      sharedWithIds: [],
-      mentionedUserIds: [],
-      assigneeIds: [],
-      archived: false,
-      isTemplate: true,
-      eventAt: "",
-      attachments: [],
-    };
+  async function saveAsTemplate(item: StaffWorkspaceItemInput) {
+    if (saving || uploadingFiles > 0 || !item.title.trim()) return;
+    setSaving(true);
+    const templateDraft = workspaceTemplateDraft(item);
     try {
       if (firebaseReady) await createStaffWorkspaceItem(profile, templateDraft);
       else {
@@ -1057,8 +1071,9 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
           updatedAt: now,
         }, ...current]);
       }
-      toast.success("Plantilla guardada", { description: "Ya puedes reutilizarla desde Plantillas." });
+      toast.success("Plantilla guardada", { description: "Encuéntrala en Plantillas y elige «Usar plantilla». Se guardaron el texto y la estructura; agrega los archivos a cada documento." });
     } catch (error) { toast.error(friendlyFirebaseError(error)); }
+    finally { setSaving(false); }
   }
 
   async function addComment() {
@@ -1163,25 +1178,16 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
 
   const selectedOwned = !selectedItem || selectedItem.ownerId === profile.uid;
   const activeDetails = typeDetails[draft.type];
-  const ActiveEditorIcon = activeDetails.icon;
 
   return (
     <div className="staff-workspace-page">
       <motion.section animate={{ opacity: 1, y: 0 }} className="staff-workspace-hero" initial={reduceMotion ? false : { opacity: 0, y: 12 }}>
         <div className="staff-workspace-hero-copy">
-          <span className="staff-workspace-kicker"><Sparkles size={14} /> Tu centro de trabajo</span>
-          <h2>Un lugar para pensar, preparar y compartir.</h2>
-          <p>Organiza planeaciones, recursos, horarios y notas con la flexibilidad de un documento por bloques.</p>
+          <h2>Mi espacio</h2>
+          <p>Tus documentos y plantillas, en un solo lugar.</p>
         </div>
         <div className="staff-workspace-hero-actions">
-          <button className="staff-workspace-focus-button" disabled={!activeItems.length} onClick={() => openItem(activeItems.find((item) => item.pinned) ?? activeItems[0], true)} type="button"><Eye size={16} /> Modo enfoque</button>
-          <button className="primary-button staff-workspace-create-button" onClick={() => openNewItem()} type="button"><Plus size={17} /> Nuevo bloque</button>
-        </div>
-        <div className="staff-workspace-stats">
-          <span><strong>{activeItems.length}</strong> bloques</span>
-          <span><LockKeyhole size={14} /><strong>{privateCount}</strong> privados</span>
-          <span><Users size={14} /><strong>{sharedCount}</strong> compartidos</span>
-          <span className={unreadCount ? "has-unread" : ""}><BellRing size={14} /><strong>{unreadCount}</strong> sin leer</span>
+          <button className="primary-button staff-workspace-create-button" onClick={() => openNewItem("note", view === "templates")} type="button"><Plus size={17} /> {view === "templates" ? "Crear plantilla" : "Crear documento"}</button>
         </div>
       </motion.section>
 
@@ -1194,19 +1200,9 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
         </section>
       )}
 
-      <section className="staff-workspace-quick-create" aria-label="Creación rápida">
-        <div><span className="eyebrow">CAPTURA RÁPIDA</span><strong>¿Qué quieres guardar?</strong></div>
-        {Object.entries(typeDetails).map(([type, details]) => (
-          <button key={type} onClick={() => openNewItem(type as StaffWorkspaceItemType)} type="button">
-            <span className={`staff-workspace-type-icon ${type}`}><details.icon size={17} /></span>
-            <span><strong>{details.label}</strong><small>{details.description}</small></span><Plus size={15} />
-          </button>
-        ))}
-      </section>
-
       <nav className="staff-workspace-view-tabs" aria-label="Vistas de Mi espacio">
         {([
-          { id: "blocks", label: "Mis bloques", icon: LayoutGrid, count: activeItems.length },
+          { id: "blocks", label: "Mis documentos", icon: LayoutGrid, count: ownedCount },
           { id: "inbox", label: "Compartido conmigo", icon: Inbox, count: unreadCount },
           { id: "templates", label: "Plantillas", icon: Copy, count: items.filter((item) => item.isTemplate && !item.archived).length },
           { id: "archive", label: "Archivo", icon: Archive, count: items.filter((item) => item.archived).length },
@@ -1221,19 +1217,13 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
         <main className="staff-workspace-main">
           <div className="staff-workspace-toolbar">
             <label className="staff-workspace-search"><Search size={16} /><input aria-label="Buscar en Mi espacio" onChange={(event) => setSearch(event.target.value)} placeholder="Buscar notas, recursos o personas…" value={search} /></label>
-            <div className="staff-workspace-scope" aria-label="Visibilidad">
-              {(["all", "private", "shared"] as WorkspaceScope[]).map((value) => (
-                <button className={scope === value ? "active" : ""} key={value} onClick={() => setScope(value)} type="button">{value === "all" ? "Todo" : value === "private" ? "Sólo yo" : "Compartido"}</button>
-              ))}
-            </div>
+            <button className="secondary-button" aria-expanded={filtersOpen} aria-controls="workspace-filter-panel" onClick={() => setFiltersOpen((open) => !open)} type="button"><SlidersHorizontal size={16} /> Filtros{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}</button>
+            {(activeFilterCount > 0 || search) && <button className="secondary-button" onClick={resetFilters} type="button">Limpiar</button>}
           </div>
-          <div className="staff-workspace-filters" aria-label="Tipos de bloque">
-            {(["all", ...Object.keys(typeDetails)] as WorkspaceFilter[]).map((value) => (
-              <button className={filter === value ? "active" : ""} key={value} onClick={() => setFilter(value)} type="button">{value === "all" ? "Todos" : typeDetails[value].label}</button>
-            ))}
-          </div>
-
+          {filtersOpen && <section id="workspace-filter-panel" aria-label="Filtros de documentos">
           <div className="staff-workspace-advanced-filters">
+            <label><span>Tipo</span><select aria-label="Filtrar por tipo" value={filter} onChange={(event) => setFilter(event.target.value as WorkspaceFilter)}><option value="all">Todos los tipos</option>{Object.entries(typeDetails).map(([type, details]) => <option key={type} value={type}>{details.label}</option>)}</select></label>
+            <label><span>Visibilidad</span><select value={scope} onChange={(event) => setScope(event.target.value as WorkspaceScope)}><option value="all">Cualquiera</option><option value="private">Sólo yo</option><option value="shared">Compartido</option></select></label>
             <label><span>Materia</span><select aria-label="Filtrar por materia" onChange={(event) => setSubjectFilter(event.target.value)} value={subjectFilter}><option value="">Todas</option>{filterOptions.subjects.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label><span>Grupo</span><select aria-label="Filtrar por grupo" onChange={(event) => setGroupFilter(event.target.value)} value={groupFilter}><option value="">Todos</option>{filterOptions.groups.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label><span>Autor</span><select aria-label="Filtrar por autor" onChange={(event) => setOwnerFilter(event.target.value)} value={ownerFilter}><option value="">Todos</option>{filterOptions.owners.map(([id, name]) => <option key={id} value={id}>{id === profile.uid ? "Yo" : name}</option>)}</select></label>
@@ -1249,6 +1239,14 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
             {activeSavedViewId && <button aria-label="Eliminar vista guardada" onClick={deleteActiveView} type="button"><Trash2 size={14} /></button>}
             <button onClick={resetFilters} type="button"><RotateCcw size={14} /> Limpiar filtros</button>
           </div>
+
+          </section>}
+
+          {view === "templates" && <section className="staff-workspace-template-guide">
+            <div><span className="eyebrow">EMPIEZA CON UNA ESTRUCTURA</span><h3>Prepara una vez. Reutiliza cuando quieras.</h3><p>Crea una plantilla o guarda cualquier documento con «Guardar como plantilla». Al usarla, se abre una copia privada y el original se conserva.</p></div>
+            <div className="staff-workspace-template-starters">{Object.entries(typeDetails).map(([type, details]) => <button key={type} onClick={() => openNewItem(type as StaffWorkspaceItemType, true, true)} type="button"><details.icon size={20} /><span><strong>{details.label}</strong><small>{details.description}</small></span><Plus size={16} /></button>)}</div>
+          </section>}
+          <p className="staff-workspace-result-count" role="status">{filteredItems.length} {view === "templates" ? "plantillas guardadas" : "documentos"}{activeFilterCount > 0 || search ? " · Con filtros aplicados" : ""}</p>
 
           {loading ? <div className="staff-workspace-loading"><LoaderCircle className="spin" size={20} /> Preparando tu espacio…</div> : filteredItems.length ? (
             <motion.div className="staff-workspace-board" layout><AnimatePresence mode="popLayout">
@@ -1270,12 +1268,27 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
                     {item.assigneeIds.length > 0 && <div className="staff-workspace-card-assignees"><UserCheck size={13} /> {item.assigneeIds.slice(0, 2).map((id) => teamMembers.find((member) => member.id === id)?.name ?? "Equipo").join(", ")}{item.assigneeIds.length > 2 ? ` +${item.assigneeIds.length - 2}` : ""}</div>}
                     {item.type === "schedule" && item.eventAt && <span className="staff-workspace-card-date"><Clock3 size={14} /> {shortDate(item.eventAt)}</span>}
                     {item.type === "resource" && firstAttachment && <a className="staff-workspace-card-link" href={firstAttachment.url} rel="noreferrer" target="_blank"><Download size={13} /> {item.attachments.length === 1 ? "Abrir archivo" : `${item.attachments.length} archivos`}</a>}
-                    <footer><span>{owned ? "Tú" : item.ownerName} · {relativeDate(item.updatedAt)}</span><div className="staff-workspace-card-actions">{item.isTemplate ? <button aria-label="Usar plantilla" onClick={() => createFromTemplate(item)} type="button"><Copy size={14} /></button> : <button aria-label="Duplicar bloque" onClick={() => duplicateItem(item)} type="button"><Copy size={14} /></button>}{owned && !item.isTemplate && <button aria-label="Guardar como plantilla" onClick={() => void saveAsTemplate(item)} type="button"><Sparkles size={14} /></button>}{owned && <button aria-label={item.archived ? "Restaurar bloque" : "Archivar bloque"} onClick={() => void toggleArchived(item)} type="button">{item.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}</button>}{owned && !item.archived && <button aria-label={item.pinned ? "Desfijar bloque" : "Fijar bloque"} onClick={() => void togglePinned(item)} type="button">{item.pinned ? <PinOff size={14} /> : <Pin size={14} />}</button>}</div></footer>
+                    <footer>
+                      <span>{owned ? "Tú" : item.ownerName} · {relativeDate(item.updatedAt)}</span>
+                      <div className="staff-workspace-card-actions">
+                        {item.isTemplate && !item.archived && <button onClick={() => createFromTemplate(item)} type="button"><Copy size={14} /> Usar plantilla</button>}
+                        <details className="staff-workspace-item-menu">
+                          <summary aria-label={`Acciones de ${item.title}`}><MoreHorizontal size={19} /></summary>
+                          <div>
+                            <button onClick={() => openItem(item)} type="button"><Pencil size={15} /> {owned ? "Editar" : "Abrir"}</button>
+                            {!item.isTemplate && <button onClick={() => duplicateItem(item)} type="button"><Copy size={15} /> Duplicar</button>}
+                            {owned && !item.isTemplate && <button disabled={saving} onClick={() => void saveAsTemplate(item)} type="button"><Sparkles size={15} /> Guardar como plantilla</button>}
+                            {owned && <button onClick={() => void toggleArchived(item)} type="button">{item.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{item.archived ? "Restaurar" : "Archivar"}</button>}
+                            {owned && !item.archived && <button onClick={() => void togglePinned(item)} type="button">{item.pinned ? <PinOff size={15} /> : <Pin size={15} />}{item.pinned ? "Desfijar" : "Fijar"}</button>}
+                          </div>
+                        </details>
+                      </div>
+                    </footer>
                   </motion.article>
                 );
               })}
             </AnimatePresence></motion.div>
-          ) : <div className="staff-workspace-empty"><span>{view === "inbox" ? <Inbox size={20} /> : view === "templates" ? <Copy size={20} /> : view === "archive" ? <Archive size={20} /> : <Search size={20} />}</span><h3>{view === "inbox" ? "Tu bandeja está al día" : view === "templates" ? "Aún no tienes plantillas" : view === "archive" ? "El archivo está vacío" : "No encontramos bloques"}</h3><p>{view === "inbox" ? "Los bloques que compartan contigo aparecerán aquí." : view === "templates" ? "Guarda un bloque como plantilla para reutilizar su estructura." : view === "archive" ? "Aquí aparecerán los bloques que decidas archivar." : "Ajusta los filtros o crea algo nuevo para comenzar."}</p>{view === "blocks" && <button onClick={() => openNewItem()} type="button"><Plus size={15} /> Crear una nota</button>}</div>}
+          ) : <div className="staff-workspace-empty"><span>{view === "inbox" ? <Inbox size={20} /> : view === "templates" ? <Copy size={20} /> : view === "archive" ? <Archive size={20} /> : <Search size={20} />}</span><h3>{activeFilterCount > 0 || search ? "No hay resultados para esta búsqueda" : view === "inbox" ? "Tu bandeja está al día" : view === "templates" ? "Aún no tienes plantillas" : view === "archive" ? "El archivo está vacío" : "Tu próximo documento empieza aquí"}</h3><p>{activeFilterCount > 0 || search ? "Prueba con otras palabras o limpia los filtros." : view === "inbox" ? "Los bloques que compartan contigo aparecerán aquí." : view === "templates" ? "Guarda un bloque como plantilla para reutilizar su estructura." : view === "archive" ? "Aquí aparecerán los bloques que decidas archivar." : "Crea un documento en blanco o elige una estructura en Plantillas."}</p>{view === "blocks" && <button onClick={() => openNewItem()} type="button"><Plus size={15} /> Crear una nota</button>}</div>}
         </main>
 
         <aside className="staff-workspace-aside">
@@ -1284,28 +1297,18 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
             {upcomingItems.length ? <div className="staff-workspace-agenda">{upcomingItems.map((item) => <button key={item.id} onClick={() => openItem(item)} type="button"><span>{item.eventAt?.slice(0, 10) === todayKey ? "Hoy" : shortDate(item.eventAt)}</span><strong>{item.title}</strong></button>)}</div> : <p>No tienes horarios próximos. Tu día está despejado.</p>}
             <button className="staff-workspace-add-event" onClick={() => openNewItem("schedule")} type="button"><Plus size={14} /> Agregar horario</button>
           </section>
-          <section className="staff-workspace-collaboration">
-            <span className="staff-workspace-collaboration-icon"><Users size={18} /></span><h3>Trabajo conectado</h3><p>Usa <strong>@</strong> para mencionar colegas y comparte cada bloque con quien corresponda.</p>
-            <div className="staff-workspace-avatar-row" aria-label="Equipo docente">{teamMembers.slice(0, 3).map((member) => <span key={member.id} title={member.name}>{member.initials}</span>)}{teamMembers.length > 3 && <span>+{teamMembers.length - 3}</span>}</div>
-            <button className="staff-workspace-inbox-shortcut" onClick={() => { setView("inbox"); resetFilters(); }} type="button"><Inbox size={14} /><span><strong>{unreadCount ? `${unreadCount} por leer` : "Bandeja al día"}</strong><small>Abrir compartidos</small></span></button>
-          </section>
         </aside>
       </div>
 
       <AnimatePresence>{editorOpen && (
         <motion.div animate={{ opacity: 1 }} className={`staff-workspace-editor-backdrop ${focusMode ? "is-focus" : ""}`} exit={{ opacity: 0 }} initial={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) closeEditor(); }}>
-          <motion.section animate={{ opacity: 1, x: 0, scale: 1 }} aria-labelledby="staff-workspace-editor-title" aria-modal="true" className="staff-workspace-editor" exit={reduceMotion ? undefined : { opacity: 0, x: 28, scale: 0.985 }} initial={reduceMotion ? false : { opacity: 0, x: 42, scale: 0.985 }} role="dialog" transition={{ type: "spring", stiffness: 360, damping: 34 }}>
-            <header><div><span className="eyebrow">{focusMode ? "MODO ENFOQUE" : selectedItem ? "EDITAR BLOQUE" : "NUEVO BLOQUE"}</span><h2 id="staff-workspace-editor-title">{selectedItem?.title || activeDetails.label}</h2></div><span className={`staff-workspace-autosave ${draftSaveState}`}>{draftSaveState === "saving" ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}{draftSaveState === "saving" ? "Guardando borrador…" : draftSaveState === "saved" ? "Borrador guardado" : "Sin cambios"}</span><button aria-label="Cerrar Mi espacio" className="plain-icon" onClick={() => closeEditor()} type="button"><X size={19} /></button></header>
+          <FocusTrap active={!confirmation}><motion.section animate={{ opacity: 1, x: 0, scale: 1 }} aria-labelledby="staff-workspace-editor-title" aria-modal="true" className="staff-workspace-editor" exit={reduceMotion ? undefined : { opacity: 0, x: 28, scale: 0.985 }} initial={reduceMotion ? false : { opacity: 0, x: 42, scale: 0.985 }} role="dialog" transition={{ type: "spring", stiffness: 360, damping: 34 }}>
+            <header><div><span className="eyebrow">{focusMode ? "MODO ENFOQUE" : draft.isTemplate ? "PLANTILLA REUTILIZABLE" : selectedItem ? "EDITAR DOCUMENTO" : "NUEVO DOCUMENTO"}</span><h2 id="staff-workspace-editor-title">{selectedItem?.title || activeDetails.label}</h2></div><span role="status" className={`staff-workspace-autosave ${draftSaveState}`}>{draftSaveState === "saving" ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}{draftSaveState === "saving" ? "Guardando borrador…" : draftSaveState === "saved" ? "Borrador guardado en este dispositivo" : draftSaveState === "error" ? "No se pudo guardar el borrador" : "Sin cambios"}</span><button aria-pressed={focusMode} aria-label={focusMode ? "Salir del modo enfoque" : "Modo enfoque"} className="plain-icon" onClick={() => setFocusMode((current) => !current)} type="button">{focusMode ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button><button disabled={saving || uploadingFiles > 0} aria-label="Cerrar Mi espacio" className="plain-icon" onClick={() => closeEditor()} type="button"><X size={19} /></button></header>
 
-            {selectedOwned ? <div className="staff-workspace-editor-form">
-              <div className="staff-workspace-type-picker" aria-label="Tipo de bloque">{Object.entries(typeDetails).map(([type, details]) => <button className={draft.type === type ? "active" : ""} key={type} onClick={() => setDraft((current) => ({ ...current, type: type as StaffWorkspaceItemType }))} type="button"><details.icon size={15} /> {details.label}</button>)}</div>
-              <div className={`staff-workspace-editor-context ${draft.type}`}><span className={`staff-workspace-type-icon ${draft.type}`}><ActiveEditorIcon size={17} /></span><div><strong>{activeDetails.label}</strong><p>{activeDetails.editorDescription}</p></div></div>
-              <label className="staff-workspace-title-field"><span>Título</span><input autoFocus maxLength={120} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder={activeDetails.titlePlaceholder} value={draft.title} /></label>
-
-              <div className="staff-workspace-metadata-grid organization">
-                <label><span>Carpeta</span><span className="staff-workspace-input-with-icon"><Folder size={14} /><input list="workspace-folders" maxLength={80} onChange={(event) => setDraft((current) => ({ ...current, folder: event.target.value }))} placeholder="Ej. Planeaciones 4° A" value={draft.folder} /></span><datalist id="workspace-folders">{filterOptions.folders.map((folder) => <option key={folder} value={folder} />)}</datalist></label>
-                <label><span>Etiquetas</span><span className="staff-workspace-input-with-icon"><Tag size={14} /><input maxLength={240} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 12) }))} placeholder="lectura, semana 8" value={draft.tags.join(", ")} /></span></label>
-              </div>
+            {selectedOwned ? <div className="staff-workspace-editor-form" inert={saving}>
+              <label className="staff-workspace-document-type"><span>Tipo de documento</span><select value={draft.type} onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value as StaffWorkspaceItemType }))}>{Object.entries(typeDetails).map(([type, details]) => <option key={type} value={type}>{details.label}</option>)}</select></label>
+              {draft.isTemplate && <p className="staff-workspace-template-notice"><Copy size={17} /> Estás editando una plantilla. Guárdala y después elige «Usar plantilla» para crear documentos con esta estructura. Los archivos se agregan a cada copia.</p>}
+              <label className="staff-workspace-title-field"><span>Título</span><input data-autofocus maxLength={120} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder={activeDetails.titlePlaceholder} value={draft.title} /></label>
 
               {draft.type === "planning" && <div className="staff-workspace-metadata-grid planning">
                 <label><span>Materia</span><input onChange={(event) => setDraft((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. Español" value={draft.subject} /></label>
@@ -1324,22 +1327,45 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
               </section>}
 
               <section className="staff-workspace-document-field">
-                <div className="staff-workspace-field-heading"><span>{draft.type === "planning" ? "Desarrollo de la planeación" : draft.type === "resource" ? "Ficha del recurso" : draft.type === "schedule" ? "Agenda y acuerdos" : "Contenido"}</span><small>Editor por bloques</small></div>
+                <div className="staff-workspace-field-heading"><span>{draft.type === "planning" ? "Desarrollo de la planeación" : draft.type === "resource" ? "Ficha del recurso" : draft.type === "schedule" ? "Agenda y acuerdos" : "Contenido"}</span><small>Selecciona texto para darle formato</small></div>
                 <WorkspaceEditorHint />
                 <StaffWorkspaceRichEditor content={draft.content} documentKey={draftId} members={teamMembers} onChange={(content) => setDraft((current) => ({ ...current, content }))} onMention={registerMention} onUploadFile={uploadEditorFile} />
               </section>
 
+              <details className="staff-workspace-details"><summary>Organización y etiquetas</summary>
+              <div className="staff-workspace-metadata-grid organization">
+                <label><span>Carpeta</span><span className="staff-workspace-input-with-icon"><Folder size={14} /><input list="workspace-folders" maxLength={80} onChange={(event) => setDraft((current) => ({ ...current, folder: event.target.value }))} placeholder="Ej. Planeaciones 4° A" value={draft.folder} /></span><datalist id="workspace-folders">{filterOptions.folders.map((folder) => <option key={folder} value={folder} />)}</datalist></label>
+                <label><span>Etiquetas</span><span className="staff-workspace-input-with-icon"><Tag size={14} /><input maxLength={240} onChange={(event) => { const value = event.target.value; setTagsText(value); setDraft((current) => ({ ...current, tags: value.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 12) })); }} placeholder="lectura, semana 8" value={tagsText} /></span></label>
+              </div>
+
+              </details>
+
+              <details className="staff-workspace-details"><summary>Compartir · {visibilityLabel(draft)}</summary>
               <fieldset className="staff-workspace-visibility-picker"><legend>Compartir</legend>{([
                 { value: "private", icon: LockKeyhole, title: "Sólo yo", detail: "Privado en tu cuenta" },
                 { value: "selected", icon: UserRound, title: "Personas específicas", detail: "Elige uno o varios miembros" },
                 { value: "staff", icon: Users, title: "Todo el equipo", detail: "Dirección y docentes" },
-              ] as const).map((option) => <button className={draft.visibility === option.value ? "active" : ""} key={option.value} onClick={() => setDraft((current) => ({ ...current, visibility: option.value }))} type="button"><option.icon size={16} /><span><strong>{option.title}</strong><small>{option.detail}</small></span>{draft.visibility === option.value && <Check size={16} />}</button>)}</fieldset>
+              ] as const).map((option) => <button aria-pressed={draft.visibility === option.value} className={draft.visibility === option.value ? "active" : ""} key={option.value} onClick={() => setDraft((current) => ({ ...current, visibility: option.value }))} type="button"><option.icon size={16} /><span><strong>{option.title}</strong><small>{option.detail}</small></span>{draft.visibility === option.value && <Check size={16} />}</button>)}</fieldset>
 
               <AnimatePresence initial={false}>{draft.visibility === "selected" && <motion.div animate={{ opacity: 1, y: 0 }} className="staff-workspace-member-picker" exit={{ opacity: 0, y: -6 }} initial={{ opacity: 0, y: -6 }}><div><strong>Compartir con</strong><span>{draft.sharedWithIds.length} seleccionados</span></div>{shareCandidates.length ? <div className="staff-workspace-member-grid">{shareCandidates.map((member) => <label className={draft.sharedWithIds.includes(member.id) ? "selected" : ""} key={member.id}><input checked={draft.sharedWithIds.includes(member.id)} onChange={() => toggleSharedMember(member.id)} type="checkbox" /><span className="staff-workspace-mention-avatar">{member.initials}</span><span>{member.name}</span>{draft.sharedWithIds.includes(member.id) && <Check size={14} />}</label>)}</div> : <p>No hay otros docentes activos disponibles.</p>}</motion.div>}</AnimatePresence>
 
               {draft.visibility !== "private" && <fieldset className="staff-workspace-assignee-picker"><legend><UserCheck size={15} /> Responsables</legend><p>Asigna a quienes deben dar seguimiento. También recibirán acceso al bloque.</p><div>{shareCandidates.map((member) => <label className={draft.assigneeIds.includes(member.id) ? "selected" : ""} key={member.id}><input checked={draft.assigneeIds.includes(member.id)} onChange={() => toggleAssignee(member.id)} type="checkbox" /><span className="staff-workspace-mention-avatar">{member.initials}</span><span>{member.name}</span>{draft.assigneeIds.includes(member.id) && <Check size={14} />}</label>)}</div></fieldset>}
 
-              <footer>{selectedItem && <button className="staff-workspace-delete" disabled={saving} onClick={() => removeItem(selectedItem)} type="button"><Trash2 size={15} /> Eliminar</button>}{selectedItem && !selectedItem.isTemplate && <button className="secondary-button" disabled={saving} onClick={() => void saveAsTemplate(selectedItem)} type="button"><Sparkles size={15} /> Plantilla</button>}{selectedItem && <button className="secondary-button" disabled={saving} onClick={() => void toggleArchived(selectedItem)} type="button">{selectedItem.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{selectedItem.archived ? "Restaurar" : "Archivar"}</button>}{draftDirty && <button className="secondary-button" disabled={saving} onClick={discardDraft} type="button">Descartar borrador</button>}<button className="secondary-button" disabled={saving} onClick={() => closeEditor()} type="button">Cerrar</button><button className="primary-button" disabled={saving || uploadingFiles > 0 || !draft.title.trim()} onClick={() => void saveItem()} type="button">{saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}{saving ? "Guardando…" : "Publicar cambios"}</button></footer>
+              </details>
+
+              <footer>
+                <details className="staff-workspace-item-menu editor-actions">
+                  <summary><MoreHorizontal size={18} /> Más opciones</summary>
+                  <div>
+                    {selectedItem && <button disabled={saving || uploadingFiles > 0} onClick={() => removeItem(selectedItem)} type="button"><Trash2 size={15} /> Eliminar</button>}
+                    {selectedItem && <button disabled={saving || uploadingFiles > 0 || draftDirty} title={draftDirty ? "Guarda o descarta los cambios antes de archivar" : undefined} onClick={() => void toggleArchived(selectedItem)} type="button">{selectedItem.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{selectedItem.archived ? "Restaurar" : "Archivar"}</button>}
+                    {draftDirty && <button disabled={saving || uploadingFiles > 0} onClick={discardDraft} type="button">Descartar borrador</button>}
+                    <button disabled={saving || uploadingFiles > 0} onClick={() => closeEditor()} type="button">Cerrar editor</button>
+                  </div>
+                </details>
+                {!draft.isTemplate && <button className="secondary-button" disabled={saving || uploadingFiles > 0 || !draft.title.trim()} onClick={() => void saveAsTemplate(draft)} type="button"><Copy size={15} /> Guardar como plantilla</button>}
+                <button className="primary-button" disabled={saving || uploadingFiles > 0 || !draft.title.trim()} onClick={() => void saveItem()} type="button">{saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}{saving ? "Guardando…" : draft.isTemplate ? "Guardar plantilla" : "Guardar documento"}</button>
+              </footer>
             </div> : selectedItem ? <div className="staff-workspace-reader">
               <div className="staff-workspace-reader-meta"><span className={`staff-workspace-type-icon ${selectedItem.type}`}>{(() => { const ReaderIcon = typeDetails[selectedItem.type].icon; return <ReaderIcon size={17} />; })()}</span><span>Compartido por <strong>{selectedItem.ownerName}</strong></span></div>
               <h3>{selectedItem.title}</h3>
@@ -1369,7 +1395,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
                 {selectedOwned && transferCandidates.length > 0 && <div className="staff-workspace-transfer"><UserRound size={15} /><label><span>Transferir propiedad</span><select onChange={(event) => setTransferTargetId(event.target.value)} value={transferTargetId}><option value="">Selecciona docente</option>{transferCandidates.map((account) => <option key={account.uid} value={account.uid}>{account.name}</option>)}</select></label><button disabled={!transferTargetId || saving} onClick={() => void transferOwnership()} type="button">Transferir</button></div>}
               </div>
             </section>}
-          </motion.section>
+          </motion.section></FocusTrap>
         </motion.div>
       )}</AnimatePresence>
 
