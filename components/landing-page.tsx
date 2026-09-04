@@ -91,7 +91,7 @@ function ProductWindow({ compact = false }: { compact?: boolean }) {
         <div className="lp-window-grid">
           <article className="lp-preview-welcome">
             <span>Tu semana</span>
-            <h2>Hoy pinta para algo grande.</h2>
+            <h2>Hoy es un buen día para avanzar.</h2>
             <p>3 actividades listas · 2 nuevas por descubrir</p>
             <div className="lp-preview-progress"><i /></div>
           </article>
@@ -105,9 +105,9 @@ function ProductWindow({ compact = false }: { compact?: boolean }) {
             </button>
           </article>
           <article className="lp-preview-card lp-preview-grade">
-            <small>MI RACHA</small>
+            <small>MI PROGRESO</small>
             <strong>92<span>%</span></strong>
-            <p>¡Vas con todo!</p>
+            <p>¡Excelente avance!</p>
           </article>
         </div>
       </div>
@@ -187,13 +187,13 @@ export function LandingPage() {
         </a>
 
         <nav className="lp-nav-links" aria-label="Navegación principal">
-          <a href="#experiencia">Lo que hay</a>
-          <a href="#comunidad">Tu comunidad</a>
-          <a href="#familias">Para cada quien</a>
+          <a href="#experiencia">Conoce el campus</a>
+          <a href="#comunidad">Comunidad</a>
+          <a href="#familias">Para cada perfil</a>
         </nav>
 
         <a className="lp-nav-action" href="/login">
-          Ir al campus <ArrowRight size={15} />
+          Acceder al campus <ArrowRight size={15} />
         </a>
       </header>
 
@@ -212,18 +212,18 @@ export function LandingPage() {
           </span>
           <h1>
             Tu vida escolar,
-            <span> más fácil y más cool.</span>
+            <span> más fácil y organizada.</span>
           </h1>
           <p>
             Tareas, avances, avisos y tu comunidad en un solo espacio para
-            organizarte, aprender y seguir rompiéndola.
+            organizarte, aprender y seguir avanzando.
           </p>
           <div className="lp-hero-actions">
             <a className="lp-button-primary" href="/login">
-              Entrar y ponerme al día <ArrowRight size={18} />
+              Entrar al campus <ArrowRight size={18} />
             </a>
             <a className="lp-button-link" href="#experiencia">
-              Ver todo lo que hay <ArrowDown size={16} />
+              Conocer todo lo que ofrece <ArrowDown size={16} />
             </a>
           </div>
         </motion.div>
@@ -240,15 +240,15 @@ export function LandingPage() {
         </motion.div>
 
         <a className="lp-scroll-cue" href="#experiencia" aria-label="Continuar">
-          <span /> Sigue bajando
+          <span /> Conoce más
         </a>
       </section>
 
       <section className="lp-manifesto" id="experiencia">
         <Reveal className="lp-manifesto-inner">
-          <span className="lp-section-kicker">Tu escuela, sin complicarte</span>
+          <span className="lp-section-kicker">Tu escuela, más sencilla</span>
           <h2>
-            Cero vueltas.
+            Sin complicaciones.
             <br />
             <em>Todo bajo control.</em>
           </h2>
@@ -259,17 +259,17 @@ export function LandingPage() {
           </p>
         </Reveal>
         <div className="lp-trust-row" aria-label="Beneficios del campus">
-          <span><CheckCircle2 size={16} /> Ubicas todo al instante</span>
-          <span><ShieldCheck size={16} /> Tu info siempre segura</span>
-          <span><Heart size={16} /> Tu comunidad va contigo</span>
+          <span><CheckCircle2 size={16} /> Encuentra todo al instante</span>
+          <span><ShieldCheck size={16} /> Tu información siempre segura</span>
+          <span><Heart size={16} /> Tu comunidad te acompaña</span>
         </div>
       </section>
 
       <section className="lp-bento-section" aria-labelledby="todo-heading">
         <Reveal className="lp-section-heading">
-          <span className="lp-section-kicker">Tu semana, sin caos</span>
-          <h2 id="todo-heading">Aquí pasa todo.</h2>
-          <p>Lo de hoy, tus logros y lo que viene. Todo listo para ti.</p>
+          <span className="lp-section-kicker">Tu semana, bien organizada</span>
+          <h2 id="todo-heading">Todo en un solo lugar.</h2>
+          <p>Tus actividades de hoy, tus logros y lo que viene, siempre a tu alcance.</p>
         </Reveal>
 
         <div className="lp-bento-grid">
@@ -277,8 +277,8 @@ export function LandingPage() {
             <div className="lp-bento-copy is-light">
               <span className="lp-card-icon"><ClipboardCheck size={19} /></span>
               <small>TAREAS</small>
-              <h3>Que no se te vaya una.</h3>
-              <p>Tareas, archivos y fechas claras para que entregues sin carreras de último minuto.</p>
+              <h3>Ninguna tarea se queda atrás.</h3>
+              <p>Tareas, archivos y fechas claras para que entregues a tiempo y sin contratiempos.</p>
             </div>
             <div className="lp-task-stack">
               <MiniTask subject="ESPAÑOL" title="Crónica de mi comunidad" tone="coral" />
@@ -291,12 +291,12 @@ export function LandingPage() {
             <div className="lp-bento-copy">
               <span className="lp-card-icon"><BarChart3 size={19} /></span>
               <small>PROGRESO</small>
-              <h3>Mira hasta dónde llegaste.</h3>
+              <h3>Reconoce cuánto has avanzado.</h3>
             </div>
             <div className="lp-ring" aria-label="92 por ciento de progreso">
               <div><strong>92</strong><span>%</span></div>
             </div>
-            <span className="lp-progress-note"><Sparkles size={14} /> ¡Semana épica!</span>
+            <span className="lp-progress-note"><Sparkles size={14} /> ¡Excelente semana!</span>
           </Reveal>
 
           <Reveal className="lp-bento-card lp-bento-community" delay={0.08}>
@@ -308,7 +308,7 @@ export function LandingPage() {
             </div>
             <div className="lp-bento-copy is-bottom">
               <small>COMUNIDAD</small>
-              <h3>Tu gente, siempre cerca.</h3>
+              <h3>Tu comunidad, siempre cerca.</h3>
               <p>Comparte ideas, descubre historias y celebra lo que logra tu comunidad.</p>
             </div>
           </Reveal>
@@ -317,7 +317,7 @@ export function LandingPage() {
             <div className="lp-bento-copy">
               <span className="lp-card-icon"><CalendarDays size={19} /></span>
               <small>CALENDARIO</small>
-              <h3>Cero sorpresas de última hora.</h3>
+              <h3>Sin sorpresas de última hora.</h3>
               <p>Fechas, eventos y recordatorios para llegar siempre un paso adelante.</p>
             </div>
             <div className="lp-calendar-sheet">
@@ -336,12 +336,12 @@ export function LandingPage() {
       <section className="lp-story" ref={storyRef} id="comunidad">
         <div className="lp-story-grid">
           <div className="lp-story-copy">
-            <span className="lp-section-kicker is-on-dark">Tu ritmo manda</span>
-            <h2>Entra. Ubica.<br /><span>Dale con todo.</span></h2>
+            <span className="lp-section-kicker is-on-dark">Avanza a tu ritmo</span>
+            <h2>Entra. Organízate.<br /><span>Sigue avanzando.</span></h2>
             <div className="lp-story-points">
               <article>
                 <span>01</span>
-                <div><strong>Arranca con todo</strong><p>Lo importante aparece primero. Así de fácil.</p></div>
+                <div><strong>Comienza con claridad</strong><p>Lo importante aparece primero para que sepas por dónde comenzar.</p></div>
               </article>
               <article>
                 <span>02</span>
@@ -349,7 +349,7 @@ export function LandingPage() {
               </article>
               <article>
                 <span>03</span>
-                <div><strong>Presume tus logros</strong><p>Mira cómo crece tu progreso semana tras semana.</p></div>
+                <div><strong>Reconoce tus logros</strong><p>Observa cómo crece tu progreso semana tras semana.</p></div>
               </article>
             </div>
           </div>
@@ -370,7 +370,7 @@ export function LandingPage() {
                 style={reduceMotion ? undefined : { y: messageY }}
               >
                 <span><MessageCircle size={17} /></span>
-                <div><small>TU COMUNIDAD</small><strong>¡La rompiste, Ana!</strong></div>
+                <div><small>TU COMUNIDAD</small><strong>¡Gran trabajo, Ana!</strong></div>
               </motion.div>
             </div>
           </div>
@@ -379,9 +379,9 @@ export function LandingPage() {
 
       <section className="lp-roles" id="familias">
         <Reveal className="lp-section-heading is-centered">
-          <span className="lp-section-kicker">Un campus, mil formas de vivirlo</span>
-          <h2>Aquí cabemos todos.</h2>
-          <p>Cada quien encuentra lo suyo para que la escuela fluya mejor en equipo.</p>
+          <span className="lp-section-kicker">Un campus, distintas formas de vivirlo</span>
+          <h2>Un espacio para todos.</h2>
+          <p>Cada perfil encuentra lo que necesita para que la escuela funcione mejor en equipo.</p>
         </Reveal>
 
         <div className="lp-role-grid">
@@ -389,7 +389,7 @@ export function LandingPage() {
             <span className="lp-role-number">01</span>
             <div className="lp-role-icon"><GraduationCap size={25} /></div>
             <h3>Estudiantes</h3>
-            <p>Aprende, entrega y celebra cada avance a tu estilo.</p>
+            <p>Aprende, entrega y celebra cada avance a tu manera.</p>
             <span className="lp-role-link">Mi espacio <ArrowRight size={15} /></span>
           </Reveal>
           <Reveal className="lp-role-card is-teacher" delay={0.06}>
@@ -403,7 +403,7 @@ export function LandingPage() {
             <span className="lp-role-number">03</span>
             <div className="lp-role-icon"><Users size={25} /></div>
             <h3>Familias</h3>
-            <p>Acompaña de cerca cada logro, sin enredos ni vueltas.</p>
+            <p>Acompaña de cerca cada logro de forma sencilla y clara.</p>
             <span className="lp-role-link">Seguir sus logros <ArrowRight size={15} /></span>
           </Reveal>
         </div>
@@ -413,7 +413,7 @@ export function LandingPage() {
         <Reveal className="lp-quote-card">
           <div className="lp-quote-mark">“</div>
           <blockquote>
-            Entro, veo qué sigue y me pongo en acción. Así sí dan ganas.
+            Entro, reviso lo que sigue y me pongo en acción. Todo resulta más claro.
           </blockquote>
           <p>Una experiencia hecha con la energía de la comunidad CEHF.</p>
           <div className="lp-quote-metrics">
@@ -421,7 +421,7 @@ export function LandingPage() {
             <i />
             <span><strong>3</strong><small>perspectivas</small></span>
             <i />
-            <span><strong>∞</strong><small>razones para darlo todo</small></span>
+            <span><strong>∞</strong><small>motivos para seguir avanzando</small></span>
           </div>
         </Reveal>
       </section>
@@ -430,11 +430,11 @@ export function LandingPage() {
         <div className="lp-final-orbit orbit-one" aria-hidden="true" />
         <div className="lp-final-orbit orbit-two" aria-hidden="true" />
         <Reveal className="lp-final-inner">
-          <span className="lp-section-kicker is-on-dark"><Clock3 size={14} /> ¿Listo para lo que sigue?</span>
-          <h2>Entra. Ponte al día.<br />Dale con todo.</h2>
+          <span className="lp-section-kicker is-on-dark"><Clock3 size={14} /> ¿Listo para continuar?</span>
+          <h2>Entra. Ponte al día.<br />Sigue avanzando.</h2>
           <p>Tu próxima tarea, tu mejor avance y toda tu comunidad ya están aquí.</p>
           <a className="lp-button-light" href="/login">
-            Vamos al Campus CEHF <ArrowRight size={18} />
+            Ir al Campus CEHF <ArrowRight size={18} />
           </a>
         </Reveal>
       </section>
@@ -448,12 +448,12 @@ export function LandingPage() {
             sizes="44px"
             unoptimized
           />
-          <div><strong>Campus CEHF</strong><small>Crece. Conecta. Atrévete.</small></div>
+          <div><strong>Campus CEHF</strong><small>Crece. Conecta. Avanza.</small></div>
         </div>
-        <p>Todo lo que necesitas para aprender, avanzar y compartir en grande.</p>
+        <p>Todo lo que necesitas para aprender, avanzar y compartir en comunidad.</p>
         <div className="lp-footer-links">
           <a href="#inicio">Inicio</a>
-          <a href="#experiencia">Lo que hay</a>
+          <a href="#experiencia">Conoce el campus</a>
           <a href="/login">Acceso</a>
         </div>
         <small className="lp-footer-legal">© 2026 CEHF · Todos los derechos reservados.</small>

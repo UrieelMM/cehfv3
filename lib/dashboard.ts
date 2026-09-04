@@ -110,6 +110,55 @@ function average(values: number[]) {
     : 0;
 }
 
+const performanceMessages = [
+  [
+    "Todo gran avance comienza con un primer paso.",
+    "Este es un buen momento para comenzar a avanzar.",
+    "Cada esfuerzo de hoy abre nuevas posibilidades.",
+    "El camino apenas comienza y cada paso cuenta.",
+    "Con constancia, cada meta se vuelve más cercana.",
+  ],
+  [
+    "Ya hay avances importantes; sigamos construyendo.",
+    "Cada paso suma y el progreso comienza a notarse.",
+    "El esfuerzo constante está marcando la diferencia.",
+    "Vamos por buen camino; aún hay mucho por lograr.",
+    "Lo que hoy se fortalece será el logro de mañana.",
+  ],
+  [
+    "El progreso es claro y seguimos avanzando con firmeza.",
+    "Estamos a mitad del camino y cada esfuerzo cuenta.",
+    "Los resultados comienzan a reflejar el trabajo realizado.",
+    "Cada avance nos acerca a una semana más completa.",
+    "El compromiso está dando frutos; continuemos así.",
+  ],
+  [
+    "El desempeño avanza con fuerza y constancia.",
+    "El esfuerzo sostenido se refleja en grandes resultados.",
+    "Estamos muy cerca de alcanzar todas las metas.",
+    "El progreso inspira; mantengamos este buen ritmo.",
+    "Cada logro confirma que vamos por excelente camino.",
+  ],
+  [
+    "El desempeño es excelente; sigamos creciendo.",
+    "Los grandes resultados reflejan un esfuerzo extraordinario.",
+    "El compromiso de esta semana merece celebrarse.",
+    "Estamos alcanzando las metas con excelencia.",
+    "Este progreso demuestra todo lo que podemos lograr.",
+  ],
+] as const;
+
+export function dashboardPerformanceMessage(completion: number, seed: string) {
+  const value = clampPercent(completion);
+  const rangeIndex = value <= 20 ? 0 : value <= 40 ? 1 : value <= 60 ? 2 : value <= 80 ? 3 : 4;
+  const messages = performanceMessages[rangeIndex];
+  const messageIndex = [...seed].reduce(
+    (hash, character) => (hash * 31 + (character.codePointAt(0) ?? 0)) >>> 0,
+    0,
+  ) % messages.length;
+  return messages[messageIndex];
+}
+
 function scoreLabel(value: number, hasRecords: boolean) {
   if (!hasRecords) return "—";
   return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
@@ -344,7 +393,6 @@ function studentViewModel(
   const latestReport = [...periodReports]
     .filter((report) => report.status === "published")
     .sort((first, second) => timestamp(second.publishedAt ?? second.updatedAt) - timestamp(first.publishedAt ?? first.updatedAt))[0];
-  const pendingTotal = pendingTasks.length + missedTasks.length + availableReviews.filter((review) => review.myAttempt?.status !== "completed").length + periodMaterials.filter((material) => material.required && !input.viewedMaterialIds.has(material.id)).length;
   const progress: DashboardProgressItem[] = [
     {
       id: "grades",
@@ -370,9 +418,10 @@ function studentViewModel(
     ...base,
     completion,
     completionLabel: "Tu avance real",
-    heroTitle: pendingTotal
-      ? `Tienes ${pendingTotal} ${pendingTotal === 1 ? "elemento por atender" : "elementos por atender"} esta semana.`
-      : `Vas al día en ${input.academicConfig.weekLabel || "la semana"}.`,
+    heroTitle: dashboardPerformanceMessage(
+      completion,
+      `${input.profile.uid}:${base.periodWeekId}`,
+    ),
     heroDescription: periodGrades.length
       ? `Tu promedio registrado es ${scoreLabel(gradeAverage, true)} y ya entregaste ${completedTasks.length} de ${availableTasks.length} tareas.`
       : `Aquí ves solamente tus tareas, repasos, recursos y reportes disponibles.`,
@@ -508,11 +557,10 @@ function staffViewModel(
     ...base,
     completion,
     completionLabel: director ? "Cobertura de seguimiento" : "Preparación semanal",
-    heroTitle: director
-      ? `${eligibleStudents.length} alumnos forman parte del seguimiento de ${input.academicConfig.weekLabel || "la semana"}.`
-      : reviewQueue.length
-        ? `Tienes ${reviewQueue.length} ${reviewQueue.length === 1 ? "entrega lista" : "entregas listas"} para revisar.`
-        : `Tu seguimiento de ${input.academicConfig.weekLabel || "la semana"} está al día.`,
+    heroTitle: dashboardPerformanceMessage(
+      completion,
+      `${input.profile.uid}:${base.periodWeekId}`,
+    ),
     heroDescription: director
       ? `${gradeCoverage}% del alumnado tiene captura y se han publicado ${publishedReports} reportes en el periodo.`
       : `${gradeCoverage}% de tus alumnos tiene calificaciones y faltan ${pendingReports} reportes por completar.`,

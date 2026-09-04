@@ -13,6 +13,14 @@ import {
   CircleHelp,
   ClipboardCheck,
   Clock3,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudMoon,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
   Copy,
   Database,
   FileBarChart,
@@ -29,6 +37,7 @@ import {
   Menu,
   MessageCircle,
   Moon,
+  MoonStar,
   MoreHorizontal,
   Newspaper,
   PanelLeftClose,
@@ -42,6 +51,9 @@ import {
   ShieldCheck,
   Sparkles,
   Sun,
+  SunMedium,
+  Sunrise,
+  Sunset,
   Target,
   UploadCloud,
   UserRound,
@@ -384,7 +396,7 @@ const navigation: Array<{
 ];
 
 const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
-  dashboard: { eyebrow: "Historial académico", title: "Buenos días" },
+  dashboard: { eyebrow: "Historial académico", title: "Inicio" },
   "my-week": { eyebrow: "Resultados y seguimiento", title: "Calificaciones" },
   "weekly-review": { eyebrow: "Práctica breve", title: "Repasos" },
   tasks: { eyebrow: "Actividades y entregas", title: "Tareas" },
@@ -404,6 +416,246 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
   settings: { eyebrow: "Preferencias del portal", title: "Configuración" },
   profile: { eyebrow: "Tu espacio", title: "Perfil" },
 };
+
+type DayPhase = {
+  key: "dawn" | "morning" | "afternoon" | "sunset" | "dusk" | "night";
+  label: string;
+  greeting: string;
+  icon: IconType;
+};
+
+const dayPhases: DayPhase[] = [
+  { key: "dawn", label: "Un nuevo día comienza", greeting: "Buenos días", icon: Sunrise },
+  { key: "morning", label: "Un buen momento para avanzar", greeting: "Buenos días", icon: SunMedium },
+  { key: "afternoon", label: "Sigamos construyendo", greeting: "Buenas tardes", icon: CloudSun },
+  { key: "sunset", label: "Cada avance cuenta", greeting: "Buenas tardes", icon: Sunset },
+  { key: "dusk", label: "Cerramos el día con calma", greeting: "Buenas noches", icon: CloudMoon },
+  { key: "night", label: "Mañana será una nueva oportunidad", greeting: "Buenas noches", icon: MoonStar },
+];
+
+type WeatherKind = "clear" | "cloudy" | "fog" | "drizzle" | "rain" | "snow" | "storm";
+
+type CurrentWeather = {
+  kind: WeatherKind;
+  label: string;
+  temperature: number;
+  timeZone: string;
+  icon: IconType;
+};
+
+type WeatherPreviewMode = "live" | "time" | WeatherKind;
+
+const weatherPreviewModes: WeatherPreviewMode[] = [
+  "live",
+  "clear",
+  "cloudy",
+  "fog",
+  "drizzle",
+  "rain",
+  "snow",
+  "storm",
+  "time",
+];
+
+const weatherPreviewCodes: Record<WeatherKind, number> = {
+  clear: 0,
+  cloudy: 3,
+  fog: 45,
+  drizzle: 53,
+  rain: 63,
+  snow: 73,
+  storm: 95,
+};
+
+const weatherPreviewLabels: Record<WeatherPreviewMode, string> = {
+  live: "Clima real",
+  clear: "Despejado",
+  cloudy: "Nublado",
+  fog: "Niebla",
+  drizzle: "Llovizna",
+  rain: "Lluvia",
+  snow: "Nieve",
+  storm: "Tormenta",
+  time: "Por hora",
+};
+
+function weatherForCode(code: number): Omit<CurrentWeather, "temperature" | "timeZone"> {
+  if (code === 0) return { kind: "clear", label: "Cielo despejado", icon: Sun };
+  if (code <= 3) return { kind: "cloudy", label: code === 3 ? "Cielo nublado" : "Algunas nubes", icon: Cloud };
+  if (code === 45 || code === 48) return { kind: "fog", label: "Ambiente con niebla", icon: CloudFog };
+  if (code >= 51 && code <= 57) return { kind: "drizzle", label: "Llovizna ligera", icon: CloudDrizzle };
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) {
+    return { kind: "rain", label: "Está lloviendo", icon: CloudRain };
+  }
+  if ((code >= 71 && code <= 77) || (code >= 85 && code <= 86)) {
+    return { kind: "snow", label: "Está nevando", icon: CloudSnow };
+  }
+  if (code >= 95) return { kind: "storm", label: "Hay tormenta", icon: CloudLightning };
+  return { kind: "cloudy", label: "Cielo cambiante", icon: CloudSun };
+}
+
+function hourInTimeZone(date: Date, timeZone: string) {
+  try {
+    const hour = new Intl.DateTimeFormat("es-MX", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      timeZone,
+    }).formatToParts(date).find((part) => part.type === "hour")?.value;
+    const parsed = Number(hour);
+    return Number.isFinite(parsed) ? parsed : date.getHours();
+  } catch {
+    return date.getHours();
+  }
+}
+
+function dayPhaseAt(date: Date, timeZone: string) {
+  const hour = hourInTimeZone(date, timeZone);
+  if (hour >= 5 && hour < 8) return dayPhases[0];
+  if (hour >= 8 && hour < 12) return dayPhases[1];
+  if (hour >= 12 && hour < 17) return dayPhases[2];
+  if (hour >= 17 && hour < 19) return dayPhases[3];
+  if (hour >= 19 && hour < 21) return dayPhases[4];
+  return dayPhases[5];
+}
+
+function TimeAwareGreeting({
+  name,
+  timeZone,
+  reduceMotion,
+}: {
+  name: string;
+  timeZone: string;
+  reduceMotion: boolean;
+}) {
+  const [now, setNow] = useState(() => new Date());
+  const [weather, setWeather] = useState<CurrentWeather | null>(null);
+  const [previewMode, setPreviewMode] = useState<WeatherPreviewMode>("live");
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!("geolocation" in navigator)) return;
+
+    const controller = new AbortController();
+    let active = true;
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const query = new URLSearchParams({
+          // City-scale precision is enough for weather and avoids sending exact coordinates.
+          latitude: coords.latitude.toFixed(2),
+          longitude: coords.longitude.toFixed(2),
+          current: "temperature_2m,weather_code",
+          timezone: "auto",
+        });
+
+        void fetch(`https://api.open-meteo.com/v1/forecast?${query}`, {
+          signal: controller.signal,
+        })
+          .then((response) => {
+            if (!response.ok) throw new Error(`Weather request failed: ${response.status}`);
+            return response.json() as Promise<{
+              timezone?: unknown;
+              current?: { temperature_2m?: unknown; weather_code?: unknown };
+            }>;
+          })
+          .then((data) => {
+            const temperature = Number(data.current?.temperature_2m);
+            const code = Number(data.current?.weather_code);
+            if (!active || !Number.isFinite(temperature) || !Number.isFinite(code)) return;
+
+            setWeather({
+              ...weatherForCode(code),
+              temperature: Math.round(temperature),
+              timeZone: typeof data.timezone === "string" ? data.timezone : timeZone,
+            });
+          })
+          .catch(() => {
+            // Location, network and provider failures intentionally keep the time-based fallback.
+          });
+      },
+      () => {
+        // Denied or unavailable location intentionally keeps the time-based fallback.
+      },
+      { enableHighAccuracy: false, maximumAge: 30 * 60_000, timeout: 8_000 },
+    );
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [timeZone]);
+
+  const previewWeather = previewMode === "live" || previewMode === "time"
+    ? null
+    : {
+        ...weatherForCode(weatherPreviewCodes[previewMode]),
+        temperature: weather?.temperature ?? 22,
+        timeZone: weather?.timeZone || timeZone,
+      };
+  const displayedWeather = previewMode === "live" ? weather : previewWeather;
+  const phase = dayPhaseAt(now, displayedWeather?.timeZone || timeZone);
+  const GreetingIcon = displayedWeather?.icon || phase.icon;
+  const atmosphere = displayedWeather?.kind || phase.key;
+  const detail = displayedWeather
+    ? `${displayedWeather.label} · ${displayedWeather.temperature}°${previewMode === "live" ? "" : " · Prueba"}`
+    : phase.label;
+
+  function showNextWeatherPreview() {
+    setPreviewMode((current) => {
+      const currentIndex = weatherPreviewModes.indexOf(current);
+      return weatherPreviewModes[(currentIndex + 1) % weatherPreviewModes.length];
+    });
+  }
+
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        className={`time-greeting is-${phase.key} weather-${atmosphere}${reduceMotion ? " motion-reduced" : ""}`}
+        key={`${phase.key}-${atmosphere}`}
+        initial={reduceMotion ? false : { opacity: 0, y: 6, filter: "blur(4px)" }}
+        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+        exit={reduceMotion ? undefined : { opacity: 0, y: -6, filter: "blur(4px)" }}
+        transition={{ duration: reduceMotion ? 0 : 0.45, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <span className="time-greeting-glow" aria-hidden="true" />
+        <span className="time-greeting-atmosphere" aria-hidden="true">
+          <span className="weather-orb" />
+          <span className="weather-cloud weather-cloud-one" />
+          <span className="weather-cloud weather-cloud-two" />
+          <span className="weather-mist weather-mist-one" />
+          <span className="weather-mist weather-mist-two" />
+          <span className="weather-particles">
+            {Array.from({ length: 10 }, (_, index) => <i key={index} />)}
+          </span>
+        </span>
+        <button
+          type="button"
+          className="weather-test-button"
+          onClick={showNextWeatherPreview}
+          title="Cambiar al siguiente clima de prueba"
+          aria-label={`Cambiar clima de prueba. Vista actual: ${weatherPreviewLabels[previewMode]}`}
+        >
+          <Eye size={12} aria-hidden="true" />
+          <span>{previewMode === "live" ? "Probar clima" : weatherPreviewLabels[previewMode]}</span>
+        </button>
+        <motion.span
+          className="time-greeting-icon"
+          aria-hidden="true"
+          animate={reduceMotion ? undefined : { y: [0, -4, 0], rotate: [-3, 3, -3] }}
+          transition={{ duration: 5.5, ease: "easeInOut", repeat: Infinity }}
+        >
+          <GreetingIcon size={27} strokeWidth={1.8} />
+        </motion.span>
+        <span className="eyebrow">{detail}</span>
+        <h1>{phase.greeting}, {name}</h1>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 
 const progressLabels: Record<
   ProgressLevel,
@@ -1090,12 +1342,37 @@ export function CEHFApp() {
   );
   const title = pageTitles[activeSection];
   const currentWeekRange = academicWeekRange(academicConfig);
-  const headingEyebrow =
-    activeSection === "dashboard"
-      ? academicConfig.calendarStatus === "active"
-        ? `${academicConfig.weekLabel} · ${currentWeekRange}`
-        : academicConfig.weekLabel
-      : title.eyebrow;
+  const hasPublishedAcademicCalendar = academicCalendarImage?.published === true;
+  const sidebarCalendarStatus =
+    academicConfig.calendarStatus === "active"
+      ? "active"
+      : hasPublishedAcademicCalendar
+        ? "published"
+        : academicConfig.calendarStatus;
+  const sidebarCalendarLabel =
+    academicConfig.calendarStatus === "active"
+      ? academicConfig.weekLabel
+      : academicCalendarImageLoading
+        ? "Cargando calendario"
+        : hasPublishedAcademicCalendar
+          ? ""
+          : academicConfig.weekLabel;
+  const sidebarCalendarDetail =
+    academicConfig.calendarStatus === "active"
+      ? `${currentWeekRange} · ${academicConfig.termLabel}`
+      : academicCalendarImageLoading
+        ? "Consultando publicación"
+        : hasPublishedAcademicCalendar
+          ? ""
+          : academicConfig.nextWeekLabel && academicConfig.nextWeekStartDate
+            ? `Próxima: ${academicConfig.nextWeekLabel}`
+            : "Dirección debe configurarlo";
+  const sidebarCalendarAccessibleLabel = [
+    "Abrir calendario académico",
+    sidebarCalendarLabel,
+    sidebarCalendarDetail,
+  ].filter(Boolean).join(". ");
+  const headingEyebrow = title.eyebrow;
 
   return (
     <div
@@ -1151,18 +1428,14 @@ export function CEHFApp() {
         </div>
         <button
           type="button"
-          className={`week-switcher is-${academicConfig.calendarStatus}`}
+          className={`week-switcher is-${sidebarCalendarStatus}`}
           onClick={() => {
             setAcademicCalendarOpen(true);
             setSidebarOpen(false);
           }}
           aria-haspopup="dialog"
-          aria-label={`Abrir calendario académico. ${academicConfig.weekLabel}`}
-          title={`Abrir calendario académico. ${academicConfig.weekLabel}. ${
-            academicConfig.calendarStatus === "active"
-              ? `${currentWeekRange}, ${academicConfig.termLabel}`
-              : "Dirección debe configurarlo"
-          }`}
+          aria-label={sidebarCalendarAccessibleLabel}
+          title={sidebarCalendarAccessibleLabel}
         >
           <span className="week-switcher-icon" aria-hidden="true">
             <CalendarDays size={16} />
@@ -1173,14 +1446,8 @@ export function CEHFApp() {
                 ? "Semana actual"
                 : "Calendario académico"}
             </span>
-            <strong>{academicConfig.weekLabel}</strong>
-            <small>
-              {academicConfig.calendarStatus === "active"
-                ? `${currentWeekRange} · ${academicConfig.termLabel}`
-                : academicConfig.nextWeekLabel && academicConfig.nextWeekStartDate
-                  ? `Próxima: ${academicConfig.nextWeekLabel}`
-                  : "Dirección debe configurarlo"}
-            </small>
+            {sidebarCalendarLabel && <strong>{sidebarCalendarLabel}</strong>}
+            {sidebarCalendarDetail && <small>{sidebarCalendarDetail}</small>}
           </div>
           <span className="week-switcher-action" aria-hidden="true">
             <span>Ver</span>
@@ -1361,15 +1628,18 @@ export function CEHFApp() {
 
         <main className="content">
           <div className="page-heading">
-            <div>
-              <span className="eyebrow">{headingEyebrow}</span>
-              <h1>
-                {title.title}
-                {activeSection === "dashboard"
-                  ? `, ${currentProfile.name.split(" ")[0]}`
-                  : ""}
-              </h1>
-            </div>
+            {activeSection === "dashboard" ? (
+              <TimeAwareGreeting
+                name={currentProfile.name.split(" ")[0]}
+                timeZone={academicConfig.timezone || "America/Mexico_City"}
+                reduceMotion={Boolean(state.settings.reducedMotion || prefersReducedMotion)}
+              />
+            ) : (
+              <div>
+                <span className="eyebrow">{headingEyebrow}</span>
+                <h1>{title.title}</h1>
+              </div>
+            )}
             <div className="page-heading-actions">
               <span
                 className={"page-week-context is-" + academicConfig.calendarStatus}
@@ -2572,7 +2842,7 @@ function Dashboard({
       <section className={`hero-card ${role !== "student" ? "teacher-hero" : ""}`} aria-busy={dashboardLoading}>
         <div className="hero-copy">
           <span className="pill pill-light">
-            <span className="live-dot" /> {academicConfig.calendarStatus === "active" ? "Semana activa" : "Resumen más reciente"}
+            <span className="live-dot" /> Desempeño actual
           </span>
           <h2>{dashboard.heroTitle}</h2>
           <p>{dashboard.heroDescription}</p>

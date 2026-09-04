@@ -48,7 +48,7 @@ export async function generateMetadata(): Promise<Metadata> {
     (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const description =
-    "Tareas, avances, avisos y tu comunidad en un solo espacio para organizarte, aprender y seguir rompiéndola.";
+    "Tareas, avances, avisos y tu comunidad en un solo espacio para organizarte, aprender y seguir avanzando.";
 
   return {
     title: {
@@ -67,7 +67,7 @@ export async function generateMetadata(): Promise<Metadata> {
       ],
     },
     openGraph: {
-      title: "Campus CEHF · Tu vida escolar, más fácil y más cool",
+      title: "Campus CEHF · Tu vida escolar, más fácil y organizada",
       description,
       type: "website",
       locale: "es_MX",
@@ -77,13 +77,13 @@ export async function generateMetadata(): Promise<Metadata> {
           url: `${origin}/og-landing.png`,
           width: 1734,
           height: 907,
-          alt: "Campus CEHF — Tu vida escolar, más fácil y más cool",
+          alt: "Campus CEHF — Tu vida escolar, más fácil y organizada",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Campus CEHF · Tu vida escolar, más fácil y más cool",
+      title: "Campus CEHF · Tu vida escolar, más fácil y organizada",
       description,
       images: [`${origin}/og-landing.png`],
     },
