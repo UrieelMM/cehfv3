@@ -1,10 +1,11 @@
 "use client";
 
 import {
-  BookOpen, CalendarDays, Check, ClipboardCheck, Clock3, Download, Eye,
-  FileText, LoaderCircle, LockKeyhole, MapPin, Paperclip, Pencil, Pin,
-  PinOff, Plus, Save, Search, Sparkles, StickyNote, Trash2, UploadCloud,
-  UserRound, Users, X,
+  Archive, ArchiveRestore, AtSign, BellRing, BookOpen, CalendarDays, Check,
+  ClipboardCheck, Clock3, Copy, Download, Eye, FileText, Folder, History,
+  Inbox, LayoutGrid, LoaderCircle, LockKeyhole, MapPin, MessageCircle,
+  Paperclip, Pencil, Pin, PinOff, Plus, RotateCcw, Save, Search, Sparkles,
+  StickyNote, Tag, Trash2, UploadCloud, UserCheck, UserRound, Users, X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
@@ -15,13 +16,18 @@ import {
 } from "@/components/staff-workspace-rich-editor";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
-  createStaffWorkspaceItem, deleteStaffWorkspaceFile, deleteStaffWorkspaceItem,
-  setStaffWorkspaceItemPinned, updateStaffWorkspaceItem,
-  uploadStaffWorkspaceFile, watchStaffWorkspace,
+  createStaffWorkspaceComment, createStaffWorkspaceItem,
+  deleteStaffWorkspaceFile, deleteStaffWorkspaceItem,
+  markStaffWorkspaceItemRead, setStaffWorkspaceItemArchived,
+  setStaffWorkspaceItemPinned, transferStaffWorkspaceItem,
+  updateStaffWorkspaceItem, uploadStaffWorkspaceFile,
+  watchStaffWorkspace, watchStaffWorkspaceActivity,
+  watchStaffWorkspaceComments, watchStaffWorkspaceReads,
 } from "@/lib/staff-workspace-firebase";
 import type {
-  ManagedAccount, StaffWorkspaceAttachment, StaffWorkspaceItem,
-  StaffWorkspaceItemInput, StaffWorkspaceItemType, UserProfile,
+  ManagedAccount, StaffWorkspaceActivity, StaffWorkspaceAttachment,
+  StaffWorkspaceComment, StaffWorkspaceItem, StaffWorkspaceItemInput,
+  StaffWorkspaceItemType, StaffWorkspaceReadReceipt, UserProfile,
 } from "@/lib/types";
 
 type Props = {
@@ -31,6 +37,33 @@ type Props = {
 };
 type WorkspaceFilter = "all" | StaffWorkspaceItemType;
 type WorkspaceScope = "all" | "private" | "shared";
+type WorkspaceView = "blocks" | "inbox" | "templates" | "archive";
+type WorkspaceDateFilter = "all" | "today" | "week" | "month" | "without-date";
+type WorkspaceSort = "updated" | "oldest" | "title" | "event";
+type DraftSaveState = "idle" | "saving" | "saved";
+
+type WorkspaceSavedView = {
+  id: string;
+  name: string;
+  search: string;
+  filter: WorkspaceFilter;
+  scope: WorkspaceScope;
+  subject: string;
+  group: string;
+  owner: string;
+  folder: string;
+  tag: string;
+  date: WorkspaceDateFilter;
+  sort: WorkspaceSort;
+};
+
+type StoredWorkspaceDraft = {
+  itemId: string;
+  selectedItemId: string | null;
+  baseline: string;
+  draft: StaffWorkspaceItemInput;
+  savedAt: string;
+};
 
 const typeDetails: Record<StaffWorkspaceItemType, {
   label: string;
@@ -129,9 +162,67 @@ function templateContent(type: StaffWorkspaceItemType) {
 function emptyDraft(type: StaffWorkspaceItemType = "note"): StaffWorkspaceItemInput {
   return {
     type, title: "", content: templateContent(type), visibility: "private",
-    sharedWithIds: [], mentionedUserIds: [], eventAt: "", resourceUrl: "", subject: "", group: "",
-    location: "", attachments: [],
+    sharedWithIds: [], mentionedUserIds: [], assigneeIds: [], archived: false,
+    isTemplate: false, folder: "", tags: [], eventAt: "", resourceUrl: "",
+    subject: "", group: "", location: "", attachments: [],
   };
+}
+
+function draftFromItem(item: StaffWorkspaceItem): StaffWorkspaceItemInput {
+  return {
+    type: item.type,
+    title: item.title,
+    content: item.content,
+    visibility: item.visibility,
+    sharedWithIds: item.sharedWithIds,
+    mentionedUserIds: item.mentionedUserIds,
+    assigneeIds: item.assigneeIds,
+    archived: item.archived,
+    isTemplate: item.isTemplate,
+    folder: item.folder ?? "",
+    tags: item.tags,
+    eventAt: item.eventAt ?? "",
+    resourceUrl: item.resourceUrl ?? "",
+    subject: item.subject ?? "",
+    group: item.group ?? "",
+    location: item.location ?? "",
+    attachments: item.attachments,
+  };
+}
+
+function workspaceDraftKey(userId: string) {
+  return `cehf-staff-workspace-draft:${userId}`;
+}
+
+function workspaceViewsKey(userId: string) {
+  return `cehf-staff-workspace-views:${userId}`;
+}
+
+function dateMatchesFilter(value: string | undefined, filter: WorkspaceDateFilter) {
+  if (filter === "all") return true;
+  if (!value) return filter === "without-date";
+  const itemDate = new Date(value);
+  if (Number.isNaN(itemDate.getTime())) return filter === "without-date";
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(startToday);
+  if (filter === "today") end.setDate(end.getDate() + 1);
+  if (filter === "week") end.setDate(end.getDate() + 7);
+  if (filter === "month") end.setMonth(end.getMonth() + 1);
+  return itemDate >= startToday && itemDate < end;
+}
+
+function activityLabel(activity: StaffWorkspaceActivity) {
+  const labels: Record<StaffWorkspaceActivity["action"], string> = {
+    created: "creó el bloque",
+    updated: "actualizó el contenido",
+    commented: "agregó un comentario",
+    archived: "archivó el bloque",
+    restored: "restauró el bloque",
+    transferred: "transfirió la propiedad",
+    template_created: "guardó una plantilla",
+  };
+  return labels[activity.action];
 }
 
 function workspaceId() {
@@ -238,18 +329,38 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   const reduceMotion = useReducedMotion();
   const [items, setItems] = useState<StaffWorkspaceItem[]>(() => firebaseReady ? [] : demoWorkspaceItems(profile));
   const [loading, setLoading] = useState(firebaseReady);
+  const [view, setView] = useState<WorkspaceView>("blocks");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<WorkspaceFilter>("all");
   const [scope, setScope] = useState<WorkspaceScope>("all");
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [folderFilter, setFolderFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState<WorkspaceDateFilter>("all");
+  const [sort, setSort] = useState<WorkspaceSort>("updated");
+  const [savedViews, setSavedViews] = useState<WorkspaceSavedView[]>([]);
+  const [activeSavedViewId, setActiveSavedViewId] = useState("");
+  const [receipts, setReceipts] = useState<StaffWorkspaceReadReceipt[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<StaffWorkspaceItem | null>(null);
   const [draft, setDraft] = useState<StaffWorkspaceItemInput>(() => emptyDraft());
   const [draftId, setDraftId] = useState("");
+  const [draftSaveState, setDraftSaveState] = useState<DraftSaveState>("idle");
+  const [recoverableDraft, setRecoverableDraft] = useState<StoredWorkspaceDraft | null>(null);
   const [initialAttachmentPaths, setInitialAttachmentPaths] = useState<string[]>([]);
   const [removedAttachments, setRemovedAttachments] = useState<StaffWorkspaceAttachment[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploadingFiles, setUploadingFiles] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
+  const [comments, setComments] = useState<StaffWorkspaceComment[]>([]);
+  const [activity, setActivity] = useState<StaffWorkspaceActivity[]>([]);
+  const [itemReceipts, setItemReceipts] = useState<StaffWorkspaceReadReceipt[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [commentSending, setCommentSending] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState("");
+  const [draftBaseline, setDraftBaseline] = useState(JSON.stringify(emptyDraft()));
 
   const teamMembers = useMemo<WorkspaceMentionMember[]>(() => {
     const members = new Map<string, WorkspaceMentionMember>();
@@ -260,6 +371,9 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     return [...members.values()].sort((first, second) => first.name.localeCompare(second.name, "es-MX"));
   }, [accounts, profile.initials, profile.name, profile.uid]);
   const shareCandidates = teamMembers.filter((member) => member.id !== profile.uid);
+  const transferCandidates = accounts.filter((account) =>
+    account.role === "teacher" && account.active && account.uid !== profile.uid,
+  );
 
   useEffect(() => {
     if (!firebaseReady) return;
@@ -272,6 +386,232 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     });
   }, [firebaseReady, profile]);
 
+  useEffect(() => {
+    if (!firebaseReady) return;
+    return watchStaffWorkspaceReads(profile, setReceipts, undefined, (error) =>
+      toast.error(friendlyFirebaseError(error)),
+    );
+  }, [firebaseReady, profile]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      try {
+        const storedDraft = window.localStorage.getItem(workspaceDraftKey(profile.uid));
+        if (storedDraft) setRecoverableDraft(JSON.parse(storedDraft) as StoredWorkspaceDraft);
+        const storedViews = window.localStorage.getItem(workspaceViewsKey(profile.uid));
+        if (storedViews) setSavedViews(JSON.parse(storedViews) as WorkspaceSavedView[]);
+      } catch {
+        window.localStorage.removeItem(workspaceDraftKey(profile.uid));
+        window.localStorage.removeItem(workspaceViewsKey(profile.uid));
+      }
+    });
+    return () => { active = false; };
+  }, [profile.uid]);
+
+  const draftDirty = editorOpen && JSON.stringify(draft) !== draftBaseline;
+
+  useEffect(() => {
+    if (!editorOpen || !draftDirty) return;
+    const pendingTimer = window.setTimeout(() => setDraftSaveState("saving"), 0);
+    const timer = window.setTimeout(() => {
+      const stored: StoredWorkspaceDraft = {
+        itemId: draftId,
+        selectedItemId: selectedItem?.id ?? null,
+        baseline: draftBaseline,
+        draft,
+        savedAt: new Date().toISOString(),
+      };
+      window.localStorage.setItem(workspaceDraftKey(profile.uid), JSON.stringify(stored));
+      setRecoverableDraft(stored);
+      setDraftSaveState("saved");
+    }, 650);
+    return () => {
+      window.clearTimeout(pendingTimer);
+      window.clearTimeout(timer);
+    };
+  }, [draft, draftBaseline, draftDirty, draftId, editorOpen, profile.uid, selectedItem?.id]);
+
+  useEffect(() => {
+    if (!draftDirty) return;
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", protectDraft);
+    return () => window.removeEventListener("beforeunload", protectDraft);
+  }, [draftDirty]);
+
+  useEffect(() => {
+    if (!selectedItem || !firebaseReady) return;
+    const stopComments = watchStaffWorkspaceComments(
+      profile,
+      selectedItem.id,
+      setComments,
+      (error) => toast.error(friendlyFirebaseError(error)),
+    );
+    const stopActivity = watchStaffWorkspaceActivity(
+      profile,
+      selectedItem.id,
+      setActivity,
+      (error) => toast.error(friendlyFirebaseError(error)),
+    );
+    const stopReceipts = watchStaffWorkspaceReads(
+      profile,
+      setItemReceipts,
+      selectedItem.id,
+      (error) => toast.error(friendlyFirebaseError(error)),
+    );
+    return () => {
+      stopComments();
+      stopActivity();
+      stopReceipts();
+    };
+  }, [firebaseReady, profile, selectedItem]);
+
+  const readAtByItem = useMemo(
+    () => new Map(receipts.map((receipt) => [receipt.itemId, receipt.readAt])),
+    [receipts],
+  );
+  const isUnread = (item: StaffWorkspaceItem) => item.ownerId !== profile.uid
+    && (!readAtByItem.get(item.id) || item.updatedAt > String(readAtByItem.get(item.id)));
+  const unreadCount = items.filter((item) =>
+    !item.archived && !item.isTemplate && isUnread(item),
+  ).length;
+
+  const filterOptions = useMemo(() => ({
+    subjects: [...new Set(items.map((item) => item.subject).filter(Boolean) as string[])].sort(),
+    groups: [...new Set(items.map((item) => item.group).filter(Boolean) as string[])].sort(),
+    owners: [...new Map(items.map((item) => [item.ownerId, item.ownerName])).entries()],
+    folders: [...new Set(items.map((item) => item.folder).filter(Boolean) as string[])].sort(),
+    tags: [...new Set(items.flatMap((item) => item.tags))].sort(),
+  }), [items]);
+
+  const filteredItems = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("es-MX");
+    const base = items.filter((item) => {
+      if (view === "templates") return item.isTemplate && !item.archived;
+      if (view === "archive") return item.archived;
+      if (item.archived || item.isTemplate) return false;
+      if (view === "inbox" && item.ownerId === profile.uid) return false;
+      if (view === "blocks" && item.ownerId !== profile.uid) return false;
+      return true;
+    });
+    return base.filter((item) => {
+      if (filter !== "all" && item.type !== filter) return false;
+      if (scope === "private" && item.visibility !== "private") return false;
+      if (scope === "shared" && item.visibility === "private") return false;
+      if (subjectFilter && item.subject !== subjectFilter) return false;
+      if (groupFilter && item.group !== groupFilter) return false;
+      if (ownerFilter && item.ownerId !== ownerFilter) return false;
+      if (folderFilter && item.folder !== folderFilter) return false;
+      if (tagFilter && !item.tags.includes(tagFilter)) return false;
+      if (!dateMatchesFilter(item.eventAt, dateFilter)) return false;
+      if (!term) return true;
+      return `${item.title} ${workspacePlainText(item.content)} ${item.ownerName} ${item.subject ?? ""} ${item.group ?? ""} ${item.folder ?? ""} ${item.tags.join(" ")}`
+        .toLocaleLowerCase("es-MX").includes(term);
+    }).sort((first, second) => {
+      if (first.pinned !== second.pinned) return first.pinned ? -1 : 1;
+      if (sort === "oldest") return first.updatedAt.localeCompare(second.updatedAt);
+      if (sort === "title") return first.title.localeCompare(second.title, "es-MX");
+      if (sort === "event") return String(first.eventAt || "9999").localeCompare(String(second.eventAt || "9999"));
+      return second.updatedAt.localeCompare(first.updatedAt);
+    });
+  }, [dateFilter, filter, folderFilter, groupFilter, items, ownerFilter, profile.uid, scope, search, sort, subjectFilter, tagFilter, view]);
+
+  const activeItems = items.filter((item) => !item.archived && !item.isTemplate);
+  const privateCount = activeItems.filter((item) => item.ownerId === profile.uid && item.visibility === "private").length;
+  const sharedCount = activeItems.filter((item) => item.visibility !== "private").length;
+  const todayKey = mexicoDateKey();
+  const upcomingItems = activeItems.filter((item) =>
+    item.type === "schedule" && item.eventAt && item.eventAt.slice(0, 10) >= todayKey,
+  ).sort((first, second) => String(first.eventAt).localeCompare(String(second.eventAt))).slice(0, 3);
+
+  function prepareEditor(nextDraft: StaffWorkspaceItemInput, itemId: string, item: StaffWorkspaceItem | null, focused = false, baseline?: string) {
+    setSelectedItem(item);
+    setDraft(nextDraft);
+    setDraftId(itemId);
+    setDraftBaseline(baseline ?? JSON.stringify(nextDraft));
+    setInitialAttachmentPaths(nextDraft.attachments.map((attachment) => attachment.storagePath));
+    setRemovedAttachments([]);
+    setFocusMode(focused);
+    setDraftSaveState("idle");
+    setTransferTargetId("");
+    setCommentText("");
+    setComments([]);
+    setItemReceipts([]);
+    setActivity(item && !firebaseReady ? [{
+      id: `demo-activity-${item.id}`,
+      institutionId: profile.institutionId,
+      itemId: item.id,
+      actorId: item.ownerId,
+      actorName: item.ownerName,
+      action: "created",
+      detail: "Creó el bloque",
+      createdAt: item.createdAt,
+    }] : []);
+    setEditorOpen(true);
+  }
+
+  function openNewItem(type: StaffWorkspaceItemType = "note") {
+    if (recoverableDraft && !window.confirm("Hay un borrador guardado. ¿Quieres empezar uno nuevo y reemplazarlo?")) return;
+    const nextDraft = emptyDraft(type);
+    prepareEditor(nextDraft, workspaceId(), null);
+  }
+
+  function openItem(item: StaffWorkspaceItem, focused = false) {
+    const nextDraft = draftFromItem(item);
+    prepareEditor(nextDraft, item.id, item, focused);
+    if (!isUnread(item)) return;
+    const optimisticReceipt: StaffWorkspaceReadReceipt = {
+      id: `${item.id}_${profile.uid}`,
+      institutionId: profile.institutionId,
+      itemId: item.id,
+      readerId: profile.uid,
+      readerName: profile.name,
+      readAt: new Date().toISOString(),
+    };
+    setReceipts((current) => [
+      ...current.filter((receipt) => receipt.itemId !== item.id),
+      optimisticReceipt,
+    ]);
+    setItemReceipts((current) => [
+      ...current.filter((receipt) => receipt.readerId !== profile.uid),
+      optimisticReceipt,
+    ]);
+    if (firebaseReady) void markStaffWorkspaceItemRead(profile, item.id).catch((error) =>
+      toast.error(friendlyFirebaseError(error)),
+    );
+  }
+
+  function restoreDraft() {
+    if (!recoverableDraft) return;
+    const item = recoverableDraft.selectedItemId
+      ? items.find((candidate) => candidate.id === recoverableDraft.selectedItemId) ?? null
+      : null;
+    prepareEditor(
+      recoverableDraft.draft,
+      recoverableDraft.itemId,
+      item,
+      false,
+      recoverableDraft.baseline,
+    );
+  }
+
+  function closeEditor() {
+    if (saving) return;
+    if (draftDirty && !window.confirm("Hay cambios sin publicar. El borrador seguirá guardado en este dispositivo. ¿Cerrar el editor?")) return;
+    setEditorOpen(false);
+  }
+
+  function discardDraft() {
+    if (!window.confirm("¿Descartar definitivamente este borrador?")) return;
+    cleanUnsavedUploads();
+    window.localStorage.removeItem(workspaceDraftKey(profile.uid));
+    setRecoverableDraft(null);
+    setEditorOpen(false);
+  }
+
   function cleanUnsavedUploads() {
     if (!firebaseReady) {
       draft.attachments.forEach((attachment) => {
@@ -282,12 +622,6 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     const initial = new Set(initialAttachmentPaths);
     draft.attachments.filter((attachment) => attachment.storagePath && !initial.has(attachment.storagePath))
       .forEach((attachment) => void deleteStaffWorkspaceFile(attachment.storagePath));
-  }
-
-  function closeEditor(cleanUploads = true) {
-    if (saving) return;
-    if (cleanUploads) cleanUnsavedUploads();
-    setEditorOpen(false);
   }
 
   useEffect(() => {
@@ -306,51 +640,6 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
       window.removeEventListener("keydown", closeOnEscape);
     };
   });
-
-  const filteredItems = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("es-MX");
-    return items.filter((item) => {
-      if (filter !== "all" && item.type !== filter) return false;
-      if (scope === "private" && item.visibility !== "private") return false;
-      if (scope === "shared" && item.visibility === "private") return false;
-      if (!term) return true;
-      return `${item.title} ${workspacePlainText(item.content)} ${item.ownerName} ${item.subject ?? ""} ${item.group ?? ""}`
-        .toLocaleLowerCase("es-MX").includes(term);
-    });
-  }, [filter, items, scope, search]);
-
-  const privateCount = items.filter((item) => item.ownerId === profile.uid && item.visibility === "private").length;
-  const sharedCount = items.filter((item) => item.visibility !== "private").length;
-  const todayKey = mexicoDateKey();
-  const upcomingItems = items.filter((item) => item.type === "schedule" && item.eventAt)
-    .sort((first, second) => String(first.eventAt).localeCompare(String(second.eventAt))).slice(0, 3);
-
-  function openNewItem(type: StaffWorkspaceItemType = "note") {
-    setSelectedItem(null);
-    setDraft(emptyDraft(type));
-    setDraftId(workspaceId());
-    setInitialAttachmentPaths([]);
-    setRemovedAttachments([]);
-    setFocusMode(false);
-    setEditorOpen(true);
-  }
-
-  function openItem(item: StaffWorkspaceItem, focused = false) {
-    setSelectedItem(item);
-    setDraft({
-      type: item.type, title: item.title, content: item.content,
-      visibility: item.visibility, sharedWithIds: item.sharedWithIds,
-      mentionedUserIds: item.mentionedUserIds,
-      eventAt: item.eventAt ?? "", resourceUrl: item.resourceUrl ?? "",
-      subject: item.subject ?? "", group: item.group ?? "", location: item.location ?? "",
-      attachments: item.attachments,
-    });
-    setDraftId(item.id);
-    setInitialAttachmentPaths(item.attachments.map((attachment) => attachment.storagePath));
-    setRemovedAttachments([]);
-    setFocusMode(focused);
-    setEditorOpen(true);
-  }
 
   async function uploadEditorFile(file: File) {
     setUploadingFiles((count) => count + 1);
@@ -419,6 +708,87 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     }));
   }
 
+  function toggleAssignee(memberId: string) {
+    if (memberId === profile.uid) return;
+    setDraft((current) => {
+      const selected = current.assigneeIds.includes(memberId);
+      return {
+        ...current,
+        visibility: selected ? current.visibility : current.visibility === "private" ? "selected" : current.visibility,
+        sharedWithIds: selected || current.visibility === "staff" || current.sharedWithIds.includes(memberId)
+          ? current.sharedWithIds
+          : [...current.sharedWithIds, memberId],
+        assigneeIds: selected
+          ? current.assigneeIds.filter((id) => id !== memberId)
+          : [...current.assigneeIds, memberId],
+      };
+    });
+  }
+
+  function persistSavedViews(next: WorkspaceSavedView[]) {
+    setSavedViews(next);
+    window.localStorage.setItem(workspaceViewsKey(profile.uid), JSON.stringify(next));
+  }
+
+  function saveCurrentView() {
+    const name = window.prompt("Nombre para esta vista:", "Mi vista");
+    if (!name?.trim()) return;
+    const savedView: WorkspaceSavedView = {
+      id: workspaceId(),
+      name: name.trim().slice(0, 50),
+      search,
+      filter,
+      scope,
+      subject: subjectFilter,
+      group: groupFilter,
+      owner: ownerFilter,
+      folder: folderFilter,
+      tag: tagFilter,
+      date: dateFilter,
+      sort,
+    };
+    persistSavedViews([...savedViews, savedView]);
+    setActiveSavedViewId(savedView.id);
+    toast.success("Vista guardada");
+  }
+
+  function applySavedView(id: string) {
+    setActiveSavedViewId(id);
+    const savedView = savedViews.find((candidate) => candidate.id === id);
+    if (!savedView) return;
+    setSearch(savedView.search);
+    setFilter(savedView.filter);
+    setScope(savedView.scope);
+    setSubjectFilter(savedView.subject);
+    setGroupFilter(savedView.group);
+    setOwnerFilter(savedView.owner);
+    setFolderFilter(savedView.folder);
+    setTagFilter(savedView.tag);
+    setDateFilter(savedView.date);
+    setSort(savedView.sort);
+  }
+
+  function deleteActiveView() {
+    if (!activeSavedViewId) return;
+    persistSavedViews(savedViews.filter((savedView) => savedView.id !== activeSavedViewId));
+    setActiveSavedViewId("");
+    toast.success("Vista eliminada");
+  }
+
+  function resetFilters() {
+    setSearch("");
+    setFilter("all");
+    setScope("all");
+    setSubjectFilter("");
+    setGroupFilter("");
+    setOwnerFilter("");
+    setFolderFilter("");
+    setTagFilter("");
+    setDateFilter("all");
+    setSort("updated");
+    setActiveSavedViewId("");
+  }
+
   async function saveItem() {
     if (!draft.title.trim()) return void toast.error("Agrega un título para guardar el bloque.");
     if (draft.visibility === "selected" && draft.sharedWithIds.length === 0) {
@@ -444,6 +814,9 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
         }, ...current]);
       }
       toast.success(selectedItem ? "Bloque actualizado" : "Bloque creado");
+      window.localStorage.removeItem(workspaceDraftKey(profile.uid));
+      setRecoverableDraft(null);
+      setDraftBaseline(JSON.stringify(draft));
       setEditorOpen(false);
     } catch (error) {
       toast.error(friendlyFirebaseError(error));
@@ -459,6 +832,134 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
         ? { ...candidate, pinned: !candidate.pinned } : candidate));
       toast.success(item.pinned ? "Quitado de favoritos" : "Fijado en tu espacio");
     } catch (error) { toast.error(friendlyFirebaseError(error)); }
+  }
+
+  async function toggleArchived(item: StaffWorkspaceItem) {
+    try {
+      if (firebaseReady) await setStaffWorkspaceItemArchived(profile, item.id, !item.archived);
+      else setItems((current) => current.map((candidate) => candidate.id === item.id
+        ? { ...candidate, archived: !candidate.archived, updatedAt: new Date().toISOString() }
+        : candidate));
+      setEditorOpen(false);
+      toast.success(item.archived ? "Bloque restaurado" : "Bloque archivado");
+    } catch (error) { toast.error(friendlyFirebaseError(error)); }
+  }
+
+  function duplicateItem(item: StaffWorkspaceItem) {
+    const nextDraft = {
+      ...draftFromItem(item),
+      title: `${item.title} · copia`,
+      archived: false,
+      isTemplate: false,
+      eventAt: item.type === "schedule" ? "" : item.eventAt ?? "",
+      attachments: [],
+    };
+    prepareEditor(nextDraft, workspaceId(), null);
+  }
+
+  function createFromTemplate(item: StaffWorkspaceItem) {
+    const nextDraft = {
+      ...draftFromItem(item),
+      archived: false,
+      isTemplate: false,
+      visibility: "private" as const,
+      sharedWithIds: [],
+      mentionedUserIds: [],
+      assigneeIds: [],
+      eventAt: "",
+      attachments: [],
+    };
+    prepareEditor(nextDraft, workspaceId(), null);
+  }
+
+  async function saveAsTemplate(item: StaffWorkspaceItem) {
+    const templateDraft: StaffWorkspaceItemInput = {
+      ...draftFromItem(item),
+      title: item.title.replace(/ · copia$/, ""),
+      visibility: "private",
+      sharedWithIds: [],
+      mentionedUserIds: [],
+      assigneeIds: [],
+      archived: false,
+      isTemplate: true,
+      eventAt: "",
+      attachments: [],
+    };
+    try {
+      if (firebaseReady) await createStaffWorkspaceItem(profile, templateDraft);
+      else {
+        const now = new Date().toISOString();
+        setItems((current) => [{
+          ...templateDraft,
+          id: workspaceId(),
+          institutionId: profile.institutionId,
+          ownerId: profile.uid,
+          ownerName: profile.name,
+          pinned: false,
+          createdAt: now,
+          updatedAt: now,
+        }, ...current]);
+      }
+      toast.success("Plantilla guardada", { description: "Ya puedes reutilizarla desde Plantillas." });
+    } catch (error) { toast.error(friendlyFirebaseError(error)); }
+  }
+
+  async function addComment() {
+    const content = commentText.trim();
+    if (!selectedItem || !content) return;
+    setCommentSending(true);
+    try {
+      if (firebaseReady) await createStaffWorkspaceComment(profile, selectedItem.id, content);
+      else {
+        const now = new Date().toISOString();
+        setComments((current) => [...current, {
+          id: workspaceId(),
+          institutionId: profile.institutionId,
+          itemId: selectedItem.id,
+          authorId: profile.uid,
+          authorName: profile.name,
+          authorInitials: profile.initials,
+          content,
+          createdAt: now,
+        }]);
+        setActivity((current) => [{
+          id: workspaceId(),
+          institutionId: profile.institutionId,
+          itemId: selectedItem.id,
+          actorId: profile.uid,
+          actorName: profile.name,
+          action: "commented",
+          detail: "Agregó un comentario",
+          createdAt: now,
+        }, ...current]);
+      }
+      setCommentText("");
+      toast.success("Comentario publicado");
+    } catch (error) { toast.error(friendlyFirebaseError(error)); }
+    finally { setCommentSending(false); }
+  }
+
+  async function transferOwnership() {
+    if (!selectedItem || !transferTargetId) return;
+    const nextOwner = transferCandidates.find((candidate) => candidate.uid === transferTargetId);
+    if (!nextOwner || !window.confirm(`¿Transferir “${selectedItem.title}” a ${nextOwner.name}?`)) return;
+    setSaving(true);
+    try {
+      if (firebaseReady) await transferStaffWorkspaceItem(profile, selectedItem, nextOwner);
+      else setItems((current) => current.map((candidate) => candidate.id === selectedItem.id
+        ? {
+          ...candidate,
+          ownerId: nextOwner.uid,
+          ownerName: nextOwner.name,
+          visibility: candidate.visibility === "private" ? "selected" : candidate.visibility,
+          sharedWithIds: [...new Set([...candidate.sharedWithIds, profile.uid])],
+          updatedAt: new Date().toISOString(),
+        }
+        : candidate));
+      setEditorOpen(false);
+      toast.success("Propiedad transferida", { description: `${nextOwner.name} ahora puede editar este bloque.` });
+    } catch (error) { toast.error(friendlyFirebaseError(error)); }
+    finally { setSaving(false); }
   }
 
   async function removeItem(item: StaffWorkspaceItem) {
@@ -486,15 +987,29 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
           <p>Organiza planeaciones, recursos, horarios y notas con la flexibilidad de un documento por bloques.</p>
         </div>
         <div className="staff-workspace-hero-actions">
-          <button className="staff-workspace-focus-button" disabled={!items.length} onClick={() => openItem(items.find((item) => item.pinned) ?? items[0], true)} type="button"><Eye size={16} /> Modo enfoque</button>
+          <button className="staff-workspace-focus-button" disabled={!activeItems.length} onClick={() => openItem(activeItems.find((item) => item.pinned) ?? activeItems[0], true)} type="button"><Eye size={16} /> Modo enfoque</button>
           <button className="primary-button staff-workspace-create-button" onClick={() => openNewItem()} type="button"><Plus size={17} /> Nuevo bloque</button>
         </div>
         <div className="staff-workspace-stats">
-          <span><strong>{items.length}</strong> bloques</span>
+          <span><strong>{activeItems.length}</strong> bloques</span>
           <span><LockKeyhole size={14} /><strong>{privateCount}</strong> privados</span>
           <span><Users size={14} /><strong>{sharedCount}</strong> compartidos</span>
+          <span className={unreadCount ? "has-unread" : ""}><BellRing size={14} /><strong>{unreadCount}</strong> sin leer</span>
         </div>
       </motion.section>
+
+      {recoverableDraft && !editorOpen && (
+        <section className="staff-workspace-draft-banner" role="status">
+          <span><RotateCcw size={18} /></span>
+          <div><strong>Tienes un borrador guardado</strong><small>Se conservó automáticamente {relativeDate(recoverableDraft.savedAt).toLowerCase()}.</small></div>
+          <button onClick={restoreDraft} type="button">Continuar borrador</button>
+          <button aria-label="Descartar borrador guardado" onClick={() => {
+            if (!window.confirm("¿Descartar definitivamente el borrador guardado?")) return;
+            window.localStorage.removeItem(workspaceDraftKey(profile.uid));
+            setRecoverableDraft(null);
+          }} type="button"><X size={16} /></button>
+        </section>
+      )}
 
       <section className="staff-workspace-quick-create" aria-label="Creación rápida">
         <div><span className="eyebrow">CAPTURA RÁPIDA</span><strong>¿Qué quieres guardar?</strong></div>
@@ -505,6 +1020,19 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
           </button>
         ))}
       </section>
+
+      <nav className="staff-workspace-view-tabs" aria-label="Vistas de Mi espacio">
+        {([
+          { id: "blocks", label: "Mis bloques", icon: LayoutGrid, count: activeItems.length },
+          { id: "inbox", label: "Compartido conmigo", icon: Inbox, count: unreadCount },
+          { id: "templates", label: "Plantillas", icon: Copy, count: items.filter((item) => item.isTemplate && !item.archived).length },
+          { id: "archive", label: "Archivo", icon: Archive, count: items.filter((item) => item.archived).length },
+        ] as const).map((option) => (
+          <button aria-current={view === option.id ? "page" : undefined} className={view === option.id ? "active" : ""} key={option.id} onClick={() => { setView(option.id); resetFilters(); }} type="button">
+            <option.icon size={16} /><span>{option.label}</span>{option.count > 0 && <em>{option.count}</em>}
+          </button>
+        ))}
+      </nav>
 
       <div className="staff-workspace-layout">
         <main className="staff-workspace-main">
@@ -522,6 +1050,23 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
             ))}
           </div>
 
+          <div className="staff-workspace-advanced-filters">
+            <label><span>Materia</span><select aria-label="Filtrar por materia" onChange={(event) => setSubjectFilter(event.target.value)} value={subjectFilter}><option value="">Todas</option>{filterOptions.subjects.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>Grupo</span><select aria-label="Filtrar por grupo" onChange={(event) => setGroupFilter(event.target.value)} value={groupFilter}><option value="">Todos</option>{filterOptions.groups.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>Autor</span><select aria-label="Filtrar por autor" onChange={(event) => setOwnerFilter(event.target.value)} value={ownerFilter}><option value="">Todos</option>{filterOptions.owners.map(([id, name]) => <option key={id} value={id}>{id === profile.uid ? "Yo" : name}</option>)}</select></label>
+            <label><span>Carpeta</span><select aria-label="Filtrar por carpeta" onChange={(event) => setFolderFilter(event.target.value)} value={folderFilter}><option value="">Todas</option>{filterOptions.folders.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>Etiqueta</span><select aria-label="Filtrar por etiqueta" onChange={(event) => setTagFilter(event.target.value)} value={tagFilter}><option value="">Todas</option>{filterOptions.tags.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <label><span>Fecha</span><select aria-label="Filtrar por fecha" onChange={(event) => setDateFilter(event.target.value as WorkspaceDateFilter)} value={dateFilter}><option value="all">Cualquier fecha</option><option value="today">Hoy</option><option value="week">Próximos 7 días</option><option value="month">Próximo mes</option><option value="without-date">Sin fecha</option></select></label>
+            <label><span>Orden</span><select aria-label="Ordenar bloques" onChange={(event) => setSort(event.target.value as WorkspaceSort)} value={sort}><option value="updated">Actualizados</option><option value="oldest">Más antiguos</option><option value="title">Título</option><option value="event">Fecha programada</option></select></label>
+          </div>
+
+          <div className="staff-workspace-saved-views">
+            <label><History size={15} /><select aria-label="Abrir vista guardada" onChange={(event) => applySavedView(event.target.value)} value={activeSavedViewId}><option value="">Vistas guardadas</option>{savedViews.map((savedView) => <option key={savedView.id} value={savedView.id}>{savedView.name}</option>)}</select></label>
+            <button onClick={saveCurrentView} type="button"><Save size={14} /> Guardar vista</button>
+            {activeSavedViewId && <button aria-label="Eliminar vista guardada" onClick={deleteActiveView} type="button"><Trash2 size={14} /></button>}
+            <button onClick={resetFilters} type="button"><RotateCcw size={14} /> Limpiar filtros</button>
+          </div>
+
           {loading ? <div className="staff-workspace-loading"><LoaderCircle className="spin" size={20} /> Preparando tu espacio…</div> : filteredItems.length ? (
             <motion.div className="staff-workspace-board" layout><AnimatePresence mode="popLayout">
               {filteredItems.map((item, index) => {
@@ -530,22 +1075,24 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
                 const owned = item.ownerId === profile.uid;
                 const firstAttachment = item.attachments[0];
                 return (
-                  <motion.article animate={{ opacity: 1, scale: 1, y: 0 }} className={`staff-workspace-card ${item.type}`} exit={reduceMotion ? undefined : { opacity: 0, scale: 0.97 }} initial={reduceMotion ? false : { opacity: 0, y: 10 }} key={item.id} layout transition={{ delay: reduceMotion ? 0 : Math.min(index * 0.025, 0.15) }}>
+                  <motion.article animate={{ opacity: 1, scale: 1, y: 0 }} className={`staff-workspace-card ${item.type} ${isUnread(item) ? "is-unread" : ""}`} exit={reduceMotion ? undefined : { opacity: 0, scale: 0.97 }} initial={reduceMotion ? false : { opacity: 0, y: 10 }} key={item.id} layout transition={{ delay: reduceMotion ? 0 : Math.min(index * 0.025, 0.15) }}>
                     <div className="staff-workspace-card-topline">
-                      <span className={`staff-workspace-type-icon ${item.type}`}><TypeIcon size={16} /></span><span className="staff-workspace-card-type">{details.label}</span>{item.pinned && <Pin aria-label="Fijado" size={14} />}
+                      <span className={`staff-workspace-type-icon ${item.type}`}><TypeIcon size={16} /></span><span className="staff-workspace-card-type">{item.isTemplate ? "Plantilla" : details.label}</span>{item.pinned && <Pin aria-label="Fijado" size={14} />}{item.mentionedUserIds.includes(profile.uid) && <span className="staff-workspace-mention-badge"><AtSign size={11} /> Mención</span>}{isUnread(item) && <span className="staff-workspace-unread-dot">Nuevo</span>}
                       <span className={`staff-workspace-visibility ${item.visibility}`}>
                         {item.visibility === "private" ? <LockKeyhole size={12} /> : item.visibility === "selected" ? <UserRound size={12} /> : <Users size={12} />}{visibilityLabel(item)}
                       </span>
                     </div>
                     <button className="staff-workspace-card-open" onClick={() => openItem(item)} type="button"><h3>{item.title}</h3><p>{workspacePlainText(item.content) || "Sin contenido adicional."}</p></button>
+                    {(item.folder || item.tags.length > 0) && <div className="staff-workspace-card-taxonomy">{item.folder && <span><Folder size={12} /> {item.folder}</span>}{item.tags.slice(0, 3).map((tag) => <span key={tag}><Tag size={11} /> {tag}</span>)}</div>}
+                    {item.assigneeIds.length > 0 && <div className="staff-workspace-card-assignees"><UserCheck size={13} /> {item.assigneeIds.slice(0, 2).map((id) => teamMembers.find((member) => member.id === id)?.name ?? "Equipo").join(", ")}{item.assigneeIds.length > 2 ? ` +${item.assigneeIds.length - 2}` : ""}</div>}
                     {item.type === "schedule" && item.eventAt && <span className="staff-workspace-card-date"><Clock3 size={14} /> {shortDate(item.eventAt)}</span>}
                     {item.type === "resource" && firstAttachment && <a className="staff-workspace-card-link" href={firstAttachment.url} rel="noreferrer" target="_blank"><Download size={13} /> {item.attachments.length === 1 ? "Abrir archivo" : `${item.attachments.length} archivos`}</a>}
-                    <footer><span>{owned ? "Tú" : item.ownerName} · {relativeDate(item.updatedAt)}</span>{owned && <button aria-label={item.pinned ? "Desfijar bloque" : "Fijar bloque"} onClick={() => void togglePinned(item)} type="button">{item.pinned ? <PinOff size={14} /> : <Pin size={14} />}</button>}</footer>
+                    <footer><span>{owned ? "Tú" : item.ownerName} · {relativeDate(item.updatedAt)}</span><div className="staff-workspace-card-actions">{item.isTemplate ? <button aria-label="Usar plantilla" onClick={() => createFromTemplate(item)} type="button"><Copy size={14} /></button> : <button aria-label="Duplicar bloque" onClick={() => duplicateItem(item)} type="button"><Copy size={14} /></button>}{owned && !item.isTemplate && <button aria-label="Guardar como plantilla" onClick={() => void saveAsTemplate(item)} type="button"><Sparkles size={14} /></button>}{owned && <button aria-label={item.archived ? "Restaurar bloque" : "Archivar bloque"} onClick={() => void toggleArchived(item)} type="button">{item.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}</button>}{owned && !item.archived && <button aria-label={item.pinned ? "Desfijar bloque" : "Fijar bloque"} onClick={() => void togglePinned(item)} type="button">{item.pinned ? <PinOff size={14} /> : <Pin size={14} />}</button>}</div></footer>
                   </motion.article>
                 );
               })}
             </AnimatePresence></motion.div>
-          ) : <div className="staff-workspace-empty"><span><Search size={20} /></span><h3>No encontramos bloques</h3><p>Ajusta los filtros o crea algo nuevo para comenzar.</p><button onClick={() => openNewItem()} type="button"><Plus size={15} /> Crear una nota</button></div>}
+          ) : <div className="staff-workspace-empty"><span>{view === "inbox" ? <Inbox size={20} /> : view === "templates" ? <Copy size={20} /> : view === "archive" ? <Archive size={20} /> : <Search size={20} />}</span><h3>{view === "inbox" ? "Tu bandeja está al día" : view === "templates" ? "Aún no tienes plantillas" : view === "archive" ? "El archivo está vacío" : "No encontramos bloques"}</h3><p>{view === "inbox" ? "Los bloques que compartan contigo aparecerán aquí." : view === "templates" ? "Guarda un bloque como plantilla para reutilizar su estructura." : view === "archive" ? "Aquí aparecerán los bloques que decidas archivar." : "Ajusta los filtros o crea algo nuevo para comenzar."}</p>{view === "blocks" && <button onClick={() => openNewItem()} type="button"><Plus size={15} /> Crear una nota</button>}</div>}
         </main>
 
         <aside className="staff-workspace-aside">
@@ -557,6 +1104,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
           <section className="staff-workspace-collaboration">
             <span className="staff-workspace-collaboration-icon"><Users size={18} /></span><h3>Trabajo conectado</h3><p>Usa <strong>@</strong> para mencionar colegas y comparte cada bloque con quien corresponda.</p>
             <div className="staff-workspace-avatar-row" aria-label="Equipo docente">{teamMembers.slice(0, 3).map((member) => <span key={member.id} title={member.name}>{member.initials}</span>)}{teamMembers.length > 3 && <span>+{teamMembers.length - 3}</span>}</div>
+            <button className="staff-workspace-inbox-shortcut" onClick={() => { setView("inbox"); resetFilters(); }} type="button"><Inbox size={14} /><span><strong>{unreadCount ? `${unreadCount} por leer` : "Bandeja al día"}</strong><small>Abrir compartidos</small></span></button>
           </section>
         </aside>
       </div>
@@ -564,12 +1112,17 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
       <AnimatePresence>{editorOpen && (
         <motion.div animate={{ opacity: 1 }} className={`staff-workspace-editor-backdrop ${focusMode ? "is-focus" : ""}`} exit={{ opacity: 0 }} initial={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) closeEditor(); }}>
           <motion.section animate={{ opacity: 1, x: 0, scale: 1 }} aria-labelledby="staff-workspace-editor-title" aria-modal="true" className="staff-workspace-editor" exit={reduceMotion ? undefined : { opacity: 0, x: 28, scale: 0.985 }} initial={reduceMotion ? false : { opacity: 0, x: 42, scale: 0.985 }} role="dialog" transition={{ type: "spring", stiffness: 360, damping: 34 }}>
-            <header><div><span className="eyebrow">{focusMode ? "MODO ENFOQUE" : selectedItem ? "EDITAR BLOQUE" : "NUEVO BLOQUE"}</span><h2 id="staff-workspace-editor-title">{selectedItem?.title || activeDetails.label}</h2></div><button aria-label="Cerrar Mi espacio" className="plain-icon" onClick={() => closeEditor()} type="button"><X size={19} /></button></header>
+            <header><div><span className="eyebrow">{focusMode ? "MODO ENFOQUE" : selectedItem ? "EDITAR BLOQUE" : "NUEVO BLOQUE"}</span><h2 id="staff-workspace-editor-title">{selectedItem?.title || activeDetails.label}</h2></div><span className={`staff-workspace-autosave ${draftSaveState}`}>{draftSaveState === "saving" ? <LoaderCircle className="spin" size={13} /> : <Check size={13} />}{draftSaveState === "saving" ? "Guardando borrador…" : draftSaveState === "saved" ? "Borrador guardado" : "Sin cambios"}</span><button aria-label="Cerrar Mi espacio" className="plain-icon" onClick={() => closeEditor()} type="button"><X size={19} /></button></header>
 
             {selectedOwned ? <div className="staff-workspace-editor-form">
               <div className="staff-workspace-type-picker" aria-label="Tipo de bloque">{Object.entries(typeDetails).map(([type, details]) => <button className={draft.type === type ? "active" : ""} key={type} onClick={() => setDraft((current) => ({ ...current, type: type as StaffWorkspaceItemType }))} type="button"><details.icon size={15} /> {details.label}</button>)}</div>
               <div className={`staff-workspace-editor-context ${draft.type}`}><span className={`staff-workspace-type-icon ${draft.type}`}><ActiveEditorIcon size={17} /></span><div><strong>{activeDetails.label}</strong><p>{activeDetails.editorDescription}</p></div></div>
               <label className="staff-workspace-title-field"><span>Título</span><input autoFocus maxLength={120} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder={activeDetails.titlePlaceholder} value={draft.title} /></label>
+
+              <div className="staff-workspace-metadata-grid organization">
+                <label><span>Carpeta</span><span className="staff-workspace-input-with-icon"><Folder size={14} /><input list="workspace-folders" maxLength={80} onChange={(event) => setDraft((current) => ({ ...current, folder: event.target.value }))} placeholder="Ej. Planeaciones 4° A" value={draft.folder} /></span><datalist id="workspace-folders">{filterOptions.folders.map((folder) => <option key={folder} value={folder} />)}</datalist></label>
+                <label><span>Etiquetas</span><span className="staff-workspace-input-with-icon"><Tag size={14} /><input maxLength={240} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 12) }))} placeholder="lectura, semana 8" value={draft.tags.join(", ")} /></span></label>
+              </div>
 
               {draft.type === "planning" && <div className="staff-workspace-metadata-grid planning">
                 <label><span>Materia</span><input onChange={(event) => setDraft((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. Español" value={draft.subject} /></label>
@@ -601,7 +1154,9 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
 
               <AnimatePresence initial={false}>{draft.visibility === "selected" && <motion.div animate={{ opacity: 1, y: 0 }} className="staff-workspace-member-picker" exit={{ opacity: 0, y: -6 }} initial={{ opacity: 0, y: -6 }}><div><strong>Compartir con</strong><span>{draft.sharedWithIds.length} seleccionados</span></div>{shareCandidates.length ? <div className="staff-workspace-member-grid">{shareCandidates.map((member) => <label className={draft.sharedWithIds.includes(member.id) ? "selected" : ""} key={member.id}><input checked={draft.sharedWithIds.includes(member.id)} onChange={() => toggleSharedMember(member.id)} type="checkbox" /><span className="staff-workspace-mention-avatar">{member.initials}</span><span>{member.name}</span>{draft.sharedWithIds.includes(member.id) && <Check size={14} />}</label>)}</div> : <p>No hay otros docentes activos disponibles.</p>}</motion.div>}</AnimatePresence>
 
-              <footer>{selectedItem && <button className="staff-workspace-delete" disabled={saving} onClick={() => void removeItem(selectedItem)} type="button"><Trash2 size={15} /> Eliminar</button>}<button className="secondary-button" disabled={saving} onClick={() => closeEditor()} type="button">Cancelar</button><button className="primary-button" disabled={saving || uploadingFiles > 0 || !draft.title.trim()} onClick={() => void saveItem()} type="button">{saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}{saving ? "Guardando…" : "Guardar"}</button></footer>
+              {draft.visibility !== "private" && <fieldset className="staff-workspace-assignee-picker"><legend><UserCheck size={15} /> Responsables</legend><p>Asigna a quienes deben dar seguimiento. También recibirán acceso al bloque.</p><div>{shareCandidates.map((member) => <label className={draft.assigneeIds.includes(member.id) ? "selected" : ""} key={member.id}><input checked={draft.assigneeIds.includes(member.id)} onChange={() => toggleAssignee(member.id)} type="checkbox" /><span className="staff-workspace-mention-avatar">{member.initials}</span><span>{member.name}</span>{draft.assigneeIds.includes(member.id) && <Check size={14} />}</label>)}</div></fieldset>}
+
+              <footer>{selectedItem && <button className="staff-workspace-delete" disabled={saving} onClick={() => void removeItem(selectedItem)} type="button"><Trash2 size={15} /> Eliminar</button>}{selectedItem && !selectedItem.isTemplate && <button className="secondary-button" disabled={saving} onClick={() => void saveAsTemplate(selectedItem)} type="button"><Sparkles size={15} /> Plantilla</button>}{selectedItem && <button className="secondary-button" disabled={saving} onClick={() => void toggleArchived(selectedItem)} type="button">{selectedItem.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{selectedItem.archived ? "Restaurar" : "Archivar"}</button>}{draftDirty && <button className="secondary-button" disabled={saving} onClick={discardDraft} type="button">Descartar borrador</button>}<button className="secondary-button" disabled={saving} onClick={() => closeEditor()} type="button">Cerrar</button><button className="primary-button" disabled={saving || uploadingFiles > 0 || !draft.title.trim()} onClick={() => void saveItem()} type="button">{saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}{saving ? "Guardando…" : "Publicar cambios"}</button></footer>
             </div> : selectedItem ? <div className="staff-workspace-reader">
               <div className="staff-workspace-reader-meta"><span className={`staff-workspace-type-icon ${selectedItem.type}`}>{(() => { const ReaderIcon = typeDetails[selectedItem.type].icon; return <ReaderIcon size={17} />; })()}</span><span>Compartido por <strong>{selectedItem.ownerName}</strong></span></div>
               <h3>{selectedItem.title}</h3>
@@ -611,6 +1166,26 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
               <StaffWorkspaceRichEditor content={selectedItem.content} documentKey={`reader-${selectedItem.id}-${selectedItem.updatedAt}`} editable={false} members={teamMembers} />
               <div className="staff-workspace-reader-note"><Pencil size={15} /> Sólo la persona que creó este bloque puede editarlo.</div>
             </div> : null}
+
+            {selectedItem && <section className="staff-workspace-collaboration-hub">
+              <div className="staff-workspace-collaboration-grid">
+                <section className="staff-workspace-comments">
+                  <header><span><MessageCircle size={16} /></span><div><strong>Comentarios</strong><small>{comments.length ? `${comments.length} en la conversación` : "Inicia la conversación"}</small></div></header>
+                  <div className="staff-workspace-comment-list">{comments.length ? comments.map((comment) => <article key={comment.id}><span>{comment.authorInitials}</span><div><strong>{comment.authorName}</strong><small>{relativeDate(comment.createdAt)}</small><p>{comment.content}</p></div></article>) : <p>Aún no hay comentarios en este bloque.</p>}</div>
+                  <div className="staff-workspace-comment-form"><textarea aria-label="Escribir comentario" maxLength={2000} onChange={(event) => setCommentText(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void addComment(); }} placeholder="Escribe un comentario para el equipo…" value={commentText} /><button disabled={commentSending || !commentText.trim()} onClick={() => void addComment()} type="button">{commentSending ? <LoaderCircle className="spin" size={15} /> : <MessageCircle size={15} />} Comentar</button></div>
+                </section>
+
+                <section className="staff-workspace-activity-panel">
+                  <header><span><History size={16} /></span><div><strong>Actividad</strong><small>Historial del bloque</small></div></header>
+                  <div>{activity.length ? activity.slice(0, 8).map((entry) => <article key={entry.id}><span /><p><strong>{entry.actorName}</strong> {activityLabel(entry)}<small>{relativeDate(entry.createdAt)}</small></p></article>) : <p>La actividad aparecerá aquí.</p>}</div>
+                </section>
+              </div>
+
+              <div className="staff-workspace-collaboration-footer">
+                <div className="staff-workspace-read-receipts"><Eye size={15} /><span><strong>Confirmaciones de lectura</strong><small>{itemReceipts.length ? itemReceipts.map((receipt) => receipt.readerId === profile.uid ? "Tú" : receipt.readerName).join(", ") : "Nadie ha abierto este bloque todavía"}</small></span></div>
+                {selectedOwned && transferCandidates.length > 0 && <div className="staff-workspace-transfer"><UserRound size={15} /><label><span>Transferir propiedad</span><select onChange={(event) => setTransferTargetId(event.target.value)} value={transferTargetId}><option value="">Selecciona docente</option>{transferCandidates.map((account) => <option key={account.uid} value={account.uid}>{account.name}</option>)}</select></label><button disabled={!transferTargetId || saving} onClick={() => void transferOwnership()} type="button">Transferir</button></div>}
+              </div>
+            </section>}
           </motion.section>
         </motion.div>
       )}</AnimatePresence>

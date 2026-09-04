@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -18,9 +19,14 @@ import {
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
 import type {
+  ManagedAccount,
+  StaffWorkspaceActivity,
+  StaffWorkspaceActivityAction,
   StaffWorkspaceAttachment,
+  StaffWorkspaceComment,
   StaffWorkspaceItem,
   StaffWorkspaceItemInput,
+  StaffWorkspaceReadReceipt,
   StaffWorkspaceItemType,
   StaffWorkspaceVisibility,
   UserProfile,
@@ -105,7 +111,16 @@ function workspaceItemFromData(id: string, data: DocumentData): StaffWorkspaceIt
     mentionedUserIds: Array.isArray(data.mentionedUserIds)
       ? data.mentionedUserIds.map(String).filter(Boolean)
       : [],
+    assigneeIds: Array.isArray(data.assigneeIds)
+      ? data.assigneeIds.map(String).filter(Boolean)
+      : [],
     pinned: data.pinned === true,
+    archived: data.archived === true,
+    isTemplate: data.isTemplate === true,
+    folder: data.folder ? String(data.folder) : undefined,
+    tags: Array.isArray(data.tags)
+      ? data.tags.map(String).filter(Boolean)
+      : [],
     eventAt: data.eventAt ? String(data.eventAt) : undefined,
     resourceUrl: data.resourceUrl ? String(data.resourceUrl) : undefined,
     subject: data.subject ? String(data.subject) : undefined,
@@ -134,6 +149,17 @@ function workspacePayload(input: StaffWorkspaceItemInput) {
       : [...new Set(input.mentionedUserIds)].filter((userId) =>
         visibility === "staff" || input.sharedWithIds.includes(userId),
       ).slice(0, 100),
+    assigneeIds: visibility === "private"
+      ? []
+      : [...new Set(input.assigneeIds)].filter((userId) =>
+        visibility === "staff" || input.sharedWithIds.includes(userId),
+      ).slice(0, 100),
+    archived: input.archived === true,
+    isTemplate: input.isTemplate === true,
+    folder: input.folder?.trim().slice(0, 80) || "",
+    tags: [...new Set(input.tags.map((tag) => tag.trim()).filter(Boolean))]
+      .slice(0, 12)
+      .map((tag) => tag.slice(0, 36)),
     eventAt: input.eventAt?.trim().slice(0, 40) || "",
     resourceUrl: input.resourceUrl?.trim().slice(0, 1_000) || "",
     subject: input.subject?.trim().slice(0, 100) || "",
@@ -214,6 +240,12 @@ export async function createStaffWorkspaceItem(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+  await recordStaffWorkspaceActivity(
+    profile,
+    reference.id,
+    input.isTemplate ? "template_created" : "created",
+    input.isTemplate ? "Guardó una plantilla reutilizable" : "Creó el bloque",
+  ).catch(() => undefined);
   return reference.id;
 }
 
@@ -226,6 +258,12 @@ export async function updateStaffWorkspaceItem(
     doc(workspaceCollection(profile.institutionId), itemId),
     { ...workspacePayload(input), updatedAt: serverTimestamp() },
   );
+  await recordStaffWorkspaceActivity(
+    profile,
+    itemId,
+    "updated",
+    "Actualizó el contenido",
+  ).catch(() => undefined);
 }
 
 export async function setStaffWorkspaceItemPinned(
@@ -237,6 +275,23 @@ export async function setStaffWorkspaceItemPinned(
     pinned,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function setStaffWorkspaceItemArchived(
+  profile: UserProfile,
+  itemId: string,
+  archived: boolean,
+) {
+  await updateDoc(doc(workspaceCollection(profile.institutionId), itemId), {
+    archived,
+    updatedAt: serverTimestamp(),
+  });
+  await recordStaffWorkspaceActivity(
+    profile,
+    itemId,
+    archived ? "archived" : "restored",
+    archived ? "Archivó el bloque" : "Restauró el bloque",
+  ).catch(() => undefined);
 }
 
 export async function deleteStaffWorkspaceItem(
@@ -292,4 +347,193 @@ export async function uploadStaffWorkspaceFile(
 export async function deleteStaffWorkspaceFile(storagePath: string) {
   if (!storagePath || !firebase.storage) return;
   await deleteObject(ref(firebase.storage, storagePath)).catch(() => undefined);
+}
+
+function workspaceReadsCollection(institutionId: string) {
+  return collection(
+    requireWorkspaceFirebase(),
+    "institutions",
+    institutionId,
+    "staffWorkspaceReads",
+  );
+}
+
+function workspaceCommentsCollection(institutionId: string) {
+  return collection(
+    requireWorkspaceFirebase(),
+    "institutions",
+    institutionId,
+    "staffWorkspaceComments",
+  );
+}
+
+function workspaceActivityCollection(institutionId: string) {
+  return collection(
+    requireWorkspaceFirebase(),
+    "institutions",
+    institutionId,
+    "staffWorkspaceActivity",
+  );
+}
+
+export function watchStaffWorkspaceReads(
+  profile: UserProfile,
+  callback: (receipts: StaffWorkspaceReadReceipt[]) => void,
+  itemId?: string,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db || profile.role === "student") {
+    callback([]);
+    return () => undefined;
+  }
+  const source = workspaceReadsCollection(profile.institutionId);
+  const sourceQuery = itemId
+    ? query(source, where("itemId", "==", itemId))
+    : query(source, where("readerId", "==", profile.uid));
+  return onSnapshot(sourceQuery, (snapshot) => {
+    callback(snapshot.docs.map((entry) => {
+      const data = entry.data();
+      return {
+        id: entry.id,
+        institutionId: String(data.institutionId ?? profile.institutionId),
+        itemId: String(data.itemId ?? ""),
+        readerId: String(data.readerId ?? ""),
+        readerName: String(data.readerName ?? "Equipo CEHF"),
+        readAt: asIso(data.readAt),
+      };
+    }));
+  }, (error) => onError?.(error));
+}
+
+export async function markStaffWorkspaceItemRead(
+  profile: UserProfile,
+  itemId: string,
+) {
+  const receiptId = `${itemId}_${profile.uid}`;
+  await setDoc(doc(workspaceReadsCollection(profile.institutionId), receiptId), {
+    institutionId: profile.institutionId,
+    itemId,
+    readerId: profile.uid,
+    readerName: profile.name,
+    readAt: serverTimestamp(),
+  });
+}
+
+export function watchStaffWorkspaceComments(
+  profile: UserProfile,
+  itemId: string,
+  callback: (comments: StaffWorkspaceComment[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db || profile.role === "student") {
+    callback([]);
+    return () => undefined;
+  }
+  return onSnapshot(
+    query(workspaceCommentsCollection(profile.institutionId), where("itemId", "==", itemId)),
+    (snapshot) => callback(snapshot.docs.map((entry) => {
+      const data = entry.data();
+      return {
+        id: entry.id,
+        institutionId: String(data.institutionId ?? profile.institutionId),
+        itemId: String(data.itemId ?? itemId),
+        authorId: String(data.authorId ?? ""),
+        authorName: String(data.authorName ?? "Equipo CEHF"),
+        authorInitials: String(data.authorInitials ?? "CE"),
+        content: String(data.content ?? ""),
+        createdAt: asIso(data.createdAt),
+      };
+    }).sort((first, second) => first.createdAt.localeCompare(second.createdAt))),
+    (error) => onError?.(error),
+  );
+}
+
+export async function createStaffWorkspaceComment(
+  profile: UserProfile,
+  itemId: string,
+  content: string,
+) {
+  const cleanContent = content.trim().slice(0, 2_000);
+  if (!cleanContent) throw new Error("Escribe un comentario antes de enviarlo.");
+  await addDoc(workspaceCommentsCollection(profile.institutionId), {
+    institutionId: profile.institutionId,
+    itemId,
+    authorId: profile.uid,
+    authorName: profile.name,
+    authorInitials: profile.initials,
+    content: cleanContent,
+    createdAt: serverTimestamp(),
+  });
+  await recordStaffWorkspaceActivity(
+    profile,
+    itemId,
+    "commented",
+    "Agregó un comentario",
+  ).catch(() => undefined);
+}
+
+export function watchStaffWorkspaceActivity(
+  profile: UserProfile,
+  itemId: string,
+  callback: (activity: StaffWorkspaceActivity[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db || profile.role === "student") {
+    callback([]);
+    return () => undefined;
+  }
+  return onSnapshot(
+    query(workspaceActivityCollection(profile.institutionId), where("itemId", "==", itemId)),
+    (snapshot) => callback(snapshot.docs.map((entry) => {
+      const data = entry.data();
+      return {
+        id: entry.id,
+        institutionId: String(data.institutionId ?? profile.institutionId),
+        itemId: String(data.itemId ?? itemId),
+        actorId: String(data.actorId ?? ""),
+        actorName: String(data.actorName ?? "Equipo CEHF"),
+        action: String(data.action ?? "updated") as StaffWorkspaceActivityAction,
+        detail: String(data.detail ?? "Actualizó el bloque"),
+        createdAt: asIso(data.createdAt),
+      };
+    }).sort((first, second) => second.createdAt.localeCompare(first.createdAt))),
+    (error) => onError?.(error),
+  );
+}
+
+export async function recordStaffWorkspaceActivity(
+  profile: UserProfile,
+  itemId: string,
+  action: StaffWorkspaceActivityAction,
+  detail: string,
+) {
+  await addDoc(workspaceActivityCollection(profile.institutionId), {
+    institutionId: profile.institutionId,
+    itemId,
+    actorId: profile.uid,
+    actorName: profile.name,
+    action,
+    detail: detail.slice(0, 240),
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function transferStaffWorkspaceItem(
+  profile: UserProfile,
+  item: StaffWorkspaceItem,
+  nextOwner: Pick<ManagedAccount, "uid" | "name">,
+) {
+  await recordStaffWorkspaceActivity(
+    profile,
+    item.id,
+    "transferred",
+    `Transfirió la propiedad a ${nextOwner.name}`,
+  ).catch(() => undefined);
+  await updateDoc(doc(workspaceCollection(profile.institutionId), item.id), {
+    ownerId: nextOwner.uid,
+    ownerName: nextOwner.name,
+    sharedWithIds: [...new Set([...item.sharedWithIds, profile.uid])],
+    visibility: item.visibility === "private" ? "selected" : item.visibility,
+    updatedAt: serverTimestamp(),
+  });
 }

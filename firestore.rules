@@ -216,18 +216,27 @@ service cloud.firestore {
       }
 
       match /staffWorkspace/{itemId} {
+        function activeWorkspaceStaff(userId) {
+          let member = get(
+            /databases/$(database)/documents/users/$(userId)
+          ).data;
+          return member.active == true
+            && member.institutionId == institutionId
+            && member.role in ["director", "teacher"];
+        }
+
         function validWorkspaceItem(data) {
           return data.keys().hasAll([
               "institutionId", "ownerId", "ownerName", "type", "title",
               "content", "visibility", "pinned", "eventAt", "resourceUrl",
-              "sharedWithIds", "mentionedUserIds", "subject", "group", "location", "attachments",
-              "createdAt", "updatedAt"
+              "sharedWithIds", "mentionedUserIds", "subject", "group", "location",
+              "attachments", "createdAt", "updatedAt"
             ])
             && data.keys().hasOnly([
               "institutionId", "ownerId", "ownerName", "type", "title",
               "content", "visibility", "pinned", "eventAt", "resourceUrl",
-              "sharedWithIds", "mentionedUserIds", "subject", "group", "location", "attachments",
-              "createdAt", "updatedAt"
+              "sharedWithIds", "mentionedUserIds", "assigneeIds", "subject", "group", "location",
+              "folder", "tags", "archived", "isTemplate", "attachments", "createdAt", "updatedAt"
             ])
             && data.institutionId == institutionId
             && data.ownerId is string
@@ -243,7 +252,15 @@ service cloud.firestore {
             && data.sharedWithIds.size() <= 100
             && data.mentionedUserIds is list
             && data.mentionedUserIds.size() <= 100
+            && data.get("assigneeIds", []) is list
+            && data.get("assigneeIds", []).size() <= 100
             && data.pinned is bool
+            && data.get("archived", false) is bool
+            && data.get("isTemplate", false) is bool
+            && data.get("folder", "") is string
+            && data.get("folder", "").size() <= 80
+            && data.get("tags", []) is list
+            && data.get("tags", []).size() <= 12
             && data.eventAt is string
             && data.resourceUrl is string
             && data.subject is string
@@ -279,19 +296,150 @@ service cloud.firestore {
         allow update: if isStaff()
           && profile().institutionId == institutionId
           && resource.data.ownerId == request.auth.uid
-          && request.resource.data.ownerId == resource.data.ownerId
-          && request.resource.data.ownerName == resource.data.ownerName
+          && (
+            (
+              request.resource.data.ownerId == resource.data.ownerId
+              && request.resource.data.ownerName == resource.data.ownerName
+            ) || (
+              activeWorkspaceStaff(request.resource.data.ownerId)
+              && request.resource.data.ownerName == get(
+                /databases/$(database)/documents/users/$(request.resource.data.ownerId)
+              ).data.name
+            )
+          )
           && request.resource.data.institutionId == resource.data.institutionId
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "type", "title", "content", "visibility", "pinned", "eventAt",
-            "resourceUrl", "sharedWithIds", "mentionedUserIds", "subject", "group", "location",
-            "attachments", "updatedAt"
+            "resourceUrl", "sharedWithIds", "mentionedUserIds", "assigneeIds", "subject", "group",
+            "location", "folder", "tags", "archived", "isTemplate", "attachments", "ownerId",
+            "ownerName", "updatedAt"
           ])
           && validWorkspaceItem(request.resource.data);
         allow delete: if isStaff()
           && profile().institutionId == institutionId
           && resource.data.ownerId == request.auth.uid;
+      }
+
+      function workspaceItemData(itemId) {
+        return get(
+          /databases/$(database)/documents/institutions/$(institutionId)/staffWorkspace/$(itemId)
+        ).data;
+      }
+
+      function canReadWorkspaceRecord(itemId) {
+        let item = workspaceItemData(itemId);
+        return isStaff()
+          && profile().institutionId == institutionId
+          && item.institutionId == institutionId
+          && (
+            item.ownerId == request.auth.uid
+            || item.visibility == "staff"
+            || (
+              item.visibility == "selected"
+              && request.auth.uid in item.sharedWithIds
+            )
+          );
+      }
+
+      match /staffWorkspaceReads/{receiptId} {
+        function validWorkspaceRead(data) {
+          return data.keys().hasAll([
+              "institutionId", "itemId", "readerId", "readerName", "readAt"
+            ])
+            && data.keys().hasOnly([
+              "institutionId", "itemId", "readerId", "readerName", "readAt"
+            ])
+            && data.institutionId == institutionId
+            && data.itemId is string
+            && data.readerId is string
+            && data.readerName is string
+            && data.readAt is timestamp;
+        }
+
+        allow read: if isStaff()
+          && profile().institutionId == institutionId
+          && (
+            resource.data.readerId == request.auth.uid
+            || canReadWorkspaceRecord(resource.data.itemId)
+          );
+        allow create, update: if isStaff()
+          && profile().institutionId == institutionId
+          && request.resource.data.readerId == request.auth.uid
+          && request.resource.data.readerName == profile().name
+          && canReadWorkspaceRecord(request.resource.data.itemId)
+          && validWorkspaceRead(request.resource.data);
+        allow delete: if false;
+      }
+
+      match /staffWorkspaceComments/{commentId} {
+        function validWorkspaceComment(data) {
+          return data.keys().hasAll([
+              "institutionId", "itemId", "authorId", "authorName",
+              "authorInitials", "content", "createdAt"
+            ])
+            && data.keys().hasOnly([
+              "institutionId", "itemId", "authorId", "authorName",
+              "authorInitials", "content", "createdAt"
+            ])
+            && data.institutionId == institutionId
+            && data.itemId is string
+            && data.authorId is string
+            && data.authorName is string
+            && data.authorInitials is string
+            && data.content is string
+            && data.content.size() > 0
+            && data.content.size() <= 2000
+            && data.createdAt is timestamp;
+        }
+
+        allow read: if canReadWorkspaceRecord(resource.data.itemId);
+        allow create: if isStaff()
+          && profile().institutionId == institutionId
+          && request.resource.data.authorId == request.auth.uid
+          && request.resource.data.authorName == profile().name
+          && canReadWorkspaceRecord(request.resource.data.itemId)
+          && validWorkspaceComment(request.resource.data);
+        allow update: if false;
+        allow delete: if isStaff()
+          && profile().institutionId == institutionId
+          && (
+            resource.data.authorId == request.auth.uid
+            || workspaceItemData(resource.data.itemId).ownerId == request.auth.uid
+          );
+      }
+
+      match /staffWorkspaceActivity/{activityId} {
+        function validWorkspaceActivity(data) {
+          return data.keys().hasAll([
+              "institutionId", "itemId", "actorId", "actorName",
+              "action", "detail", "createdAt"
+            ])
+            && data.keys().hasOnly([
+              "institutionId", "itemId", "actorId", "actorName",
+              "action", "detail", "createdAt"
+            ])
+            && data.institutionId == institutionId
+            && data.itemId is string
+            && data.actorId is string
+            && data.actorName is string
+            && data.action in [
+              "created", "updated", "commented", "archived", "restored",
+              "transferred", "template_created"
+            ]
+            && data.detail is string
+            && data.detail.size() <= 240
+            && data.createdAt is timestamp;
+        }
+
+        allow read: if canReadWorkspaceRecord(resource.data.itemId);
+        allow create: if isStaff()
+          && profile().institutionId == institutionId
+          && request.resource.data.actorId == request.auth.uid
+          && request.resource.data.actorName == profile().name
+          && canReadWorkspaceRecord(request.resource.data.itemId)
+          && validWorkspaceActivity(request.resource.data);
+        allow update, delete: if false;
       }
 
       match /workshops/{workshopId} {

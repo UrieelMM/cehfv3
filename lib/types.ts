@@ -1108,6 +1108,46 @@ export type StaffWorkspaceAttachment = {
   url: string;
 };
 
+export type StaffWorkspaceComment = {
+  id: string;
+  institutionId: string;
+  itemId: string;
+  authorId: string;
+  authorName: string;
+  authorInitials: string;
+  content: string;
+  createdAt: string;
+};
+
+export type StaffWorkspaceActivityAction =
+  | "created"
+  | "updated"
+  | "commented"
+  | "archived"
+  | "restored"
+  | "transferred"
+  | "template_created";
+
+export type StaffWorkspaceActivity = {
+  id: string;
+  institutionId: string;
+  itemId: string;
+  actorId: string;
+  actorName: string;
+  action: StaffWorkspaceActivityAction;
+  detail: string;
+  createdAt: string;
+};
+
+export type StaffWorkspaceReadReceipt = {
+  id: string;
+  institutionId: string;
+  itemId: string;
+  readerId: string;
+  readerName: string;
+  readAt: string;
+};
+
 export type StaffWorkspaceItem = {
   id: string;
   institutionId: string;
@@ -1119,7 +1159,12 @@ export type StaffWorkspaceItem = {
   visibility: StaffWorkspaceVisibility;
   sharedWithIds: string[];
   mentionedUserIds: string[];
+  assigneeIds: string[];
   pinned: boolean;
+  archived: boolean;
+  isTemplate: boolean;
+  folder?: string;
+  tags: string[];
   eventAt?: string;
   resourceUrl?: string;
   subject?: string;
@@ -1138,6 +1183,11 @@ export type StaffWorkspaceItemInput = Pick<
   | "visibility"
   | "sharedWithIds"
   | "mentionedUserIds"
+  | "assigneeIds"
+  | "archived"
+  | "isTemplate"
+  | "folder"
+  | "tags"
   | "eventAt"
   | "resourceUrl"
   | "subject"
