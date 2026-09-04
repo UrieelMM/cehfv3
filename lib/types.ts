@@ -1090,6 +1090,35 @@ export type PortalSettings = {
   quietHours: string;
 };
 
+export type StaffWorkspaceItemType =
+  | "planning"
+  | "resource"
+  | "schedule"
+  | "note";
+
+export type StaffWorkspaceVisibility = "private" | "staff";
+
+export type StaffWorkspaceItem = {
+  id: string;
+  institutionId: string;
+  ownerId: string;
+  ownerName: string;
+  type: StaffWorkspaceItemType;
+  title: string;
+  content: string;
+  visibility: StaffWorkspaceVisibility;
+  pinned: boolean;
+  eventAt?: string;
+  resourceUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StaffWorkspaceItemInput = Pick<
+  StaffWorkspaceItem,
+  "type" | "title" | "content" | "visibility" | "eventAt" | "resourceUrl"
+>;
+
 export type PortalState = {
   week: WeekPlan;
   weeklyVerse: WeeklyVerse;

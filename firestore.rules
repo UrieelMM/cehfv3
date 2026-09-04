@@ -215,6 +215,68 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /staffWorkspace/{itemId} {
+        function validWorkspaceItem(data) {
+          return data.keys().hasAll([
+              "institutionId", "ownerId", "ownerName", "type", "title",
+              "content", "visibility", "pinned", "eventAt", "resourceUrl",
+              "createdAt", "updatedAt"
+            ])
+            && data.keys().hasOnly([
+              "institutionId", "ownerId", "ownerName", "type", "title",
+              "content", "visibility", "pinned", "eventAt", "resourceUrl",
+              "createdAt", "updatedAt"
+            ])
+            && data.institutionId == institutionId
+            && data.ownerId is string
+            && data.ownerName is string
+            && data.type in ["planning", "resource", "schedule", "note"]
+            && data.title is string
+            && data.title.size() > 0
+            && data.title.size() <= 120
+            && data.content is string
+            && data.content.size() <= 8000
+            && data.visibility in ["private", "staff"]
+            && data.pinned is bool
+            && data.eventAt is string
+            && data.resourceUrl is string
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp;
+        }
+
+        function canReadWorkspaceItem(data) {
+          return isStaff()
+            && profile().institutionId == institutionId
+            && data.institutionId == institutionId
+            && (
+              data.ownerId == request.auth.uid
+              || data.visibility == "staff"
+            );
+        }
+
+        allow read: if canReadWorkspaceItem(resource.data);
+        allow create: if isStaff()
+          && profile().institutionId == institutionId
+          && request.resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerName == profile().name
+          && validWorkspaceItem(request.resource.data);
+        allow update: if isStaff()
+          && profile().institutionId == institutionId
+          && resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.ownerName == resource.data.ownerName
+          && request.resource.data.institutionId == resource.data.institutionId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "type", "title", "content", "visibility", "pinned", "eventAt",
+            "resourceUrl", "updatedAt"
+          ])
+          && validWorkspaceItem(request.resource.data);
+        allow delete: if isStaff()
+          && profile().institutionId == institutionId
+          && resource.data.ownerId == request.auth.uid;
+      }
+
       match /workshops/{workshopId} {
         function validWorkshopAccess(data) {
           return data.studentIds is list

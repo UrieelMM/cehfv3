@@ -58,6 +58,7 @@ import { AcademicCalendarModal } from "@/components/academic-calendar-modal";
 import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
 import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
+import { StaffWorkspacePage } from "@/components/staff-workspace-page";
 import { WorkshopsPage } from "@/components/workshops-page";
 import { GradingWeightsCard } from "@/components/weekly-grades";
 import {
@@ -194,7 +195,7 @@ const routes: Record<SectionKey, string> = {
   "my-week": "/qualifications",
   "weekly-review": "/weekly-review",
   tasks: "/tasks",
-  "weekly-progress": "/weekly-progress",
+  "weekly-progress": "/my-space",
   reports: "/reports",
   "wall-newspaper": "/wall-newspaper",
   forum: "/forum",
@@ -237,10 +238,12 @@ const sectionFromPath = (path: string): SectionKey => {
   const name = path.split("/").filter(Boolean)[0] as
     | SectionKey
     | "qualifications"
+    | "my-space"
     | "weekly-materials"
     | undefined;
   if (!name || name === ("login" as SectionKey)) return "dashboard";
   if (name === "qualifications" || name === "my-week") return "my-week";
+  if (name === "my-space") return "weekly-progress";
   if (name === "weekly-materials") return "tasks";
   return name in routes ? name : "dashboard";
 };
@@ -320,7 +323,12 @@ const navigation: Array<{
   { key: "my-week", label: "Calificaciones", icon: GraduationCap },
   { key: "weekly-review", label: "Repasos", icon: BookOpen },
   { key: "tasks", label: "Tareas", icon: ClipboardCheck },
-  { key: "weekly-progress", label: "Mi avance", icon: Target },
+  {
+    key: "weekly-progress",
+    label: "Mi espacio",
+    icon: Target,
+    roles: ["director", "teacher"],
+  },
   { key: "reports", label: "Reportes", icon: FileBarChart },
   { key: "wall-newspaper", label: "Periódico mural", icon: Newspaper },
   { key: "forum", label: "Foro", icon: MessageCircle },
@@ -339,8 +347,8 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
   "weekly-review": { eyebrow: "Práctica breve", title: "Repasos" },
   tasks: { eyebrow: "Actividades y entregas", title: "Tareas" },
   "weekly-progress": {
-    eyebrow: "Evidencias y próximos pasos",
-    title: "Avance semanal",
+    eyebrow: "Organización personal y del equipo",
+    title: "Mi espacio",
   },
   reports: { eyebrow: "Seguimiento con contexto", title: "Reportes" },
   "wall-newspaper": {
@@ -699,6 +707,18 @@ export function CEHFApp() {
       state.settings.reducedMotion,
     );
   }, [state.settings]);
+
+  useEffect(() => {
+    if (!authReady || activeSection !== "weekly-progress") return;
+    if (role === "student") {
+      window.history.replaceState({}, "", routes.dashboard);
+      queueMicrotask(() => setActiveSection("dashboard"));
+      return;
+    }
+    if (window.location.pathname !== routes["weekly-progress"]) {
+      window.history.replaceState({}, "", routes["weekly-progress"]);
+    }
+  }, [activeSection, authReady, role]);
 
   useEffect(() => {
     if (!firebaseUser || !profile || role === "student") return;
@@ -1939,12 +1959,8 @@ function SectionContent({
         />
       );
     case "weekly-progress":
-      return (
-        <ProgressPage
-          role={role}
-          state={state}
-          updateState={updateState}
-        />
+      return role === "student" ? null : (
+        <StaffWorkspacePage profile={profile} firebaseReady={firebaseReady} />
       );
     case "reports":
       return (
@@ -2296,7 +2312,7 @@ function Dashboard({
 
       <section className="two-column student-lower">
         <article className="panel">
-          <PanelHeading title="Así vas esta semana" action="Ver mi avance" />
+          <PanelHeading title="Así vas esta semana" />
           <div className="mini-progress-list">
             {state.progress.slice(0, 3).map((criterion) => (
               <div key={criterion.id}>
@@ -2518,117 +2534,6 @@ function WeekPage({
         accounts={managedAccounts}
         firebaseReady={firebaseReady}
       />
-    </div>
-  );
-}
-
-function ProgressPage({
-  role,
-  state,
-  updateState,
-}: {
-  role: Role;
-  state: PortalState;
-  updateState: (
-    updater: (previous: PortalState) => PortalState,
-    message?: string,
-  ) => void;
-}) {
-  const score = Math.round(
-    state.progress.reduce((total, criterion) => {
-      const value = {
-        achieved: 1,
-        in_progress: 0.65,
-        needs_support: 0.35,
-        not_observed: 0,
-      }[criterion.level];
-      return total + value * criterion.weight;
-    }, 0),
-  );
-  return (
-    <div className="progress-layout">
-      <section className="panel progress-summary">
-        <div>
-          <span className="pill pill-active">Semana 7</span>
-          <h2>{role === "student" ? "Vas construyendo tu avance" : "Avance del grupo"}</h2>
-          <p>
-            {role === "student"
-              ? "Estos estados explican lo que ya lograste y cuál puede ser tu siguiente paso."
-              : "La propuesta se calcula con evidencias y siempre requiere revisión docente."}
-          </p>
-        </div>
-        <div className="score-block">
-          <ProgressRing value={score} />
-          <span>Propuesta actual</span>
-        </div>
-      </section>
-      <section className="criteria-list">
-        {state.progress.map((criterion) => {
-          const status = progressLabels[criterion.level];
-          return (
-            <article className="criterion-card" key={criterion.id}>
-              <div className="criterion-weight">{criterion.weight}%</div>
-              <div className="criterion-copy">
-                <h3>{criterion.label}</h3>
-                <p>{criterion.detail}</p>
-                <button className="text-link">
-                  Ver evidencias <ArrowRight size={15} />
-                </button>
-              </div>
-              {role === "student" ? (
-                <span className={`status-tag ${status.className}`}>
-                  {status.label}
-                </span>
-              ) : (
-                <select
-                  aria-label={`Estado de ${criterion.label}`}
-                  value={criterion.level}
-                  onChange={(event) =>
-                    updateState(
-                      (previous) => ({
-                        ...previous,
-                        progress: previous.progress.map((item) =>
-                          item.id === criterion.id
-                            ? {
-                                ...item,
-                                level: event.target.value as ProgressLevel,
-                              }
-                            : item,
-                        ),
-                      }),
-                      "Criterio actualizado",
-                    )
-                  }
-                >
-                  {Object.entries(progressLabels).map(([value, item]) => (
-                    <option value={value} key={value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </article>
-          );
-        })}
-      </section>
-      <aside className="panel next-step-card">
-        <span className="metric-icon gold">
-          <Sparkles size={21} />
-        </span>
-        <span className="eyebrow">Tu siguiente paso</span>
-        <h3>Completa el repaso de lectura.</h3>
-        <p>
-          Después revisa la retroalimentación para mejorar tu idea principal.
-        </p>
-        {role !== "student" && (
-          <button
-            className="primary-button"
-            onClick={() => toast.success("Avance publicado con versión 1")}
-          >
-            <Check size={17} /> Publicar avance
-          </button>
-        )}
-      </aside>
     </div>
   );
 }
