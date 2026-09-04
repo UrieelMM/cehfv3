@@ -702,13 +702,14 @@ export function CEHFApp() {
   }, []);
 
   useEffect(() => {
+    if (!authReady) return;
     document.documentElement.dataset.theme = state.settings.theme;
     window.localStorage.setItem("cehf-theme", state.settings.theme);
     document.documentElement.classList.toggle(
       "reduce-motion",
       state.settings.reducedMotion,
     );
-  }, [state.settings]);
+  }, [authReady, state.settings]);
 
   useEffect(() => {
     if (!authReady || activeSection !== "weekly-progress") return;
@@ -4168,9 +4169,13 @@ function LoadingScreen() {
             <i />
           </span>
           <span className="loading-emblem-glow" />
-          <div className="brand-mark">
-            <span>CE</span>
-          </div>
+          <Image
+            className="loading-logo"
+            src={logoCehf}
+            alt=""
+            sizes="100px"
+            unoptimized
+          />
         </div>
 
         <div className="loading-brand">

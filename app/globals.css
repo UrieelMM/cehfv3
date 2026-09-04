@@ -11007,6 +11007,10 @@ code {
 }
 
 .loading-screen {
+  --loading-screen-base: var(--background);
+  --loading-stage-background: color-mix(in srgb, var(--surface) 76%, transparent);
+  --loading-stage-border: color-mix(in srgb, var(--border) 78%, transparent);
+  --loading-stage-highlight: color-mix(in srgb, white 48%, transparent);
   position: fixed;
   z-index: 100;
   inset: 0;
@@ -11021,8 +11025,24 @@ code {
       color-mix(in srgb, var(--violet-soft) 68%, transparent) 0,
       transparent 34%
     ),
-    var(--background);
+    var(--loading-screen-base);
   transition: background-color 280ms ease;
+}
+
+:root[data-theme="dark"] .loading-screen {
+  --loading-screen-base: #08121d;
+  --loading-stage-background: rgb(17 31 45 / 0.88);
+  --loading-stage-border: rgb(106 137 169 / 0.28);
+  --loading-stage-highlight: rgb(255 255 255 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .loading-screen {
+    --loading-screen-base: #08121d;
+    --loading-stage-background: rgb(17 31 45 / 0.88);
+    --loading-stage-border: rgb(106 137 169 / 0.28);
+    --loading-stage-highlight: rgb(255 255 255 / 0.08);
+  }
 }
 
 .loading-atmosphere,
@@ -11091,12 +11111,12 @@ code {
   align-items: center;
   flex-direction: column;
   padding: 42px 38px 34px;
-  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border: 1px solid var(--loading-stage-border);
   border-radius: 32px;
-  background: color-mix(in srgb, var(--surface) 76%, transparent);
+  background: var(--loading-stage-background);
   box-shadow:
     0 32px 90px color-mix(in srgb, var(--foreground) 12%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 48%, transparent);
+    inset 0 1px 0 var(--loading-stage-highlight);
   text-align: center;
   backdrop-filter: blur(24px) saturate(140%);
   animation: loading-stage-enter 360ms cubic-bezier(0.22, 0.8, 0.25, 1) both;
@@ -11110,20 +11130,13 @@ code {
   place-items: center;
 }
 
-.loading-emblem .brand-mark {
+.loading-logo {
   z-index: 2;
-  width: 62px;
-  height: 62px;
-  flex-basis: 62px;
-  border-radius: 18px 18px 27px 18px;
-  box-shadow:
-    0 14px 34px color-mix(in srgb, var(--violet) 28%, transparent),
-    0 0 0 8px color-mix(in srgb, var(--surface) 86%, transparent);
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  filter: drop-shadow(0 13px 18px color-mix(in srgb, var(--violet) 30%, transparent));
   animation: loading-mark-breathe 2.8s ease-in-out infinite;
-}
-
-.loading-emblem .brand-mark span {
-  font-size: calc(1.1rem + 0.125rem);
 }
 
 .loading-emblem-glow {
@@ -11373,7 +11386,7 @@ code {
 @media (prefers-reduced-motion: reduce) {
   .loading-stage,
   .loading-orbit,
-  .loading-emblem .brand-mark,
+  .loading-logo,
   .loading-emblem-glow,
   .loading-progress span,
   .loading-status b,

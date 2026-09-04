@@ -66,6 +66,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     indexes,
     manifest,
     css,
+    landingCssSource,
     firebaseSource,
     appSource,
     usersSource,
@@ -97,6 +98,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
       readFile(new URL("firestore.indexes.json", projectRoot), "utf8"),
       readFile(new URL("public/manifest.webmanifest", projectRoot), "utf8"),
       readFile(new URL("app/globals.css", projectRoot), "utf8"),
+      readFile(new URL("app/landing.css", projectRoot), "utf8"),
       readFile(new URL("lib/firebase.ts", projectRoot), "utf8"),
       readFile(new URL("components/cehf-app.tsx", projectRoot), "utf8"),
       readFile(new URL("components/users-page.tsx", projectRoot), "utf8"),
@@ -371,6 +373,12 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradeReportPdfSource, /loadBrandLogoBytes/);
   assert.match(gradeReportPdfSource, /doc\.addImage\(brandLogo, "PNG"/);
   assert.match(appSource, /className="sidebar-brand-logo"/);
+  assert.match(appSource, /className="loading-logo"/);
+  assert.match(appSource, /if \(!authReady\) return;/);
+  assert.match(css, /:root\[data-theme="dark"\] \.loading-screen/);
+  assert.match(css, /--loading-stage-background:/);
+  assert.match(css, /\.loading-logo/);
+  assert.match(landingCssSource, /\.lp-bento-calendar\s*\{[^}]*min-height:\s*700px/s);
   assert.match(workshopSource, /Biblioteca creativa/);
   assert.match(workshopSource, /Laboratorio digital/);
   assert.match(workshopFirebaseSource, /ensureDefaultWorkshops/);
