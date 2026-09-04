@@ -2,13 +2,15 @@
 
 import {
   collection,
+  doc,
+  getDoc,
   limit,
   onSnapshot,
   orderBy,
   query,
   where,
   type DocumentData,
-  type QueryDocumentSnapshot,
+  type DocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -112,7 +114,7 @@ function dateFromData(value: unknown) {
 }
 
 function wallPostFromSnapshot(
-  snapshot: QueryDocumentSnapshot<DocumentData>,
+  snapshot: DocumentSnapshot<DocumentData>,
   likedStoryIds: ReadonlySet<string> = new Set(),
 ): WallPost {
   const data = snapshot.data();
@@ -175,6 +177,15 @@ function wallPostFromSnapshot(
     assignedTeacherId: data.assignedTeacherId ? String(data.assignedTeacherId) : undefined,
     assignedTeacherName: data.assignedTeacherName ? String(data.assignedTeacherName) : undefined,
   };
+}
+
+export async function getMuralStory(profile: UserProfile, storyId: string) {
+  if (!firebase.db) return null;
+  const snapshot = await getDoc(doc(firebase.db, "wallPosts", storyId));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  if (data.institutionId !== profile.institutionId) return null;
+  return wallPostFromSnapshot(snapshot);
 }
 
 function numberInRange(value: unknown, fallback: number, minimum = 0, maximum = 100) {

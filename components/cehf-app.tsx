@@ -69,6 +69,9 @@ import {
 } from "@/lib/demo-seed-firebase";
 import { AcademicGradesPanel } from "@/components/academic-grades";
 import { AcademicReportsPage } from "@/components/academic-reports";
+import { MaterialCreateModal, MaterialsPage } from "@/components/materials-page";
+import { PortalSearch } from "@/components/portal-search";
+import { backfillPortalSearch } from "@/lib/portal-search";
 import {
   ReviewCreateModal,
   ReviewsPage,
@@ -119,6 +122,13 @@ import {
   watchWeeklyReviews,
 } from "@/lib/reviews-firebase";
 import {
+  createDemoLearningMaterial,
+  createLearningMaterial,
+  legacyMaterialsToLearningMaterials,
+  loadViewedLearningMaterialIds,
+  watchLearningMaterials,
+} from "@/lib/materials-firebase";
+import {
   createDemoState,
   demoManagedAccounts,
   demoProfiles,
@@ -145,6 +155,7 @@ import type {
   AcademicConfig,
   PortalState,
   PortalSettings,
+  PortalSearchHit,
   ProgressLevel,
   Role,
   SchoolLevel,
@@ -152,6 +163,8 @@ import type {
   UserProfile,
   TaskAssignment,
   TaskCreateInput,
+  LearningMaterial,
+  LearningMaterialCreateInput,
   WeeklyReview,
   WeeklyReviewCreateInput,
 } from "@/lib/types";
@@ -197,6 +210,7 @@ const routes: Record<SectionKey, string> = {
   "my-week": "/qualifications",
   "weekly-review": "/weekly-review",
   tasks: "/tasks",
+  materials: "/weekly-materials",
   "weekly-progress": "/my-space",
   reports: "/reports",
   "wall-newspaper": "/wall-newspaper",
@@ -246,7 +260,7 @@ const sectionFromPath = (path: string): SectionKey => {
   if (!name || name === ("login" as SectionKey)) return "dashboard";
   if (name === "qualifications" || name === "my-week") return "my-week";
   if (name === "my-space") return "weekly-progress";
-  if (name === "weekly-materials") return "tasks";
+  if (name === "weekly-materials") return "materials";
   return name in routes ? name : "dashboard";
 };
 
@@ -325,6 +339,7 @@ const navigation: Array<{
   { key: "my-week", label: "Calificaciones", icon: GraduationCap },
   { key: "weekly-review", label: "Repasos", icon: BookOpen },
   { key: "tasks", label: "Tareas", icon: ClipboardCheck },
+  { key: "materials", label: "Recursos", icon: BookOpen },
   {
     key: "weekly-progress",
     label: "Mi espacio",
@@ -348,6 +363,7 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string }> = {
   "my-week": { eyebrow: "Resultados y seguimiento", title: "Calificaciones" },
   "weekly-review": { eyebrow: "Práctica breve", title: "Repasos" },
   tasks: { eyebrow: "Actividades y entregas", title: "Tareas" },
+  materials: { eyebrow: "Biblioteca de aprendizaje", title: "Recursos" },
   "weekly-progress": {
     eyebrow: "Organización personal y del equipo",
     title: "Mi espacio",
@@ -441,6 +457,18 @@ export function CEHFApp() {
   );
   const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
   const [reviewRecordsRevision, setReviewRecordsRevision] = useState(0);
+  const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>(() =>
+    legacyMaterialsToLearningMaterials(
+      createDemoState().materials,
+      demoProfiles.student,
+      defaultAcademicConfig,
+      demoManagedAccounts,
+    ),
+  );
+  const [materialRecordsLoading, setMaterialRecordsLoading] = useState(false);
+  const [viewedMaterialIds, setViewedMaterialIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [mobileMore, setMobileMore] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>(
@@ -467,6 +495,79 @@ export function CEHFApp() {
       ),
     [academicCalendar, currentProfile.institutionId, storedAcademicConfig],
   );
+  const localSearchRecords = useMemo<PortalSearchHit[]>(() => {
+    const asTime = (value?: string) => {
+      const parsed = Date.parse(value ?? "");
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const tasks: PortalSearchHit[] = taskRecords.map((task) => ({
+      objectID: `task:${task.id}`,
+      entityType: "task",
+      entityId: task.id,
+      title: task.title,
+      excerpt: task.description,
+      subject: task.subject,
+      context: `${task.weekLabel} · ${task.targetGroup}`,
+      status: task.status,
+      route: `/tasks/${encodeURIComponent(task.id)}`,
+      updatedAt: asTime(task.updatedAt),
+    }));
+    const reviews: PortalSearchHit[] = reviewRecords.map((review) => ({
+      objectID: `review:${review.id}`,
+      entityType: "review",
+      entityId: review.id,
+      title: review.title,
+      excerpt: review.description,
+      subject: review.subject,
+      context: review.weekLabel,
+      status: review.status,
+      route: `/weekly-review/${encodeURIComponent(review.id)}`,
+      updatedAt: asTime(review.updatedAt),
+    }));
+    const materials: PortalSearchHit[] = materialRecords.map((material) => ({
+      objectID: `material:${material.id}`,
+      entityType: "material",
+      entityId: material.id,
+      title: material.title,
+      excerpt: material.description,
+      subject: material.subject,
+      context: material.weekLabel,
+      status: material.type,
+      route: `/weekly-materials/${encodeURIComponent(material.id)}`,
+      updatedAt: asTime(material.updatedAt),
+    }));
+    const stories: PortalSearchHit[] = state.wallPosts
+      .filter((story) =>
+        role !== "student"
+        || story.status === "published"
+        || story.authorId === currentProfile.uid,
+      )
+      .map((story) => ({
+        objectID: `story:${story.id}`,
+        entityType: "story",
+        entityId: story.id,
+        title: story.title,
+        excerpt: story.lead ?? story.excerpt,
+        subject: story.category,
+        context: `${story.author} · ${story.group}`,
+        status: story.status,
+        route: `/wall-newspaper/stories/${encodeURIComponent(story.id)}`,
+        updatedAt: asTime(story.updatedAt ?? story.publishedAt),
+      }));
+    const topics: PortalSearchHit[] = state.forumTopics.map((topic) => ({
+      objectID: `forum_topic:${topic.id}`,
+      entityType: "forum_topic",
+      entityId: topic.id,
+      title: topic.title,
+      excerpt: topic.prompt,
+      subject: topic.subject,
+      context: `${topic.forumName} · ${topic.group}`,
+      status: topic.status,
+      route: `/forum/${encodeURIComponent(topic.forumId)}/${encodeURIComponent(topic.id)}`,
+      updatedAt: asTime(topic.lastActivityAt),
+    }));
+    return [...tasks, ...reviews, ...materials, ...stories, ...topics];
+  }, [currentProfile.uid, materialRecords, reviewRecords, role, state.forumTopics, state.wallPosts, taskRecords]);
 
   useEffect(() => {
     if (window.location.pathname.split("/").filter(Boolean)[0] === "my-week") {
@@ -644,6 +745,45 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
+    queueMicrotask(() => setMaterialRecordsLoading(true));
+    return watchLearningMaterials(
+      profile,
+      (materials) => {
+        setMaterialRecords(materials);
+        setMaterialRecordsLoading(false);
+        if (profile.role === "student") {
+          void loadViewedLearningMaterialIds(materials, profile)
+            .then(setViewedMaterialIds)
+            .catch((error) => reportFirebaseError("cargar lecturas de materiales", error));
+        } else {
+          setViewedMaterialIds(new Set());
+        }
+      },
+      (error) => {
+        setMaterialRecordsLoading(false);
+        reportFirebaseError("cargar materiales", error);
+      },
+    );
+  }, [firebaseUser, profile]);
+
+  useEffect(() => {
+    if (firebaseUser) return;
+    queueMicrotask(() => {
+      setMaterialRecords(
+        legacyMaterialsToLearningMaterials(
+          state.materials,
+          currentProfile,
+          academicConfig,
+          managedAccounts,
+        ),
+      );
+      setMaterialRecordsLoading(false);
+      setViewedMaterialIds(new Set());
+    });
+  }, [academicConfig, currentProfile, demoRole, firebaseUser, managedAccounts, state.materials]);
+
+  useEffect(() => {
+    if (!firebaseUser || !profile) return;
     return watchTaskNotifications(
       profile.uid,
       (notifications) =>
@@ -783,6 +923,16 @@ export function CEHFApp() {
     window.history.pushState({}, "", "/tasks");
     setActiveSection("tasks");
     setDetailOpen(null);
+  }
+
+  function openSearchResult(result: PortalSearchHit) {
+    window.history.pushState({}, "", result.route);
+    setActiveSection(sectionFromPath(new URL(result.route, window.location.origin).pathname));
+    setDetailOpen(taskIdFromPath(new URL(result.route, window.location.origin).pathname));
+    setSidebarOpen(false);
+    setMobileMore(false);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function updateState(
@@ -1073,14 +1223,12 @@ export function CEHFApp() {
           >
             <Menu size={21} />
           </button>
-          <div className="search">
-            <Search size={18} aria-hidden="true" />
-            <input
-              aria-label="Buscar en el portal"
-              placeholder="Buscar tareas, recursos o temas…"
-            />
-            <kbd>⌘ K</kbd>
-          </div>
+          <PortalSearch
+            profile={currentProfile}
+            firebaseReady={Boolean(firebaseUser && profile)}
+            localRecords={localSearchRecords}
+            onOpen={openSearchResult}
+          />
           <div className="topbar-actions">
             {usingDemo && <span className="demo-badge">Demo</span>}
             <button
@@ -1207,6 +1355,7 @@ export function CEHFApp() {
                 [
                   "weekly-review",
                   "tasks",
+                  "materials",
                   "forum",
                   "users",
                 ].includes(activeSection) && (
@@ -1216,6 +1365,8 @@ export function CEHFApp() {
                       (activeSection === "tasks" &&
                         academicConfig.calendarStatus !== "active") ||
                       (activeSection === "weekly-review" &&
+                        academicCalendar.weeks.length === 0) ||
+                      (activeSection === "materials" &&
                         academicCalendar.weeks.length === 0)
                     }
                     title={
@@ -1255,6 +1406,12 @@ export function CEHFApp() {
               taskRecordsLoading={taskRecordsLoading}
               reviewRecords={reviewRecords}
               reviewRecordsLoading={reviewRecordsLoading}
+              materialRecords={materialRecords}
+              materialRecordsLoading={materialRecordsLoading}
+              viewedMaterialIds={viewedMaterialIds}
+              onMaterialViewed={(materialId) =>
+                setViewedMaterialIds((current) => new Set(current).add(materialId))
+              }
               onDemoReviewChange={(updatedReview) =>
                 setReviewRecords((previous) =>
                   previous.map((review) =>
@@ -1436,6 +1593,34 @@ export function CEHFApp() {
                     ? "Tarea programada"
                     : "Borrador guardado",
               );
+            }}
+          />
+        ) : createOpen && activeSection === "materials" ? (
+          <MaterialCreateModal
+            profile={currentProfile}
+            config={academicConfig}
+            calendar={academicCalendar}
+            accounts={managedAccounts}
+            onClose={() => setCreateOpen(false)}
+            onCreate={async (input: LearningMaterialCreateInput) => {
+              if (firebaseUser && profile) {
+                await createLearningMaterial(
+                  input,
+                  profile,
+                  academicConfig,
+                  academicCalendar,
+                );
+              } else {
+                const material = createDemoLearningMaterial(
+                  input,
+                  currentProfile,
+                  academicConfig,
+                  academicCalendar,
+                  managedAccounts,
+                );
+                setMaterialRecords((current) => [material, ...current]);
+              }
+              toast.success("Material publicado");
             }}
           />
         ) : createOpen && activeSection === "users" ? (
@@ -1884,6 +2069,10 @@ function SectionContent({
   taskRecordsLoading,
   reviewRecords,
   reviewRecordsLoading,
+  materialRecords,
+  materialRecordsLoading,
+  viewedMaterialIds,
+  onMaterialViewed,
   onDemoReviewChange,
   academicConfig,
   academicCalendar,
@@ -1912,6 +2101,10 @@ function SectionContent({
   taskRecordsLoading: boolean;
   reviewRecords: WeeklyReview[];
   reviewRecordsLoading: boolean;
+  materialRecords: LearningMaterial[];
+  materialRecordsLoading: boolean;
+  viewedMaterialIds: Set<string>;
+  onMaterialViewed: (materialId: string) => void;
   onDemoReviewChange: (review: WeeklyReview) => void;
   academicConfig: AcademicConfig;
   academicCalendar: AcademicCalendar;
@@ -1964,6 +2157,18 @@ function SectionContent({
           tasks={taskRecords}
           loading={taskRecordsLoading}
           openDetail={openDetail}
+        />
+      );
+    case "materials":
+      return (
+        <MaterialsPage
+          materials={materialRecords}
+          loading={materialRecordsLoading}
+          profile={profile}
+          accounts={managedAccounts}
+          viewedIds={viewedMaterialIds}
+          onViewed={onMaterialViewed}
+          firebaseReady={firebaseReady}
         />
       );
     case "weekly-progress":
@@ -2587,6 +2792,7 @@ function SettingsPage({
   const [demoSeedLoading, setDemoSeedLoading] = useState(false);
   const [demoSeedClearing, setDemoSeedClearing] = useState(false);
   const [demoSeedCounts, setDemoSeedCounts] = useState<DemoSeedCounts | null>(null);
+  const [searchBackfillLoading, setSearchBackfillLoading] = useState(false);
 
   useEffect(() => {
     const syncSettingsRoute = () => {
@@ -2638,6 +2844,23 @@ function SettingsPage({
       toast.error(friendlyFirebaseError(error));
     } finally {
       setDemoSeedClearing(false);
+    }
+  };
+
+  const handleSearchBackfill = async () => {
+    if (searchBackfillLoading) return;
+    setSearchBackfillLoading(true);
+    try {
+      const result = await backfillPortalSearch();
+      toast.success("Índice de búsqueda actualizado", {
+        description: `${result.records} elementos disponibles con sus permisos actuales.`,
+      });
+    } catch (error) {
+      toast.error("No pudimos actualizar el buscador", {
+        description: friendlyFirebaseError(error),
+      });
+    } finally {
+      setSearchBackfillLoading(false);
     }
   };
   const settingsTabs: Array<{
@@ -2879,6 +3102,36 @@ function SettingsPage({
                 calendar={academicCalendar}
                 onSave={saveAcademicCalendarConfiguration}
               />
+              <section className="panel settings-section">
+                <div className="settings-heading">
+                  <span className="settings-icon">
+                    <Search size={20} />
+                  </span>
+                  <div>
+                    <h2>Buscador global</h2>
+                    <p>Sincroniza con Algolia los contenidos que ya existen y conserva sus permisos.</p>
+                  </div>
+                </div>
+                <div className="setting-row">
+                  <div>
+                    <strong>Reconstruir índice seguro</strong>
+                    <span>Úsalo una vez al activar Algolia o después de una migración.</span>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    disabled={!firebaseReady || searchBackfillLoading}
+                    onClick={() => void handleSearchBackfill()}
+                    type="button"
+                  >
+                    {searchBackfillLoading ? (
+                      <LoaderCircle className="spin" size={16} />
+                    ) : (
+                      <Database size={16} />
+                    )}
+                    {searchBackfillLoading ? "Sincronizando…" : "Sincronizar ahora"}
+                  </button>
+                </div>
+              </section>
               <section className="panel settings-section demo-seed-card">
                 <div className="settings-heading">
                   <span className="settings-icon">
@@ -4243,6 +4496,7 @@ function createLabel(section: SectionKey) {
   const labels: Partial<Record<SectionKey, string>> = {
     "weekly-review": "Nuevo repaso",
     tasks: "Nueva tarea",
+    materials: "Nuevo recurso",
     forum: "Nuevo tema",
     users: "Registrar cuenta",
   };

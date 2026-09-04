@@ -43,6 +43,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { toast } from "sonner";
 import {
@@ -67,6 +68,7 @@ import {
   defaultMuralCover,
   defaultMuralEdition,
   defaultMuralGallerySlides,
+  getMuralStory,
   reviewMuralStory,
   reviewerRoleLabel,
   saveMuralEdition,
@@ -208,6 +210,15 @@ type ReaderPage =
   | { kind: "content"; paragraphs: string[]; first: boolean; last: boolean };
 
 type ReaderContentPage = Extract<ReaderPage, { kind: "content" }>;
+type MuralSectionTab = "stories" | "review" | "archive";
+
+function storyFromPath() {
+  if (typeof window === "undefined") return null;
+  const [section, collection, storyId] = window.location.pathname.split("/").filter(Boolean);
+  return section === "wall-newspaper" && collection === "stories" && storyId
+    ? decodeURIComponent(storyId)
+    : null;
+}
 
 function normalizeSearch(value: string) {
   return value
@@ -789,7 +800,7 @@ function MuralEditionEditor({
                 {draft.periodType === "season" && <label>Nombre de la temporada<input value={draft.seasonName} maxLength={muralCoverLimits.seasonName} onChange={(event) => setDraft((current) => ({ ...current, seasonName: event.target.value }))} placeholder="Ej. Navidad, Cuaresma o Semana cultural" /></label>}
                 <label>Grupo responsable<select value={draft.group} onChange={(event) => setDraft((current) => ({ ...current, group: event.target.value }))}>{groups.map((item) => <option key={item}>{item}</option>)}</select></label>
                 <label>Maestra encargada<select value={draft.teacherId} onChange={(event) => { const teacher = teachers.find((item) => item.uid === event.target.value); setDraft((current) => ({ ...current, teacherId: event.target.value, teacherName: teacher?.name ?? "" })); }}><option value="">Selecciona una maestra</option>{teachers.map((teacher) => <option value={teacher.uid} key={teacher.uid}>{teacher.name}</option>)}</select></label>
-                <div className="mural-assignment-note"><ShieldCheck size={17} /><span><strong>Permisos automáticos</strong>La maestra asignada podrá revisar, solicitar cambios, publicar y diseñar esta portada.</span></div>
+                <div className="mural-assignment-note"><ShieldCheck size={17} /><span><strong>Permisos</strong>El maestro asignado podrá revisar, solicitar cambios, publicar y diseñar esta portada.</span></div>
               </div>
             )}
 
@@ -1421,6 +1432,7 @@ export function WallNewspaperPage({
   const [archiveEdition, setArchiveEdition] = useState<MuralEdition | null>(null);
   const [archiveStories, setArchiveStories] = useState<WallPost[]>([]);
   const [archiveStoriesLoading, setArchiveStoriesLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<MuralSectionTab>("stories");
 
   useEffect(() => {
     if (!firebaseReady || editionLoading || !editionConfigured) return;
@@ -1499,6 +1511,49 @@ export function WallNewspaperPage({
   const reviewQueue = firebaseReady
     ? workspace.reviewQueue.filter((story) => story.editionId === edition.id)
     : state.wallPosts.filter((story) => story.status === "submitted" && (!story.editionId || story.editionId === edition.id));
+
+  useEffect(() => {
+    const syncStoryFromRoute = () => {
+      const storyId = storyFromPath();
+      if (!storyId) {
+        setReaderPost(null);
+        return;
+      }
+      const candidate = [
+        ...workspace.published,
+        ...workspace.mine,
+        ...workspace.reviewQueue,
+        ...archiveStories,
+        ...state.wallPosts,
+      ].find((story) => story.id === storyId);
+      if (candidate) {
+        setReaderPost(candidate);
+      } else if (firebaseReady) {
+        void getMuralStory(profile, storyId)
+          .then((story) => {
+            if (story && storyFromPath() === story.id) setReaderPost(story);
+          })
+          .catch(() => undefined);
+      }
+    };
+    syncStoryFromRoute();
+    window.addEventListener("popstate", syncStoryFromRoute);
+    return () => window.removeEventListener("popstate", syncStoryFromRoute);
+  }, [archiveStories, firebaseReady, profile, state.wallPosts, workspace.mine, workspace.published, workspace.reviewQueue]);
+
+  function openStory(story: WallPost) {
+    window.history.pushState(
+      {},
+      "",
+      `/wall-newspaper/stories/${encodeURIComponent(story.id)}`,
+    );
+    setReaderPost(story);
+  }
+
+  function closeStory() {
+    window.history.pushState({}, "", "/wall-newspaper");
+    setReaderPost(null);
+  }
   const featured = publishedStories[0];
   const storyGroups = useMemo(
     () => [...new Set(publishedStories.map((story) => story.group).filter(Boolean))].sort((first, second) => first.localeCompare(second, "es")),
@@ -1568,6 +1623,23 @@ export function WallNewspaperPage({
   const archivePageCount = Math.max(1, Math.ceil(filteredArchivedEditions.length / ARCHIVE_PER_PAGE));
   const safeArchivePage = Math.min(archivePage, archivePageCount);
   const pageArchivedEditions = filteredArchivedEditions.slice((safeArchivePage - 1) * ARCHIVE_PER_PAGE, safeArchivePage * ARCHIVE_PER_PAGE);
+  const visibleTab = profile.role === "student" && activeTab === "review" ? "stories" : activeTab;
+  const handleTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, currentTab: MuralSectionTab) => {
+    const tabs: MuralSectionTab[] = profile.role === "student"
+      ? ["stories", "archive"]
+      : ["stories", "review", "archive"];
+    const currentIndex = tabs.indexOf(currentTab);
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    setActiveTab(nextTab);
+    window.requestAnimationFrame(() => document.getElementById(`mural-tab-${nextTab}`)?.focus());
+  };
 
   const openEditionEditor = () => {
     if (!editionConfigured && profile.role === "director" && activeTeachers.length) {
@@ -1819,21 +1891,42 @@ export function WallNewspaperPage({
         </div>
         <div className="mural-edition-team"><span>Grupo responsable<strong>{edition.group}</strong></span><i /><span>Edición y revisión<strong>{edition.teacherName}</strong></span></div>
         <div className="mural-edition-actions">
-          <button className="secondary-button" onClick={() => openImmersive(edition)}><Maximize2 size={15} />Periódico Mural</button>
+          <button className="mural-open-button" onClick={() => openImmersive(edition)} aria-label="Abrir el Periódico Mural en pantalla completa">
+            <span className="mural-open-button-icon"><Maximize2 size={18} /></span>
+            <span><strong>Periódico Mural</strong><small>Ver Exposición</small></span>
+            <ChevronRight size={17} />
+          </button>
           {canManageEdition && <button className="primary-button" onClick={openEditionEditor}><Brush size={15} />{profile.role === "director" ? "Configurar edición" : "Diseñar portada"}</button>}
         </div>
         {profile.role === "director" && !editionConfigured && <span className="mural-edition-alert"><AlertCircle size={15} />Falta publicar la primera asignación</span>}
       </section>
 
-      <MuralEditionCover
-        edition={edition}
-        featured={featured}
-        onExplore={() => document.getElementById("mural-stories")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-        onOpenStory={setReaderPost}
-      />
+      <nav className={`mural-section-tabs panel ${profile.role === "student" ? "is-student" : "is-staff"}`} role="tablist" aria-label="Secciones del Periódico mural">
+        <button type="button" role="tab" id="mural-tab-stories" aria-selected={visibleTab === "stories"} aria-controls="mural-panel-stories" tabIndex={visibleTab === "stories" ? 0 : -1} className={visibleTab === "stories" ? "active" : ""} onClick={() => setActiveTab("stories")} onKeyDown={(event) => handleTabKeyDown(event, "stories")}>
+          <span><Newspaper size={18} /><span><strong>Historias</strong><small>Edición vigente</small></span></span>
+          <em>{publishedStories.length}</em>
+        </button>
+        {profile.role !== "student" && <button type="button" role="tab" id="mural-tab-review" aria-selected={visibleTab === "review"} aria-controls="mural-panel-review" tabIndex={visibleTab === "review" ? 0 : -1} className={visibleTab === "review" ? "active" : ""} onClick={() => setActiveTab("review")} onKeyDown={(event) => handleTabKeyDown(event, "review")}>
+          <span><ListChecks size={18} /><span><strong>Historias por revisar</strong><small>Mesa editorial</small></span></span>
+          <em className={reviewQueue.length ? "has-items" : ""}>{reviewQueue.length}</em>
+        </button>}
+        <button type="button" role="tab" id="mural-tab-archive" aria-selected={visibleTab === "archive"} aria-controls="mural-panel-archive" tabIndex={visibleTab === "archive" ? 0 : -1} className={visibleTab === "archive" ? "active" : ""} onClick={() => setActiveTab("archive")} onKeyDown={(event) => handleTabKeyDown(event, "archive")}>
+          <span><CalendarDays size={18} /><span><strong>Periódicos anteriores</strong><small>Archivo por periodo</small></span></span>
+          <em>{archivedEditions.length}</em>
+        </button>
+      </nav>
 
-      {canReviewEdition && (
-        <section className="mural-editorial-desk panel">
+      {visibleTab === "stories" && <div className="mural-tab-panel" role="tabpanel" id="mural-panel-stories" aria-labelledby="mural-tab-stories">
+        <MuralEditionCover
+          edition={edition}
+          featured={featured}
+          onExplore={() => document.getElementById("mural-stories")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+          onOpenStory={openStory}
+        />
+      </div>}
+
+      {visibleTab === "review" && canReviewEdition && (
+        <section className="mural-editorial-desk panel mural-tab-panel" role="tabpanel" id="mural-panel-review" aria-labelledby="mural-tab-review">
           <div className="mural-desk-heading">
             <div><span className="eyebrow">MESA EDITORIAL · {profile.role === "director" ? "DIRECCIÓN" : edition.group}</span><h2>Historias por revisar</h2><p>{profile.role === "director" ? `Edición a cargo de ${edition.teacherName}.` : "Tú administras las revisiones y publicaciones de esta edición."} Lee cada propuesta completa antes de decidir.</p></div>
             <span className="mural-pending-count">{reviewQueue.length}<small>pendientes</small></span>
@@ -1845,7 +1938,7 @@ export function WallNewspaperPage({
                 <div className="mural-review-copy">
                   <div><span>{story.section} · versión {story.version ?? 1}{story.editionLabel ? ` · ${story.editionLabel}` : ""}</span><h3>{story.title}</h3><p>Por {story.author} · {story.group} · {story.readingTime}</p></div>
                   <p>{story.lead ?? story.excerpt}</p>
-                  <button className="text-link" onClick={() => setReaderPost(story)}>Leer historia completa <ArrowRight size={14} /></button>
+                  <button className="text-link" onClick={() => openStory(story)}>Leer historia completa <ArrowRight size={14} /></button>
                   <div className="mural-review-actions">
                     <button className="secondary-button" disabled={reviewBusy === story.id} onClick={() => setChangesStory(story)}><Pencil size={14} />Solicitar correcciones</button>
                     <button className="primary-button" disabled={reviewBusy === story.id} onClick={() => void reviewStory(story, "approve")}>
@@ -1859,11 +1952,11 @@ export function WallNewspaperPage({
         </section>
       )}
 
-      {profile.role === "teacher" && !canReviewEdition && (
-        <section className="mural-not-assigned panel"><ShieldCheck size={22} /><div><span className="eyebrow">EQUIPO EDITORIAL</span><strong>{edition.teacherName} administra esta edición</strong><p>Dirección asignó {edition.periodLabel} al grupo {edition.group}. La bandeja de revisión sólo está disponible para su maestra responsable.</p></div></section>
+      {visibleTab === "review" && profile.role === "teacher" && !canReviewEdition && (
+        <section className="mural-not-assigned panel mural-tab-panel" role="tabpanel" id="mural-panel-review" aria-labelledby="mural-tab-review"><ShieldCheck size={22} /><div><span className="eyebrow">EQUIPO EDITORIAL</span><strong>{edition.teacherName} administra esta edición</strong><p>Dirección asignó {edition.periodLabel} al grupo {edition.group}. La bandeja de revisión sólo está disponible para su maestra responsable.</p></div></section>
       )}
 
-      {profile.role === "student" && mine.length > 0 && (
+      {visibleTab === "stories" && profile.role === "student" && mine.length > 0 && (
         <section className="mural-my-stories panel">
           <div className="mural-section-heading"><div><span className="eyebrow">MIS HISTORIAS · {edition.periodLabel}</span><h2>Seguimiento editorial</h2></div>{studentCanSubmit && <button className="secondary-button" onClick={() => { setEditingStory(null); setSubmissionOpen(true); }}><Pencil size={15} />Nueva historia</button>}</div>
           <div className="mural-submission-list">{mine.map((story) => (
@@ -1876,15 +1969,15 @@ export function WallNewspaperPage({
         </section>
       )}
 
-      <section id="mural-stories" className="mural-discovery panel" aria-label="Buscar y filtrar historias">
+      {visibleTab === "stories" && <section id="mural-stories" className="mural-discovery panel mural-tab-panel" aria-label="Buscar y filtrar historias">
         <label className="mural-search"><Search size={18} /><input type="search" value={queryText} onChange={(event) => { setQueryText(event.target.value); setPage(1); }} placeholder="Buscar por título, autor o palabra…" aria-label="Buscar historias" />{queryText && <button type="button" onClick={() => { setQueryText(""); setPage(1); }} aria-label="Borrar búsqueda"><X size={14} /></button>}</label>
         <label className="mural-filter"><span>Categoría</span><select value={category} onChange={(event) => { setCategory(event.target.value); setPage(1); }}><option value="all">Todas</option>{muralCategories.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></label>
         <label className="mural-filter"><span>Grupo</span><select value={group} onChange={(event) => { setGroup(event.target.value); setPage(1); }}><option value="all">Todos</option>{storyGroups.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></label>
         <button type="button" className={`mural-favorites ${favoritesOnly ? "active" : ""}`} aria-pressed={favoritesOnly} title="Mostrar historias con me gusta, de mayor a menor" onClick={() => { setFavoritesOnly((active) => !active); setPage(1); }}><Heart size={16} fill={favoritesOnly ? "currentColor" : "none"} />Favoritas</button>
-      </section>
+      </section>}
 
-      <div className="mural-results-meta"><span><strong>{filteredStories.length}</strong> {filteredStories.length === 1 ? "historia" : "historias"}{favoritesOnly ? " · de más a menos me gusta" : ""}</span>{hasFilters && <button onClick={clearFilters}><X size={13} />Limpiar filtros</button>}</div>
-      {pageStories.length ? (
+      {visibleTab === "stories" && <div className="mural-results-meta"><span><strong>{filteredStories.length}</strong> {filteredStories.length === 1 ? "historia" : "historias"}{favoritesOnly ? " · de más a menos me gusta" : ""}</span>{hasFilters && <button onClick={clearFilters}><X size={13} />Limpiar filtros</button>}</div>}
+      {visibleTab === "stories" && (pageStories.length ? (
         <motion.section className="wall-grid" layout>
           <AnimatePresence mode="popLayout">{pageStories.map((story, index) => (
             <motion.article
@@ -1893,11 +1986,11 @@ export function WallNewspaperPage({
               role="button"
               tabIndex={0}
               aria-label={`Leer ${story.title}`}
-              onClick={() => setReaderPost(story)}
+              onClick={() => openStory(story)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  setReaderPost(story);
+                  openStory(story);
                 }
               }}
               layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: Math.min(index, 5) * 0.035 }}
@@ -1907,23 +2000,23 @@ export function WallNewspaperPage({
                 <div className="wall-byline"><span>{story.author} · {story.group}</span><span>{storyDate(story.publishedAt)}</span></div>
                 <h3>{story.title}</h3><p>{story.excerpt}</p>
                 {story.approvedByName && <small className="mural-approved"><ShieldCheck size={12} />Aprobó {story.approvedByName} · {reviewerRoleLabel(story.approvedByRole)}</small>}
-                <div className="wall-actions"><button className="text-link" onClick={(event) => { event.stopPropagation(); setReaderPost(story); }}>Leer <ArrowRight size={15} /></button><button className={`favorite-button ${(story.likedByCurrentUser ?? story.favorite) ? "active" : ""}`} aria-label={(story.likedByCurrentUser ?? story.favorite) ? `Quitar me gusta. ${story.likeCount ?? 0} en total` : `Dar me gusta. ${story.likeCount ?? 0} en total`} aria-pressed={story.likedByCurrentUser ?? story.favorite} disabled={likeBusy === story.id} onClick={(event) => { event.stopPropagation(); void toggleFavorite(story.id); }}>{likeBusy === story.id ? <LoaderCircle className="spin" size={17} /> : <Heart size={18} fill={(story.likedByCurrentUser ?? story.favorite) ? "currentColor" : "none"} />}<span>{story.likeCount ?? 0}</span></button></div>
+                <div className="wall-actions"><button className="text-link" onClick={(event) => { event.stopPropagation(); openStory(story); }}>Leer <ArrowRight size={15} /></button><button className={`favorite-button ${(story.likedByCurrentUser ?? story.favorite) ? "active" : ""}`} aria-label={(story.likedByCurrentUser ?? story.favorite) ? `Quitar me gusta. ${story.likeCount ?? 0} en total` : `Dar me gusta. ${story.likeCount ?? 0} en total`} aria-pressed={story.likedByCurrentUser ?? story.favorite} disabled={likeBusy === story.id} onClick={(event) => { event.stopPropagation(); void toggleFavorite(story.id); }}>{likeBusy === story.id ? <LoaderCircle className="spin" size={17} /> : <Heart size={18} fill={(story.likedByCurrentUser ?? story.favorite) ? "currentColor" : "none"} />}<span>{story.likeCount ?? 0}</span></button></div>
               </div>
             </motion.article>
           ))}</AnimatePresence>
         </motion.section>
       ) : (
         <section className="mural-empty panel"><Search size={24} /><strong>No encontramos historias</strong><p>Prueba otra palabra o cambia los filtros.</p><button className="secondary-button" onClick={clearFilters}>Ver todo el mural</button></section>
-      )}
+      ))}
 
-      {filteredStories.length > STORIES_PER_PAGE && (
+      {visibleTab === "stories" && filteredStories.length > STORIES_PER_PAGE && (
         <nav className="mural-pagination" aria-label="Paginación de historias">
           <span>Mostrando {(safePage - 1) * STORIES_PER_PAGE + 1}–{Math.min(safePage * STORIES_PER_PAGE, filteredStories.length)} de {filteredStories.length}</span>
           <div><button className="secondary-button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={safePage === 1}><ChevronLeft size={15} />Anterior</button><strong>Página {safePage} de {pageCount}</strong><button className="secondary-button" onClick={() => setPage((current) => Math.min(pageCount, current + 1))} disabled={safePage === pageCount}>Siguiente<ChevronRight size={15} /></button></div>
         </nav>
       )}
 
-      <section className="mural-archive panel" aria-labelledby="mural-archive-title">
+      {visibleTab === "archive" && <section className="mural-archive panel mural-tab-panel" role="tabpanel" id="mural-panel-archive" aria-labelledby="mural-tab-archive">
         <div className="mural-archive-heading">
           <div><span className="eyebrow">HEMEROTECA CEHF</span><h2 id="mural-archive-title">Periódicos murales anteriores</h2><p>Consulta la portada, la exposición y las historias de cada grupo sin mezclar ediciones.</p></div>
           <span className="mural-archive-count"><Newspaper size={17} />{filteredArchivedEditions.length} {filteredArchivedEditions.length === 1 ? "edición" : "ediciones"}</span>
@@ -1942,19 +2035,19 @@ export function WallNewspaperPage({
           ))}</div>
         ) : <div className="mural-archive-empty"><Newspaper size={23} /><strong>{archivedEditions.length ? "No encontramos esa edición" : "Aún no hay ediciones anteriores"}</strong><span>{archivedEditions.length ? "Prueba otro periodo, grupo o palabra." : "Cuando Dirección publique un nuevo periodo, el actual aparecerá aquí."}</span></div>}
         {filteredArchivedEditions.length > ARCHIVE_PER_PAGE && <nav className="mural-pagination mural-archive-pagination" aria-label="Paginación de ediciones anteriores"><span>Mostrando {(safeArchivePage - 1) * ARCHIVE_PER_PAGE + 1}–{Math.min(safeArchivePage * ARCHIVE_PER_PAGE, filteredArchivedEditions.length)} de {filteredArchivedEditions.length}</span><div><button className="secondary-button" onClick={() => setArchivePage((current) => Math.max(1, current - 1))} disabled={safeArchivePage === 1}><ChevronLeft size={15} />Anterior</button><strong>Página {safeArchivePage} de {archivePageCount}</strong><button className="secondary-button" onClick={() => setArchivePage((current) => Math.min(archivePageCount, current + 1))} disabled={safeArchivePage === archivePageCount}>Siguiente<ChevronRight size={15} /></button></div></nav>}
-      </section>
+      </section>}
 
-      {studentCanSubmit && (
+      {visibleTab === "stories" && studentCanSubmit && (
         <div className="proposal-note"><Sparkles size={21} /><div><strong>¿Tienes una historia para compartir?</strong><p>Envíala al equipo editorial. {edition.teacherName} o Dirección la revisará antes de publicarla.</p></div><button className="secondary-button" onClick={() => { setEditingStory(null); setSubmissionOpen(true); }}>Proponer historia</button></div>
       )}
 
-      {profile.role === "student" && !studentCanSubmit && (
+      {visibleTab === "stories" && profile.role === "student" && !studentCanSubmit && (
         <div className="proposal-note mural-group-notice"><ShieldCheck size={21} /><div><strong>Esta edición corresponde a {edition.group}</strong><p>Podrás enviar historias cuando tu grupo esté a cargo. Así cada periodo conserva su propio contenido.</p></div></div>
       )}
 
       <AnimatePresence>{immersiveEdition && <MuralImmersiveView edition={immersiveEdition} onClose={closeImmersive} />}</AnimatePresence>
-      <AnimatePresence>{archiveEdition && <MuralArchiveViewer edition={archiveEdition} stories={archiveStories} loading={archiveStoriesLoading} onClose={() => setArchiveEdition(null)} onOpenStory={setReaderPost} onOpenImmersive={() => openImmersive(archiveEdition)} />}</AnimatePresence>
-      <AnimatePresence>{readerPost && <WallStoryReader post={readerPost} onClose={() => setReaderPost(null)} onFavorite={() => void toggleFavorite(readerPost.id)} favoriteBusy={likeBusy === readerPost.id} favoriteEnabled={!readerPost.editionId || readerPost.editionId === edition.id} />}</AnimatePresence>
+      <AnimatePresence>{archiveEdition && <MuralArchiveViewer edition={archiveEdition} stories={archiveStories} loading={archiveStoriesLoading} onClose={() => setArchiveEdition(null)} onOpenStory={openStory} onOpenImmersive={() => openImmersive(archiveEdition)} />}</AnimatePresence>
+      <AnimatePresence>{readerPost && <WallStoryReader post={readerPost} onClose={closeStory} onFavorite={() => void toggleFavorite(readerPost.id)} favoriteBusy={likeBusy === readerPost.id} favoriteEnabled={!readerPost.editionId || readerPost.editionId === edition.id} />}</AnimatePresence>
       <AnimatePresence>{submissionOpen && <MuralSubmissionModal story={editingStory} busy={saving} onClose={() => { if (!saving) { setSubmissionOpen(false); setEditingStory(null); } }} onSubmit={submitStory} />}</AnimatePresence>
       <AnimatePresence>{changesStory && <ReviewRequestModal story={changesStory} busy={reviewBusy === changesStory.id} onClose={() => { if (!reviewBusy) setChangesStory(null); }} onSubmit={(note) => reviewStory(changesStory, "request_changes", note)} />}</AnimatePresence>
       <AnimatePresence>{editionEditorOpen && <MuralEditionEditor edition={edition} profile={profile} accounts={accounts} groups={editionGroups} busy={editionSaving} onClose={() => { if (!editionSaving) setEditionEditorOpen(false); }} onSave={saveEdition} />}</AnimatePresence>

@@ -58,6 +58,14 @@ import type {
 
 const REVIEWS_PAGE_SIZE = 6;
 
+function reviewFromPath() {
+  if (typeof window === "undefined") return null;
+  const [section, reviewId] = window.location.pathname.split("/").filter(Boolean);
+  return section === "weekly-review" && reviewId
+    ? decodeURIComponent(reviewId)
+    : null;
+}
+
 const questionTypeMeta: Record<
   WeeklyReviewQuestionType,
   { label: string; detail: string }
@@ -129,7 +137,13 @@ export function ReviewsPage({
   const [subject, setSubject] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(reviewFromPath);
+
+  useEffect(() => {
+    const onPopState = () => setSelectedId(reviewFromPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const weeks = useMemo(() => {
     const fromReviews = new Map(reviews.map((item) => [item.weekId, item.weekLabel]));
@@ -180,6 +194,23 @@ export function ReviewsPage({
   );
   const totalAudience = reviews.reduce((sum, review) => sum + review.audienceCount, 0);
   const selected = reviews.find((review) => review.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (selectedId && !loading && !selected) {
+      window.history.replaceState({}, "", "/weekly-review");
+      queueMicrotask(() => setSelectedId(null));
+    }
+  }, [loading, selected, selectedId]);
+
+  function openReview(reviewId: string) {
+    window.history.pushState({}, "", `/weekly-review/${encodeURIComponent(reviewId)}`);
+    setSelectedId(reviewId);
+  }
+
+  function closeReview() {
+    window.history.pushState({}, "", "/weekly-review");
+    setSelectedId(null);
+  }
 
   return (
     <div className="reviews-workspace">
@@ -398,7 +429,7 @@ export function ReviewsPage({
                         ? `${attempt?.answeredCount ?? 0} respuestas guardadas`
                         : `${review.completedCount} de ${review.audienceCount} alumnos`}
                   </span>
-                  <button className="secondary-button" onClick={() => setSelectedId(review.id)}>
+                  <button className="secondary-button" onClick={() => openReview(review.id)}>
                     {profile.role === "student"
                       ? review.status === "closed" && attempt?.status !== "completed"
                         ? "Ver estado"
@@ -465,7 +496,7 @@ export function ReviewsPage({
           <StudentReviewModal
             review={selected}
             firebaseReady={firebaseReady}
-            onClose={() => setSelectedId(null)}
+            onClose={closeReview}
             onDemoChange={onDemoReviewChange}
           />
         )}
@@ -473,7 +504,7 @@ export function ReviewsPage({
           <StaffReviewModal
             review={selected}
             accounts={accounts}
-            onClose={() => setSelectedId(null)}
+            onClose={closeReview}
             onDemoChange={onDemoReviewChange}
           />
         )}

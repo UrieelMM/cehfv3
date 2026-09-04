@@ -132,7 +132,7 @@ function ReportEditor({
 }
 
 function PublishedReportCard({ report, grade }: { report: StudentWeeklyReport; grade?: WeeklyGradeRecord }) {
-  return <article className="published-report-card">
+  return <article className="published-report-card" id={`report-${report.id}`}>
     <header><div><span className={`report-status is-${report.status}`}>{report.status === "published" ? "Publicado" : "Borrador"}</span><h3>{report.studentName}</h3><p>{report.subject} · {report.weekLabel} · {report.termLabel}</p></div><FileText size={25} /></header>
     <WeeklyEvidence grade={grade} />
     <div className="published-report-fields">
@@ -213,6 +213,29 @@ export function AcademicReportsPage({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    const openReportFromRoute = () => {
+      const [section, reportId] = window.location.pathname.split("/").filter(Boolean);
+      if (section !== "reports" || !reportId) return;
+      const report = reports.find((candidate) => candidate.id === decodeURIComponent(reportId));
+      if (!report) return;
+      setWeekId(report.weekId);
+      setSubject(report.subject);
+      setStatus("all");
+      setSearch(profile.role === "teacher" ? report.studentName : "");
+      setPage(1);
+      window.setTimeout(() => {
+        document.getElementById(`report-${report.id}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }, 120);
+    };
+    openReportFromRoute();
+    window.addEventListener("popstate", openReportFromRoute);
+    return () => window.removeEventListener("popstate", openReportFromRoute);
+  }, [profile.role, reports]);
 
   useEffect(() => {
     if (!firebaseReady) {
@@ -327,7 +350,7 @@ export function AcademicReportsPage({
       <div className="report-editor-list">{!pagedStudents.length ? <div className="report-empty"><Search size={27} /><h3>No encontramos alumnos</h3><p>Revisa la materia seleccionada o ajusta la búsqueda.</p></div> : pagedStudents.map((student) => {
         const grade = weekSubjectGrades.find((item) => item.studentId === student.uid && item.teacherId === profile.uid);
         const report = reports.find((item) => item.weekId === week?.id && item.subject === activeSubject && item.studentId === student.uid && item.teacherId === profile.uid);
-        return <ReportEditor key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`} student={student} grade={grade} report={report} onSave={persist} />;
+        return <div id={report ? `report-${report.id}` : undefined} key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`}><ReportEditor student={student} grade={grade} report={report} onSave={persist} /></div>;
       })}</div>
     ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} />)}</div>}
     <Pagination page={page} total={total} onChange={setPage} />

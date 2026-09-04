@@ -305,6 +305,20 @@ export function ForumPage({
   }, [topics]);
 
   useEffect(() => {
+    const postId = new URLSearchParams(window.location.search).get("post");
+    if (!postId || !selectedTopic?.replies.some((replyItem) => replyItem.id === postId)) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      document.getElementById(`forum-post-${postId}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [selectedTopic]);
+
+  useEffect(() => {
     if (!firebaseReady) return;
     return watchForumFollowing(profile, setFollowing, (error) =>
       toast.error(friendlyFirebaseError(error)),
@@ -1696,6 +1710,7 @@ function ForumReplyCard({
   return (
     <article
       className={`forum-reply-card ${item.teacher ? "is-teacher" : ""} ${item.markedAnswer ? "is-marked" : ""} ${item.status === "hidden" ? "is-hidden" : ""}`}
+      id={`forum-post-${item.id}`}
     >
       <div className="forum-reply-main">
         <span className="avatar">{item.initials}</span>

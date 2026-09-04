@@ -255,8 +255,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(taskUiSource, /workingDayCountForWeek/);
   assert.match(taskUiSource, /ACADEMIC_WEEKS_PAGE_SIZE = 5/);
   assert.match(taskUiSource, /academic-week-pagination/);
-  assert.doesNotMatch(appSource, /key: "weekly-materials", label: "Materiales"/);
-  assert.match(appSource, /name === "weekly-materials"\) return "tasks"/);
+  assert.match(appSource, /key: "materials", label: "Recursos"/);
+  assert.match(appSource, /name === "weekly-materials"\) return "materials"/);
   assert.match(taskUiSource, /TaskResourceViewer/);
   assert.match(taskUiSource, /PDF, Office, imagen, audio o vídeo/);
   assert.match(taskResourceViewerSource, /Registro de aperturas/);
@@ -499,6 +499,12 @@ test("keeps mural stories, likes and archives scoped to their edition", async ()
   ]);
 
   assert.match(muralSource, /Periódicos murales anteriores/);
+  assert.match(muralSource, /mural-section-tabs/);
+  assert.match(muralSource, /mural-open-button/);
+  assert.match(muralSource, /Ver Exposición/);
+  assert.match(muralSource, /Historias por revisar/);
+  assert.match(muralSource, /profile\.role !== "student"/);
+  assert.match(muralSource, /handleTabKeyDown/);
   assert.match(muralSource, /role="button"/);
   assert.match(muralSource, /second\.likeCount/);
   assert.match(muralSource, /studentCanSubmit/);
@@ -511,5 +517,34 @@ test("keeps mural stories, likes and archives scoped to their edition", async ()
   assert.match(firestoreRules, /match \/wallPostLikes\/\{likeId\}/);
   assert.match(indexes, /"collectionGroup": "wallPostLikes"/);
   assert.match(css, /\.mural-archive-grid/);
+  assert.match(css, /\.mural-section-tabs\.is-student/);
+  assert.match(css, /\.mural-open-button/);
+  assert.match(css, /@keyframes mural-open-pulse/);
+  assert.match(css, /--mural-open-background:/);
+  assert.match(css, /\.mural-open-button[\s\S]*background: var\(--mural-open-background\)/);
+  assert.match(css, /:root\[data-theme="dark"\][\s\S]*--mural-open-background:/);
+  assert.match(css, /:root\[data-theme="system"\][\s\S]*--mural-open-background:/);
   assert.match(css, /\.wall-card\[role="button"\]:focus-visible/);
+});
+
+test("uses the shared editorial gradient across selected tab menus", async () => {
+  const [globalCss, gradesCss, academicGradesCss, workshopsCss] = await Promise.all([
+    readFile(new URL("app/globals.css", projectRoot), "utf8"),
+    readFile(new URL("app/grades.css", projectRoot), "utf8"),
+    readFile(new URL("app/academic-grades.css", projectRoot), "utf8"),
+    readFile(new URL("app/workshops.css", projectRoot), "utf8"),
+  ]);
+
+  assert.match(globalCss, /--tab-active-gradient:/);
+  assert.match(globalCss, /--tab-active-stripe:/);
+  assert.match(globalCss, /\.settings-tabs > button\.active::after[\s\S]*var\(--tab-active-stripe\)/);
+  assert.match(globalCss, /\.grade-view-tabs button\.active::after/);
+  assert.match(globalCss, /\.academic-level-tabs button\.active::after/);
+  assert.match(globalCss, /\.workshop-access-tabs button\.active::after/);
+  assert.match(globalCss, /\.settings-tabs > button\.active[\s\S]*var\(--tab-active-gradient\)/);
+  assert.match(globalCss, /\.mural-studio-tabs button\.active[\s\S]*var\(--tab-active-gradient\)/);
+  assert.match(gradesCss, /\.grade-view-tabs button\.active[\s\S]*var\(--tab-active-gradient\)/);
+  assert.match(gradesCss, /\.grade-week-selector button\.active[\s\S]*var\(--tab-active-gradient\)/);
+  assert.match(academicGradesCss, /\.academic-level-tabs button\.active[\s\S]*var\(--tab-active-gradient\)/);
+  assert.match(workshopsCss, /\.workshop-access-tabs button\.active[^\n]*var\(--tab-active-gradient\)/);
 });

@@ -79,10 +79,10 @@
 }
 
 .grade-view-tabs button.active {
-  border-color: var(--border);
-  background: var(--surface);
+  border-color: var(--tab-active-border);
+  background: var(--tab-active-gradient);
   color: var(--violet);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--tab-active-shadow);
 }
 
 .grade-week-selector {
@@ -103,7 +103,7 @@
   justify-content: center;
   gap: 6px;
   padding: 6px 8px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
   color: var(--muted);
@@ -121,9 +121,9 @@
 }
 
 .grade-week-selector button.active {
-  background: var(--surface);
+  background: var(--tab-active-gradient);
   color: var(--violet);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--tab-active-shadow);
 }
 
 .grade-week-selector button span {
@@ -304,10 +304,10 @@
 }
 
 .teacher-subject-selector button.active {
-  border-color: var(--violet);
-  background: var(--violet);
-  color: var(--on-primary);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--violet) 20%, transparent);
+  border-color: var(--tab-active-border);
+  background: var(--tab-active-gradient);
+  color: var(--violet);
+  box-shadow: var(--tab-active-shadow);
 }
 
 .teacher-capture-context {

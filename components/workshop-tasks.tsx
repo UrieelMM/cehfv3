@@ -102,6 +102,35 @@ export function WorkshopTasks({
     role === "director" || workshop.managerIds.includes(profile.uid);
 
   useEffect(() => {
+    const syncTaskFromRoute = () => {
+      const taskId = new URLSearchParams(window.location.search).get("task");
+      if (!taskId) {
+        setSelectedTask(null);
+        return;
+      }
+      const task = tasks.find((candidate) => candidate.id === taskId);
+      if (task) setSelectedTask(task);
+    };
+    syncTaskFromRoute();
+    window.addEventListener("popstate", syncTaskFromRoute);
+    return () => window.removeEventListener("popstate", syncTaskFromRoute);
+  }, [tasks]);
+
+  function openTask(task: WorkshopTask) {
+    window.history.pushState(
+      {},
+      "",
+      `/workshops/${encodeURIComponent(workshop.id)}?task=${encodeURIComponent(task.id)}`,
+    );
+    setSelectedTask(task);
+  }
+
+  function closeTask() {
+    window.history.pushState({}, "", `/workshops/${encodeURIComponent(workshop.id)}`);
+    setSelectedTask(null);
+  }
+
+  useEffect(() => {
     if (!firebaseReady) {
       queueMicrotask(() => {
         setTasks([]);
@@ -161,7 +190,7 @@ export function WorkshopTasks({
             <button
               className="workshop-task-card"
               key={task.id}
-              onClick={() => setSelectedTask(task)}
+              onClick={() => openTask(task)}
             >
               <span className={`workshop-task-status is-${task.status}`}>
                 {task.status === "draft"
@@ -213,7 +242,7 @@ export function WorkshopTasks({
               accounts={accounts}
               firebaseReady={firebaseReady}
               onStatusChange={changeStatus}
-              onClose={() => setSelectedTask(null)}
+              onClose={closeTask}
             />
           )}
         </AnimatePresence>,

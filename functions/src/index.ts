@@ -46,6 +46,24 @@ import {
 } from "./whatsapp-core.js";
 import { clearDemoData, seedDemoData } from "./demo-seed.js";
 
+export {
+  backfillPortalSearch,
+  getPortalSearchAccess,
+  syncSearchForumPost,
+  syncSearchForumTopic,
+  syncSearchForumTopicPosts,
+  syncSearchMaterial,
+  syncSearchReport,
+  syncSearchReview,
+  syncSearchStory,
+  syncSearchTask,
+  syncSearchWorkshop,
+  syncSearchWorkshopChildren,
+  syncSearchWorkshopResource,
+  syncSearchWorkshopTask,
+  syncSearchWorkspace,
+} from "./search.js";
+
 initializeApp();
 setGlobalOptions({ region: "us-central1", maxInstances: 10 });
 

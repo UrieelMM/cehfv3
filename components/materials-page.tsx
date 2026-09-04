@@ -50,6 +50,14 @@ import type {
 
 const MATERIALS_PAGE_SIZE = 6;
 
+function materialFromPath() {
+  if (typeof window === "undefined") return null;
+  const [section, materialId] = window.location.pathname.split("/").filter(Boolean);
+  return section === "weekly-materials" && materialId
+    ? decodeURIComponent(materialId)
+    : null;
+}
+
 const materialTypeOptions: Array<{
   value: LearningMaterialType;
   label: string;
@@ -140,7 +148,36 @@ export function MaterialsPage({
   const [type, setType] = useState<LearningMaterialType | "all">("all");
   const [required, setRequired] = useState("all");
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<LearningMaterial | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(materialFromPath);
+  const selected = materials.find((material) => material.id === selectedId) ?? null;
+
+  useEffect(() => {
+    const onPopState = () => setSelectedId(materialFromPath());
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (selectedId && !loading && !selected) {
+      window.history.replaceState({}, "", "/weekly-materials");
+      queueMicrotask(() => setSelectedId(null));
+    }
+  }, [loading, selected, selectedId]);
+
+  function openMaterial(material: LearningMaterial) {
+    window.history.pushState(
+      {},
+      "",
+      `/weekly-materials/${encodeURIComponent(material.id)}`,
+    );
+    setSelectedId(material.id);
+    if (profile.role === "student") onViewed(material.id);
+  }
+
+  function closeMaterial() {
+    window.history.pushState({}, "", "/weekly-materials");
+    setSelectedId(null);
+  }
 
   const weeks = useMemo(
     () => [...new Map(materials.map((item) => [item.weekId, item.weekLabel])).entries()],
@@ -260,8 +297,7 @@ export function MaterialsPage({
                 <footer>
                   <span>Por {material.createdByName} · {formatDate(material.createdAt)}</span>
                   <button className={profile.role === "student" && !viewed ? "primary-button" : "secondary-button"} onClick={() => {
-                    setSelected(material);
-                    if (profile.role === "student") onViewed(material.id);
+                    openMaterial(material);
                   }}>
                     {profile.role === "student" ? (viewed ? "Abrir de nuevo" : "Abrir material") : "Ver material"}
                     <ArrowRight size={15} />
@@ -295,7 +331,7 @@ export function MaterialsPage({
             profile={profile}
             accounts={accounts}
             firebaseReady={firebaseReady}
-            onClose={() => setSelected(null)}
+            onClose={closeMaterial}
           />
         )}
       </AnimatePresence>

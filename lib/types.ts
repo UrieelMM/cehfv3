@@ -1214,11 +1214,39 @@ export type PortalState = {
   updatedAt?: string;
 };
 
+export type PortalSearchEntityType =
+  | "task"
+  | "review"
+  | "material"
+  | "story"
+  | "forum_topic"
+  | "forum_post"
+  | "workspace"
+  | "workshop"
+  | "workshop_resource"
+  | "workshop_task"
+  | "report";
+
+export type PortalSearchHit = {
+  objectID: string;
+  entityType: PortalSearchEntityType;
+  entityId: string;
+  parentId?: string;
+  title: string;
+  excerpt: string;
+  subject: string;
+  context: string;
+  status: string;
+  route: string;
+  updatedAt: number;
+};
+
 export type SectionKey =
   | "dashboard"
   | "my-week"
   | "weekly-review"
   | "tasks"
+  | "materials"
   | "weekly-progress"
   | "reports"
   | "wall-newspaper"

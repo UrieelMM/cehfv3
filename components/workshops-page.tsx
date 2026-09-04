@@ -72,6 +72,11 @@ function workshopFromPath() {
     : null;
 }
 
+function workshopResourceFromRoute() {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("resource");
+}
+
 function resourceIcon(resource: WorkshopResource) {
   if (resource.contentType.startsWith("image/")) return FileImage;
   if (resource.contentType.startsWith("audio/")) return Headphones;
@@ -197,6 +202,16 @@ export function WorkshopsPage({
   }, [baseWorkshops, firebaseReady, profile.institutionId]);
 
   useEffect(() => {
+    const resourceId = workshopResourceFromRoute();
+    if (!selected || !resourceId || previewResource?.id === resourceId) return;
+    const resource = selected.resources.find((candidate) => candidate.id === resourceId);
+    if (resource) void openResource(resource, false);
+  // openResource changes with the selected workshop; these values are the
+  // complete synchronization boundary for a deep-linked resource.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewResource?.id, selected]);
+
+  useEffect(() => {
     if (selectedId && !loading && !workshops.some((item) => item.id === selectedId)) {
       window.history.replaceState({}, "", "/workshops");
       queueMicrotask(() => setSelectedId(null));
@@ -235,12 +250,19 @@ export function WorkshopsPage({
     await deleteWorkshopResource(resource);
   }
 
-  async function openResource(resource: WorkshopResource) {
+  async function openResource(resource: WorkshopResource, syncRoute = true) {
     if (!firebaseReady) {
       toast.error("Inicia sesión para abrir este recurso.");
       return;
     }
     const requestId = ++previewRequest.current;
+    if (syncRoute) {
+      window.history.pushState(
+        {},
+        "",
+        `/workshops/${encodeURIComponent(resource.workshopId)}?resource=${encodeURIComponent(resource.id)}`,
+      );
+    }
     setPreviewResource(resource);
     setPreviewUrl("");
     setPreviewLoading(true);
@@ -262,6 +284,9 @@ export function WorkshopsPage({
     setPreviewResource(null);
     setPreviewUrl("");
     setPreviewLoading(false);
+    if (selectedId) {
+      window.history.pushState({}, "", `/workshops/${encodeURIComponent(selectedId)}`);
+    }
   }
 
   if (loading) {

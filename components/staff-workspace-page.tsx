@@ -42,6 +42,12 @@ type WorkspaceDateFilter = "all" | "today" | "week" | "month" | "without-date";
 type WorkspaceSort = "updated" | "oldest" | "title" | "event";
 type DraftSaveState = "idle" | "saving" | "saved";
 
+function workspaceItemFromPath() {
+  if (typeof window === "undefined") return null;
+  const [section, itemId] = window.location.pathname.split("/").filter(Boolean);
+  return section === "my-space" && itemId ? decodeURIComponent(itemId) : null;
+}
+
 type WorkspaceSavedView = {
   id: string;
   name: string;
@@ -387,6 +393,21 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   }, [firebaseReady, profile]);
 
   useEffect(() => {
+    const syncItemFromRoute = () => {
+      const itemId = workspaceItemFromPath();
+      if (!itemId) return;
+      const item = items.find((candidate) => candidate.id === itemId);
+      if (item && selectedItem?.id !== item.id) openItem(item, false, false);
+    };
+    syncItemFromRoute();
+    window.addEventListener("popstate", syncItemFromRoute);
+    return () => window.removeEventListener("popstate", syncItemFromRoute);
+  // openItem intentionally stays outside the dependency list: it reads the
+  // latest item and would otherwise recreate this route subscription each render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, selectedItem?.id]);
+
+  useEffect(() => {
     if (!firebaseReady) return;
     return watchStaffWorkspaceReads(profile, setReceipts, undefined, (error) =>
       toast.error(friendlyFirebaseError(error)),
@@ -559,7 +580,10 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     prepareEditor(nextDraft, workspaceId(), null);
   }
 
-  function openItem(item: StaffWorkspaceItem, focused = false) {
+  function openItem(item: StaffWorkspaceItem, focused = false, syncRoute = true) {
+    if (syncRoute) {
+      window.history.pushState({}, "", `/my-space/${encodeURIComponent(item.id)}`);
+    }
     const nextDraft = draftFromItem(item);
     prepareEditor(nextDraft, item.id, item, focused);
     if (!isUnread(item)) return;
@@ -601,6 +625,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   function closeEditor() {
     if (saving) return;
     if (draftDirty && !window.confirm("Hay cambios sin publicar. El borrador seguirá guardado en este dispositivo. ¿Cerrar el editor?")) return;
+    window.history.pushState({}, "", "/my-space");
     setEditorOpen(false);
   }
 

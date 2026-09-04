@@ -146,7 +146,7 @@
   justify-content: center;
   gap: 6px;
   padding: 0 10px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--muted-strong);
@@ -158,9 +158,10 @@
 .academic-level-tabs button svg { width: 15px; height: 15px; }
 
 .academic-level-tabs button.active {
-  background: var(--surface);
+  border-color: var(--tab-active-border);
+  background: var(--tab-active-gradient);
   color: var(--violet);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--tab-active-shadow);
 }
 
 .academic-toolbar {

@@ -986,8 +986,8 @@
 }
 
 .workshop-access-tabs { display: flex; gap: 5px; padding: 4px; border-radius: 11px; background: var(--surface-soft); }
-.workshop-access-tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: calc(0.68rem + 0.125rem); font-weight: 750; }
-.workshop-access-tabs button.active { background: var(--surface); color: var(--foreground); box-shadow: var(--shadow-sm); }
+.workshop-access-tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); font-size: calc(0.68rem + 0.125rem); font-weight: 750; }
+.workshop-access-tabs button.active { border-color: var(--tab-active-border); background: var(--tab-active-gradient); color: var(--violet); box-shadow: var(--tab-active-shadow); }
 .workshop-access-tabs span { display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 6px; background: var(--violet-soft); color: var(--violet); font-size: calc(0.56rem + 0.125rem); }
 
 .workshop-access-toolbar > label { display: flex; width: 230px; align-items: center; gap: 7px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); }
@@ -1377,7 +1377,7 @@
 .workshop-submission-tabs { padding: 12px; background: var(--surface-soft); }
 .workshop-submission-tabs > span { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; font-size: calc(0.65rem + 0.125rem); font-weight: 780; }
 .workshop-submission-tabs > button { display: grid; width: 100%; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; margin-bottom: 6px; padding: 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; text-align: left; }
-.workshop-submission-tabs > button.active { border-color: var(--border); background: var(--surface); box-shadow: var(--shadow-sm); }
+.workshop-submission-tabs > button.active { border-color: var(--tab-active-border); background: var(--tab-active-gradient); color: var(--violet); box-shadow: var(--tab-active-shadow); }
 .workshop-submission-tabs i { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 9px; background: var(--violet-soft); color: var(--violet); font-size: calc(0.55rem + 0.125rem); font-style: normal; font-weight: 820; }
 .workshop-submission-tabs span,
 .workshop-submission-tabs strong,
