@@ -46,7 +46,7 @@ export async function searchPortal(
     indexName: access.indexName,
     searchParams: {
       query: query.trim(),
-      hitsPerPage: 12,
+      hitsPerPage: 30,
       attributesToHighlight: ["title", "excerpt", "subject", "context"],
       highlightPreTag: "<mark>",
       highlightPostTag: "</mark>",
@@ -82,7 +82,7 @@ export function searchLocalPortal(
         .includes(normalized),
     )
     .sort((first, second) => second.updatedAt - first.updatedAt)
-    .slice(0, 12);
+    .slice(0, 30);
 }
 
 export async function backfillPortalSearch() {

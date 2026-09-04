@@ -8,7 +8,7 @@ import {
   StickyNote, Tag, Trash2, UploadCloud, UserCheck, UserRound, Users, X,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { toast } from "sonner";
 import {
   StaffWorkspaceRichEditor, WorkspaceEditorHint,
@@ -41,6 +41,14 @@ type WorkspaceView = "blocks" | "inbox" | "templates" | "archive";
 type WorkspaceDateFilter = "all" | "today" | "week" | "month" | "without-date";
 type WorkspaceSort = "updated" | "oldest" | "title" | "event";
 type DraftSaveState = "idle" | "saving" | "saved";
+type WorkspaceConfirmation = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  danger?: boolean;
+  icon: ComponentType<{ size?: number }>;
+  onConfirm: () => void | Promise<void>;
+};
 
 function workspaceItemFromPath() {
   if (typeof window === "undefined") return null;
@@ -331,6 +339,81 @@ function mexicoDateKey() {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
+function WorkspaceConfirmationModal({
+  confirmation,
+  busy,
+  reduceMotion,
+  onCancel,
+  onConfirm,
+}: {
+  confirmation: WorkspaceConfirmation;
+  busy: boolean;
+  reduceMotion: boolean | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const ConfirmationIcon = confirmation.icon;
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [busy, onCancel]);
+
+  return (
+    <motion.div
+      animate={{ opacity: 1 }}
+      className="staff-workspace-confirm-backdrop"
+      exit={{ opacity: 0 }}
+      initial={{ opacity: 0 }}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
+    >
+      <motion.section
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        aria-describedby="staff-workspace-confirm-description"
+        aria-labelledby="staff-workspace-confirm-title"
+        aria-modal="true"
+        className={`staff-workspace-confirm-modal ${confirmation.danger ? "is-danger" : ""}`}
+        exit={reduceMotion ? undefined : { opacity: 0, y: 10, scale: 0.98 }}
+        initial={reduceMotion ? false : { opacity: 0, y: 16, scale: 0.98 }}
+        onKeyDown={(event) => {
+          if (event.key !== "Tab") return;
+          if (event.shiftKey && document.activeElement === cancelRef.current) {
+            event.preventDefault();
+            confirmRef.current?.focus();
+          } else if (!event.shiftKey && document.activeElement === confirmRef.current) {
+            event.preventDefault();
+            cancelRef.current?.focus();
+          }
+        }}
+        role="alertdialog"
+      >
+        <span className="staff-workspace-confirm-icon"><ConfirmationIcon size={23} /></span>
+        <span className="eyebrow">MI ESPACIO</span>
+        <h2 id="staff-workspace-confirm-title">{confirmation.title}</h2>
+        <p id="staff-workspace-confirm-description">{confirmation.description}</p>
+        <footer>
+          <button className="secondary-button" disabled={busy} onClick={onCancel} ref={cancelRef} type="button">Cancelar</button>
+          <button className={confirmation.danger ? "danger-button" : "primary-button"} disabled={busy} onClick={onConfirm} ref={confirmRef} type="button">
+            {busy ? <LoaderCircle className="spin" size={16} /> : <ConfirmationIcon size={16} />}
+            {busy ? "Procesando…" : confirmation.confirmLabel}
+          </button>
+        </footer>
+      </motion.section>
+    </motion.div>
+  );
+}
+
 export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) {
   const reduceMotion = useReducedMotion();
   const [items, setItems] = useState<StaffWorkspaceItem[]>(() => firebaseReady ? [] : demoWorkspaceItems(profile));
@@ -367,6 +450,8 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   const [commentSending, setCommentSending] = useState(false);
   const [transferTargetId, setTransferTargetId] = useState("");
   const [draftBaseline, setDraftBaseline] = useState(JSON.stringify(emptyDraft()));
+  const [confirmation, setConfirmation] = useState<WorkspaceConfirmation | null>(null);
+  const [confirmationBusy, setConfirmationBusy] = useState(false);
 
   const teamMembers = useMemo<WorkspaceMentionMember[]>(() => {
     const members = new Map<string, WorkspaceMentionMember>();
@@ -575,9 +660,22 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   }
 
   function openNewItem(type: StaffWorkspaceItemType = "note") {
-    if (recoverableDraft && !window.confirm("Hay un borrador guardado. ¿Quieres empezar uno nuevo y reemplazarlo?")) return;
-    const nextDraft = emptyDraft(type);
-    prepareEditor(nextDraft, workspaceId(), null);
+    const startNewItem = () => {
+      const nextDraft = emptyDraft(type);
+      prepareEditor(nextDraft, workspaceId(), null);
+    };
+    if (recoverableDraft) {
+      setConfirmation({
+        title: "¿Reemplazar el borrador guardado?",
+        description: "Al comenzar un bloque nuevo, el borrador anterior se reemplazará cuando guardes contenido. Puedes cancelarlo para continuarlo después.",
+        confirmLabel: "Crear bloque nuevo",
+        danger: true,
+        icon: RotateCcw,
+        onConfirm: startNewItem,
+      });
+      return;
+    }
+    startNewItem();
   }
 
   function openItem(item: StaffWorkspaceItem, focused = false, syncRoute = true) {
@@ -624,17 +722,51 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
 
   function closeEditor() {
     if (saving) return;
-    if (draftDirty && !window.confirm("Hay cambios sin publicar. El borrador seguirá guardado en este dispositivo. ¿Cerrar el editor?")) return;
-    window.history.pushState({}, "", "/my-space");
-    setEditorOpen(false);
+    const finishClosing = () => {
+      window.history.pushState({}, "", "/my-space");
+      setEditorOpen(false);
+    };
+    if (draftDirty) {
+      setConfirmation({
+        title: "¿Cerrar con cambios pendientes?",
+        description: "Tus cambios sin publicar seguirán guardados en este dispositivo para que puedas recuperarlos más tarde.",
+        confirmLabel: "Cerrar editor",
+        icon: X,
+        onConfirm: finishClosing,
+      });
+      return;
+    }
+    finishClosing();
   }
 
   function discardDraft() {
-    if (!window.confirm("¿Descartar definitivamente este borrador?")) return;
-    cleanUnsavedUploads();
-    window.localStorage.removeItem(workspaceDraftKey(profile.uid));
-    setRecoverableDraft(null);
-    setEditorOpen(false);
+    setConfirmation({
+      title: "¿Descartar este borrador?",
+      description: "Se eliminarán el borrador local y los archivos nuevos que todavía no se hayan publicado. Esta acción no se puede deshacer.",
+      confirmLabel: "Descartar borrador",
+      danger: true,
+      icon: Trash2,
+      onConfirm: () => {
+        cleanUnsavedUploads();
+        window.localStorage.removeItem(workspaceDraftKey(profile.uid));
+        setRecoverableDraft(null);
+        setEditorOpen(false);
+      },
+    });
+  }
+
+  function discardSavedDraft() {
+    setConfirmation({
+      title: "¿Descartar el borrador guardado?",
+      description: "El borrador se eliminará de este dispositivo y ya no podrás recuperarlo.",
+      confirmLabel: "Descartar borrador",
+      danger: true,
+      icon: Trash2,
+      onConfirm: () => {
+        window.localStorage.removeItem(workspaceDraftKey(profile.uid));
+        setRecoverableDraft(null);
+      },
+    });
   }
 
   function cleanUnsavedUploads() {
@@ -654,7 +786,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     const previousOverflow = document.body.style.overflow;
     const closeOnEscape = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (event.key === "Escape" && !saving && !target?.closest(".bn-container")) {
+      if (event.key === "Escape" && !saving && !confirmation && !target?.closest(".bn-container")) {
         closeEditor();
       }
     };
@@ -967,36 +1099,66 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   async function transferOwnership() {
     if (!selectedItem || !transferTargetId) return;
     const nextOwner = transferCandidates.find((candidate) => candidate.uid === transferTargetId);
-    if (!nextOwner || !window.confirm(`¿Transferir “${selectedItem.title}” a ${nextOwner.name}?`)) return;
-    setSaving(true);
-    try {
-      if (firebaseReady) await transferStaffWorkspaceItem(profile, selectedItem, nextOwner);
-      else setItems((current) => current.map((candidate) => candidate.id === selectedItem.id
-        ? {
-          ...candidate,
-          ownerId: nextOwner.uid,
-          ownerName: nextOwner.name,
-          visibility: candidate.visibility === "private" ? "selected" : candidate.visibility,
-          sharedWithIds: [...new Set([...candidate.sharedWithIds, profile.uid])],
-          updatedAt: new Date().toISOString(),
-        }
-        : candidate));
-      setEditorOpen(false);
-      toast.success("Propiedad transferida", { description: `${nextOwner.name} ahora puede editar este bloque.` });
-    } catch (error) { toast.error(friendlyFirebaseError(error)); }
-    finally { setSaving(false); }
+    if (!nextOwner) return;
+    const item = selectedItem;
+    setConfirmation({
+      title: `¿Transferir “${item.title}”?`,
+      description: `${nextOwner.name} pasará a ser la persona propietaria y podrá editar el bloque. Tú conservarás acceso como colaborador.`,
+      confirmLabel: "Transferir propiedad",
+      icon: UserRound,
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          if (firebaseReady) await transferStaffWorkspaceItem(profile, item, nextOwner);
+          else setItems((current) => current.map((candidate) => candidate.id === item.id
+            ? {
+              ...candidate,
+              ownerId: nextOwner.uid,
+              ownerName: nextOwner.name,
+              visibility: candidate.visibility === "private" ? "selected" : candidate.visibility,
+              sharedWithIds: [...new Set([...candidate.sharedWithIds, profile.uid])],
+              updatedAt: new Date().toISOString(),
+            }
+            : candidate));
+          setEditorOpen(false);
+          toast.success("Propiedad transferida", { description: `${nextOwner.name} ahora puede editar este bloque.` });
+        } catch (error) { toast.error(friendlyFirebaseError(error)); }
+        finally { setSaving(false); }
+      },
+    });
   }
 
-  async function removeItem(item: StaffWorkspaceItem) {
-    if (!window.confirm(`¿Eliminar “${item.title}”? Esta acción no se puede deshacer.`)) return;
-    setSaving(true);
+  function removeItem(item: StaffWorkspaceItem) {
+    setConfirmation({
+      title: `¿Eliminar “${item.title}”?`,
+      description: "Se eliminarán el bloque y sus archivos asociados. Esta acción no se puede deshacer.",
+      confirmLabel: "Eliminar definitivamente",
+      danger: true,
+      icon: Trash2,
+      onConfirm: async () => {
+        setSaving(true);
+        try {
+          if (firebaseReady) await deleteStaffWorkspaceItem(profile, item);
+          else setItems((current) => current.filter((candidate) => candidate.id !== item.id));
+          setEditorOpen(false);
+          toast.success("Bloque eliminado");
+        } catch (error) { toast.error(friendlyFirebaseError(error)); }
+        finally { setSaving(false); }
+      },
+    });
+  }
+
+  async function confirmWorkspaceAction() {
+    if (!confirmation || confirmationBusy) return;
+    setConfirmationBusy(true);
     try {
-      if (firebaseReady) await deleteStaffWorkspaceItem(profile, item);
-      else setItems((current) => current.filter((candidate) => candidate.id !== item.id));
-      setEditorOpen(false);
-      toast.success("Bloque eliminado");
-    } catch (error) { toast.error(friendlyFirebaseError(error)); }
-    finally { setSaving(false); }
+      await confirmation.onConfirm();
+      setConfirmation(null);
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setConfirmationBusy(false);
+    }
   }
 
   const selectedOwned = !selectedItem || selectedItem.ownerId === profile.uid;
@@ -1028,11 +1190,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
           <span><RotateCcw size={18} /></span>
           <div><strong>Tienes un borrador guardado</strong><small>Se conservó automáticamente {relativeDate(recoverableDraft.savedAt).toLowerCase()}.</small></div>
           <button onClick={restoreDraft} type="button">Continuar borrador</button>
-          <button aria-label="Descartar borrador guardado" onClick={() => {
-            if (!window.confirm("¿Descartar definitivamente el borrador guardado?")) return;
-            window.localStorage.removeItem(workspaceDraftKey(profile.uid));
-            setRecoverableDraft(null);
-          }} type="button"><X size={16} /></button>
+          <button aria-label="Descartar borrador guardado" onClick={discardSavedDraft} type="button"><X size={16} /></button>
         </section>
       )}
 
@@ -1181,7 +1339,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
 
               {draft.visibility !== "private" && <fieldset className="staff-workspace-assignee-picker"><legend><UserCheck size={15} /> Responsables</legend><p>Asigna a quienes deben dar seguimiento. También recibirán acceso al bloque.</p><div>{shareCandidates.map((member) => <label className={draft.assigneeIds.includes(member.id) ? "selected" : ""} key={member.id}><input checked={draft.assigneeIds.includes(member.id)} onChange={() => toggleAssignee(member.id)} type="checkbox" /><span className="staff-workspace-mention-avatar">{member.initials}</span><span>{member.name}</span>{draft.assigneeIds.includes(member.id) && <Check size={14} />}</label>)}</div></fieldset>}
 
-              <footer>{selectedItem && <button className="staff-workspace-delete" disabled={saving} onClick={() => void removeItem(selectedItem)} type="button"><Trash2 size={15} /> Eliminar</button>}{selectedItem && !selectedItem.isTemplate && <button className="secondary-button" disabled={saving} onClick={() => void saveAsTemplate(selectedItem)} type="button"><Sparkles size={15} /> Plantilla</button>}{selectedItem && <button className="secondary-button" disabled={saving} onClick={() => void toggleArchived(selectedItem)} type="button">{selectedItem.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{selectedItem.archived ? "Restaurar" : "Archivar"}</button>}{draftDirty && <button className="secondary-button" disabled={saving} onClick={discardDraft} type="button">Descartar borrador</button>}<button className="secondary-button" disabled={saving} onClick={() => closeEditor()} type="button">Cerrar</button><button className="primary-button" disabled={saving || uploadingFiles > 0 || !draft.title.trim()} onClick={() => void saveItem()} type="button">{saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}{saving ? "Guardando…" : "Publicar cambios"}</button></footer>
+              <footer>{selectedItem && <button className="staff-workspace-delete" disabled={saving} onClick={() => removeItem(selectedItem)} type="button"><Trash2 size={15} /> Eliminar</button>}{selectedItem && !selectedItem.isTemplate && <button className="secondary-button" disabled={saving} onClick={() => void saveAsTemplate(selectedItem)} type="button"><Sparkles size={15} /> Plantilla</button>}{selectedItem && <button className="secondary-button" disabled={saving} onClick={() => void toggleArchived(selectedItem)} type="button">{selectedItem.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{selectedItem.archived ? "Restaurar" : "Archivar"}</button>}{draftDirty && <button className="secondary-button" disabled={saving} onClick={discardDraft} type="button">Descartar borrador</button>}<button className="secondary-button" disabled={saving} onClick={() => closeEditor()} type="button">Cerrar</button><button className="primary-button" disabled={saving || uploadingFiles > 0 || !draft.title.trim()} onClick={() => void saveItem()} type="button">{saving ? <LoaderCircle className="spin" size={16} /> : <Save size={16} />}{saving ? "Guardando…" : "Publicar cambios"}</button></footer>
             </div> : selectedItem ? <div className="staff-workspace-reader">
               <div className="staff-workspace-reader-meta"><span className={`staff-workspace-type-icon ${selectedItem.type}`}>{(() => { const ReaderIcon = typeDetails[selectedItem.type].icon; return <ReaderIcon size={17} />; })()}</span><span>Compartido por <strong>{selectedItem.ownerName}</strong></span></div>
               <h3>{selectedItem.title}</h3>
@@ -1213,6 +1371,18 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
             </section>}
           </motion.section>
         </motion.div>
+      )}</AnimatePresence>
+
+      <AnimatePresence>{confirmation && (
+        <WorkspaceConfirmationModal
+          busy={confirmationBusy}
+          confirmation={confirmation}
+          onCancel={() => {
+            if (!confirmationBusy) setConfirmation(null);
+          }}
+          onConfirm={() => void confirmWorkspaceAction()}
+          reduceMotion={reduceMotion}
+        />
       )}</AnimatePresence>
     </div>
   );

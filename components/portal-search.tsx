@@ -73,13 +73,14 @@ export function PortalSearch({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchedQuery, setSearchedQuery] = useState("");
   const [group, setGroup] = useState<SearchGroup>("all");
   const [hits, setHits] = useState<PortalSearchHit[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const requestRevision = useRef(0);
 
   const filteredHits = useMemo(
     () => hits.filter((hit) => matchesGroup(hit, group)),
@@ -108,42 +109,48 @@ export function PortalSearch({
     return () => window.removeEventListener("pointerdown", outside);
   }, [open]);
 
-  useEffect(() => {
+  async function runSearch() {
     const term = query.trim();
-    if (term.length < 2) return;
-    let active = true;
-    const timer = window.setTimeout(() => {
-      setLoading(true);
+    if (!term) {
+      setHits([]);
+      setSearchedQuery("");
       setError("");
-      const entityTypes = groupEntities[group];
-      const request = firebaseReady
-        ? searchPortal(profile.uid, term, entityTypes)
-        : Promise.resolve(searchLocalPortal(localRecords, term, entityTypes));
-      void request
-        .then((next) => {
-          if (active) setHits(next);
-        })
-        .catch(() => {
-          if (active) {
-            setHits([]);
-            setError("No pudimos consultar el índice. Intenta de nuevo.");
-          }
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    }, 250);
-    return () => {
-      active = false;
-      window.clearTimeout(timer);
-    };
-  }, [firebaseReady, group, localRecords, profile.uid, query]);
+      setLoading(false);
+      inputRef.current?.focus();
+      return;
+    }
+
+    const revision = requestRevision.current + 1;
+    requestRevision.current = revision;
+    setOpen(true);
+    setSearchedQuery(term);
+    setLoading(true);
+    setError("");
+
+    try {
+      const next = firebaseReady
+        ? await searchPortal(profile.uid, term)
+        : searchLocalPortal(localRecords, term);
+      if (requestRevision.current === revision) setHits(next);
+    } catch {
+      if (requestRevision.current === revision) {
+        setHits([]);
+        setError("No pudimos consultar el índice. Intenta de nuevo.");
+      }
+    } finally {
+      if (requestRevision.current === revision) setLoading(false);
+    }
+  }
 
   function openHit(hit: PortalSearchHit) {
     onOpen(hit);
     setOpen(false);
     setQuery("");
+    setSearchedQuery("");
+    setHits([]);
   }
+
+  const submitted = Boolean(searchedQuery) && query.trim() === searchedQuery;
 
   return (
     <div className={`search portal-search ${open ? "is-open" : ""}`} ref={rootRef}>
@@ -165,24 +172,19 @@ export function PortalSearch({
         type="search"
         value={query}
         onChange={(event) => {
+          requestRevision.current += 1;
           setQuery(event.target.value);
+          setSearchedQuery("");
           setHits([]);
           setError("");
           setLoading(false);
-          setActiveIndex(0);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(event) => {
-          if (event.key === "ArrowDown") {
+          if (event.key === "Enter") {
             event.preventDefault();
-            setActiveIndex((value) => Math.min(filteredHits.length - 1, value + 1));
-          } else if (event.key === "ArrowUp") {
-            event.preventDefault();
-            setActiveIndex((value) => Math.max(0, value - 1));
-          } else if (event.key === "Enter" && filteredHits[activeIndex]) {
-            event.preventDefault();
-            openHit(filteredHits[activeIndex]);
+            void runSearch();
           }
         }}
       />
@@ -192,7 +194,12 @@ export function PortalSearch({
           type="button"
           aria-label="Limpiar búsqueda"
           onClick={() => {
+            requestRevision.current += 1;
             setQuery("");
+            setSearchedQuery("");
+            setHits([]);
+            setError("");
+            setLoading(false);
             inputRef.current?.focus();
           }}
         >
@@ -201,6 +208,14 @@ export function PortalSearch({
       ) : (
         <kbd>⌘ K</kbd>
       )}
+      <button
+        className="portal-search-submit"
+        type="button"
+        disabled={!query.trim() || loading}
+        onClick={() => void runSearch()}
+      >
+        Buscar
+      </button>
 
       <AnimatePresence>
         {open && (
@@ -218,7 +233,6 @@ export function PortalSearch({
                   key={item.id}
                   onClick={() => {
                     setGroup(item.id);
-                    setActiveIndex(0);
                   }}
                   role="tab"
                   type="button"
@@ -229,11 +243,17 @@ export function PortalSearch({
               ))}
             </div>
             <div className="portal-search-results" aria-live="polite">
-              {query.trim().length < 2 ? (
+              {!query.trim() ? (
                 <div className="portal-search-message">
                   <Search size={24} />
                   <strong>Busca en todo el portal</strong>
-                  <span>Escribe al menos dos caracteres.</span>
+                  <span>Escribe lo que quieres encontrar y pulsa Buscar o Enter.</span>
+                </div>
+              ) : !submitted ? (
+                <div className="portal-search-message">
+                  <Search size={24} />
+                  <strong>Listo para buscar</strong>
+                  <span>Escribir no genera consultas. Pulsa Buscar o Enter cuando termines.</span>
                 </div>
               ) : loading ? (
                 <div className="portal-search-message">
@@ -247,14 +267,13 @@ export function PortalSearch({
                   <span>{error}</span>
                 </div>
               ) : filteredHits.length ? (
-                filteredHits.map((hit, index) => {
+                filteredHits.map((hit) => {
                   const details = entityDetails[hit.entityType];
                   const ResultIcon = details.icon;
                   return (
                     <button
-                      className={`portal-search-result ${activeIndex === index ? "active" : ""}`}
+                      className="portal-search-result"
                       key={hit.objectID}
-                      onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => openHit(hit)}
                       type="button"
                     >
@@ -279,8 +298,7 @@ export function PortalSearch({
               )}
             </div>
             <footer className="portal-search-footer">
-              <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
-              <span><kbd>↵</kbd> abrir</span>
+              <span><kbd>↵</kbd> buscar</span>
               <span><kbd>esc</kbd> cerrar</span>
               <strong>Resultados limitados a tus permisos</strong>
             </footer>

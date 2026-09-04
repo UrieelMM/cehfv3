@@ -67,11 +67,29 @@ import {
   loadInstitutionDemoData,
   type DemoSeedCounts,
 } from "@/lib/demo-seed-firebase";
-import { AcademicGradesPanel } from "@/components/academic-grades";
-import { AcademicReportsPage } from "@/components/academic-reports";
+import {
+  AcademicGradesPanel,
+  demoDailyGrades,
+} from "@/components/academic-grades";
+import {
+  AcademicReportsPage,
+  demoStudentWeeklyReports,
+} from "@/components/academic-reports";
 import { MaterialCreateModal, MaterialsPage } from "@/components/materials-page";
 import { PortalSearch } from "@/components/portal-search";
 import { backfillPortalSearch } from "@/lib/portal-search";
+import {
+  aggregateDailyGradesByWeek,
+  watchDailyGrades,
+} from "@/lib/grades-firebase";
+import { watchStudentWeeklyReports } from "@/lib/reports-firebase";
+import {
+  buildDashboardViewModel,
+  dashboardReviewScope,
+  dashboardTaskScope,
+  roleMetricIconKey,
+  type DashboardActivity,
+} from "@/lib/dashboard";
 import {
   ReviewCreateModal,
   ReviewsPage,
@@ -114,11 +132,13 @@ import {
   watchAcademicConfig,
   watchTaskAssignments,
   watchTaskNotifications,
+  watchTaskSubmissions,
 } from "@/lib/tasks-firebase";
 import {
   createDemoWeeklyReview,
   createWeeklyReview,
   legacyReviewsToWeeklyReviews,
+  watchWeeklyReviewAttempts,
   watchWeeklyReviews,
 } from "@/lib/reviews-firebase";
 import {
@@ -163,10 +183,14 @@ import type {
   UserProfile,
   TaskAssignment,
   TaskCreateInput,
+  TaskSubmission,
   LearningMaterial,
   LearningMaterialCreateInput,
+  DailyGradeRecord,
+  StudentWeeklyReport,
   WeeklyReview,
   WeeklyReviewCreateInput,
+  WeeklyReviewAttempt,
 } from "@/lib/types";
 
 type IconType = typeof Home;
@@ -745,7 +769,10 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
-    queueMicrotask(() => setMaterialRecordsLoading(true));
+    queueMicrotask(() => {
+      setMaterialRecords([]);
+      setMaterialRecordsLoading(true);
+    });
     return watchLearningMaterials(
       profile,
       (materials) => {
@@ -778,7 +805,13 @@ export function CEHFApp() {
         ),
       );
       setMaterialRecordsLoading(false);
-      setViewedMaterialIds(new Set());
+      setViewedMaterialIds(
+        new Set(
+          state.materials
+            .filter((material) => material.reviewed)
+            .map((material) => material.id),
+        ),
+      );
     });
   }, [academicConfig, currentProfile, demoRole, firebaseUser, managedAccounts, state.materials]);
 
@@ -866,7 +899,10 @@ export function CEHFApp() {
   useEffect(() => {
     if (!firebaseUser || !profile || role === "student") return;
     let active = true;
-    queueMicrotask(() => setManagedAccountsLoading(true));
+    queueMicrotask(() => {
+      setManagedAccounts([]);
+      setManagedAccountsLoading(true);
+    });
     void listManagedAccounts(profile.institutionId, profile.role)
       .then((accounts) => {
         if (active) setManagedAccounts(accounts);
@@ -2126,6 +2162,19 @@ function SectionContent({
           state={state}
           navigate={navigate}
           updateState={updateState}
+          openTask={openDetail}
+          taskRecords={taskRecords}
+          taskRecordsLoading={taskRecordsLoading}
+          reviewRecords={reviewRecords}
+          reviewRecordsLoading={reviewRecordsLoading}
+          materialRecords={materialRecords}
+          materialRecordsLoading={materialRecordsLoading}
+          viewedMaterialIds={viewedMaterialIds}
+          academicConfig={academicConfig}
+          academicCalendar={academicCalendar}
+          managedAccounts={managedAccounts}
+          managedAccountsLoading={managedAccountsLoading}
+          firebaseReady={firebaseReady}
         />
       );
     case "my-week":
@@ -2259,6 +2308,19 @@ function Dashboard({
   state,
   navigate,
   updateState,
+  openTask,
+  taskRecords,
+  taskRecordsLoading,
+  reviewRecords,
+  reviewRecordsLoading,
+  materialRecords,
+  materialRecordsLoading,
+  viewedMaterialIds,
+  academicConfig,
+  academicCalendar,
+  managedAccounts,
+  managedAccountsLoading,
+  firebaseReady,
 }: {
   role: Role;
   profile: UserProfile;
@@ -2268,141 +2330,234 @@ function Dashboard({
     updater: (previous: PortalState) => PortalState,
     message?: string,
   ) => void;
+  openTask: (id: string) => void;
+  taskRecords: TaskAssignment[];
+  taskRecordsLoading: boolean;
+  reviewRecords: WeeklyReview[];
+  reviewRecordsLoading: boolean;
+  materialRecords: LearningMaterial[];
+  materialRecordsLoading: boolean;
+  viewedMaterialIds: Set<string>;
+  academicConfig: AcademicConfig;
+  academicCalendar: AcademicCalendar;
+  managedAccounts: ManagedAccount[];
+  managedAccountsLoading: boolean;
+  firebaseReady: boolean;
 }) {
-  if (role !== "student") {
-    const director = role === "director";
-    return (
-      <div className="dashboard-stack">
-        <WeeklyVerseCard
-          role={role}
-          profile={profile}
-          state={state}
-          updateState={updateState}
-        />
-        <section className="hero-card teacher-hero">
-          <div className="hero-copy">
-            <span className="pill pill-light">
-              <span className="live-dot" /> Semana activa
-            </span>
-            <h2>
-              {director
-                ? "Nuestra comunidad avanza con una semana bien preparada."
-                : "Tu semana está casi lista para el grupo."}
-            </h2>
-            <p>
-              {director
-                ? "Consulta la preparación, los pendientes y las señales que necesitan atención."
-                : "Revisa los últimos detalles y acompaña las evidencias que faltan."}
-            </p>
-            <button
-              className="light-button"
-              onClick={() => navigate("my-week")}
-            >
-              {director ? "Ver calificaciones institucionales" : "Capturar calificaciones"}
-              <ArrowRight size={17} />
-            </button>
-          </div>
-          <div className="hero-metric">
-            <ProgressRing value={director ? 84 : 78} />
-            <span>Preparación semanal</span>
-          </div>
-        </section>
-        <section className="metric-grid">
-          {[
-            {
-              icon: ClipboardCheck,
-              value: director ? "128" : "7",
-              label: director ? "Entregas esta semana" : "Tareas por revisar",
-              tone: "coral",
-            },
-            {
-              icon: BookOpen,
-              value: director ? "91%" : "4",
-              label: director ? "Repasos completados" : "Respuestas abiertas",
-              tone: "violet",
-            },
-            {
-              icon: FileBarChart,
-              value: director ? "18" : "6",
-              label: "Reportes pendientes",
-              tone: "gold",
-            },
-            {
-              icon: MessageCircle,
-              value: director ? "2" : "1",
-              label: "Casos de moderación",
-              tone: "mint",
-            },
-          ].map((metric) => (
-            <article className="metric-card" key={metric.label}>
-              <span className={`metric-icon ${metric.tone}`}>
-                <metric.icon size={20} />
-              </span>
-              <strong>{metric.value}</strong>
-              <p>{metric.label}</p>
-            </article>
-          ))}
-        </section>
-        <section className="two-column">
-          <article className="panel">
-            <PanelHeading
-              title={director ? "Grupos esta semana" : "Prioridades de hoy"}
-              action="Ver todo"
-            />
-            <div className="priority-list">
-              {[
-                {
-                  title: director
-                    ? "5.º A · Mariana López"
-                    : "Revisar Bitácora de un cambio",
-                  detail: director
-                    ? "Planeación publicada · 78% de evidencias"
-                    : "7 entregas nuevas",
-                  status: "Ahora",
-                },
-                {
-                  title: director
-                    ? "4.º B · Roberto Díaz"
-                    : "Completar avances semanales",
-                  detail: director
-                    ? "Falta publicar 1 repaso"
-                    : "6 estudiantes pendientes",
-                  status: "Hoy",
-                },
-                {
-                  title: director
-                    ? "3.º A · Elena Gómez"
-                    : "Revisar propuesta del mural",
-                  detail: director
-                    ? "Semana lista · sin alertas"
-                    : "1 publicación enviada",
-                  status: "Mañana",
-                },
-              ].map((item, index) => (
-                <button className="priority-row" key={item.title}>
-                  <span className={`priority-number n${index + 1}`}>
-                    {index + 1}
-                  </span>
-                  <span>
-                    <strong>{item.title}</strong>
-                    <small>{item.detail}</small>
-                  </span>
-                  <em>{item.status}</em>
-                </button>
-              ))}
-            </div>
-          </article>
-          <article className="panel">
-            <PanelHeading title="Actividad reciente" action="Abrir centro" />
-            <Timeline notifications={state.notifications} />
-          </article>
-        </section>
-      </div>
-    );
-  }
+  const [dashboardGrades, setDashboardGrades] = useState<DailyGradeRecord[]>([]);
+  const [dashboardReports, setDashboardReports] = useState<StudentWeeklyReport[]>([]);
+  const [dashboardRecordsLoading, setDashboardRecordsLoading] = useState(firebaseReady);
+  const [submissionsByTask, setSubmissionsByTask] = useState<Record<string, TaskSubmission[]>>({});
+  const [attemptsByReview, setAttemptsByReview] = useState<Record<string, WeeklyReviewAttempt[]>>({});
+  const scopedTasks = useMemo(
+    () => dashboardTaskScope(taskRecords, academicConfig),
+    [academicConfig, taskRecords],
+  );
+  const scopedReviews = useMemo(
+    () => dashboardReviewScope(reviewRecords, academicConfig),
+    [academicConfig, reviewRecords],
+  );
 
-  const nextTask = state.tasks.find((task) => task.status === "published");
-  const nextReview = state.reviews.find((review) => review.progress < 100);
+  useEffect(() => {
+    if (!firebaseReady) {
+      queueMicrotask(() => {
+        const grades = demoDailyGrades(
+          profile,
+          academicCalendar,
+          academicConfig,
+          managedAccounts,
+        );
+        setDashboardGrades(grades);
+        setDashboardReports(
+          demoStudentWeeklyReports(
+            aggregateDailyGradesByWeek(grades, academicCalendar),
+            profile,
+            academicConfig,
+          ),
+        );
+        setDashboardRecordsLoading(false);
+      });
+      return;
+    }
+
+    let gradesReady = false;
+    let reportsReady = false;
+    queueMicrotask(() => setDashboardRecordsLoading(true));
+    const finish = () => {
+      if (gradesReady && reportsReady) setDashboardRecordsLoading(false);
+    };
+    const stopGrades = watchDailyGrades(
+      profile,
+      (grades) => {
+        setDashboardGrades(grades);
+        gradesReady = true;
+        finish();
+      },
+      (error) => {
+        console.error("[Campus CEHF] cargar resumen de calificaciones", error);
+        gradesReady = true;
+        finish();
+      },
+    );
+    const stopReports = watchStudentWeeklyReports(
+      profile,
+      (reports) => {
+        setDashboardReports(reports);
+        reportsReady = true;
+        finish();
+      },
+      (error) => {
+        console.error("[Campus CEHF] cargar resumen de reportes", error);
+        reportsReady = true;
+        finish();
+      },
+    );
+    return () => {
+      stopGrades();
+      stopReports();
+    };
+  }, [academicCalendar, academicConfig, firebaseReady, managedAccounts, profile]);
+
+  useEffect(() => {
+    if (!firebaseReady) {
+      const taskState = new Map(state.tasks.map((task) => [task.id, task]));
+      const students = managedAccounts.filter((account) => account.role === "student" && account.active);
+      const demoSubmissions: Record<string, TaskSubmission[]> = {};
+      scopedTasks.forEach((task, index) => {
+        const legacy = taskState.get(task.id);
+        if (!legacy || legacy.status === "published") return;
+        const student = role === "student" ? profile : students[index % Math.max(1, students.length)];
+        if (!student) return;
+        const status: TaskSubmission["status"] = legacy.status === "reviewed" ? "reviewed" : "submitted";
+        const updatedAt = new Date(Date.now() - (index + 1) * 45 * 60_000).toISOString();
+        demoSubmissions[task.id] = [{
+            id: student.uid,
+            studentId: student.uid,
+            studentName: student.name,
+            teacherId: task.createdBy,
+            taskId: task.id,
+            content: legacy.description,
+            attachments: [],
+            status,
+            version: 1,
+            submittedAt: updatedAt,
+            updatedAt,
+            reviewedAt: status === "reviewed" ? updatedAt : undefined,
+          }];
+      });
+      queueMicrotask(() => setSubmissionsByTask(demoSubmissions));
+      return;
+    }
+    queueMicrotask(() => setSubmissionsByTask({}));
+    const stops = scopedTasks.map((task) =>
+      watchTaskSubmissions(
+        task,
+        profile,
+        (submissions) =>
+          setSubmissionsByTask((current) => ({ ...current, [task.id]: submissions })),
+        (error) => console.error(`[Campus CEHF] cargar entregas de ${task.id}`, error),
+      ),
+    );
+    return () => stops.forEach((stop) => stop());
+  }, [firebaseReady, managedAccounts, profile, role, scopedTasks, state.tasks]);
+
+  useEffect(() => {
+    if (!firebaseReady || role === "student") {
+      queueMicrotask(() =>
+        setAttemptsByReview(
+          Object.fromEntries(
+            scopedReviews.map((review) => [
+              review.id,
+              review.myAttempt ? [review.myAttempt] : [],
+            ]),
+          ),
+        ),
+      );
+      return;
+    }
+    queueMicrotask(() => setAttemptsByReview({}));
+    const stops = scopedReviews.map((review) =>
+      watchWeeklyReviewAttempts(
+        review,
+        (attempts) =>
+          setAttemptsByReview((current) => ({ ...current, [review.id]: attempts })),
+        (error) => console.error(`[Campus CEHF] cargar intentos de ${review.id}`, error),
+      ),
+    );
+    return () => stops.forEach((stop) => stop());
+  }, [firebaseReady, role, scopedReviews]);
+
+  const dashboard = useMemo(
+    () =>
+      buildDashboardViewModel({
+        profile,
+        academicConfig,
+        accounts: managedAccounts,
+        tasks: taskRecords,
+        submissionsByTask,
+        reviews: reviewRecords,
+        attemptsByReview,
+        materials: materialRecords,
+        viewedMaterialIds,
+        grades: dashboardGrades,
+        reports: dashboardReports,
+        notifications: state.notifications,
+        openModerationCount: state.forumModeration.filter(
+          (item) => item.status === "open",
+        ).length,
+      }),
+    [
+      academicConfig,
+      attemptsByReview,
+      dashboardGrades,
+      dashboardReports,
+      managedAccounts,
+      materialRecords,
+      profile,
+      reviewRecords,
+      state.forumModeration,
+      state.notifications,
+      submissionsByTask,
+      taskRecords,
+      viewedMaterialIds,
+    ],
+  );
+  const dashboardLoading =
+    dashboardRecordsLoading ||
+    taskRecordsLoading ||
+    reviewRecordsLoading ||
+    materialRecordsLoading ||
+    (role !== "student" && managedAccountsLoading);
+  const metricIcons: Record<string, IconType> = {
+    users: Users,
+    tasks: ClipboardCheck,
+    reviews: BookOpen,
+    reports: FileBarChart,
+    grades: GraduationCap,
+    materials: Paperclip,
+  };
+  const openDashboardTarget = (target: { section: SectionKey; taskId?: string }) => {
+    if (target.taskId) openTask(target.taskId);
+    else navigate(target.section);
+  };
+  const currentDate = new Intl.DateTimeFormat("es-MX", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    timeZone: academicConfig.timezone || "America/Mexico_City",
+  }).format(new Date());
+  const dateLabel = currentDate.charAt(0).toUpperCase() + currentDate.slice(1);
+  const dueLabel = dashboard.nextTask
+    ? new Intl.DateTimeFormat("es-MX", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: academicConfig.timezone || "America/Mexico_City",
+      }).format(new Date(dashboard.nextTask.dueAt))
+    : "";
+
   return (
     <div className="dashboard-stack">
       <WeeklyVerseCard
@@ -2411,127 +2566,87 @@ function Dashboard({
         state={state}
         updateState={updateState}
       />
-      <section className="hero-card">
+      <section className={`hero-card ${role !== "student" ? "teacher-hero" : ""}`} aria-busy={dashboardLoading}>
         <div className="hero-copy">
           <span className="pill pill-light">
-            <span className="live-dot" /> En curso
+            <span className="live-dot" /> {academicConfig.calendarStatus === "active" ? "Semana activa" : "Resumen más reciente"}
           </span>
-          <h2>{state.week.title}</h2>
-          <p>{state.week.welcomeMessage}</p>
+          <h2>{dashboard.heroTitle}</h2>
+          <p>{dashboard.heroDescription}</p>
           <button
             className="light-button"
             onClick={() => navigate("my-week")}
           >
-            Ver mis calificaciones <ArrowRight size={17} />
+            {role === "student"
+              ? "Ver mis calificaciones"
+              : role === "teacher"
+                ? "Capturar calificaciones"
+                : "Ver seguimiento institucional"}
+            <ArrowRight size={17} />
           </button>
         </div>
         <div className="hero-metric">
-          <ProgressRing value={state.week.completion} />
-          <span>Tu camino semanal</span>
+          <ProgressRing value={dashboardLoading ? 0 : dashboard.completion} />
+          <span>{dashboardLoading ? "Calculando resumen…" : dashboard.completionLabel}</span>
         </div>
       </section>
 
-      <section className="today-section">
+      <section className={`metric-grid ${role === "student" ? "student-metric-grid" : ""}`} aria-label="Resumen con datos actuales">
+        {dashboard.metrics.map((metric) => {
+          const MetricIcon = metricIcons[roleMetricIconKey(role, metric.key)] ?? GraduationCap;
+          return (
+            <article className="metric-card" key={metric.key}>
+              <span className={`metric-icon ${metric.tone}`}>
+                <MetricIcon size={20} />
+              </span>
+              <strong>{dashboardLoading ? "…" : metric.value}</strong>
+              <p>{metric.label}</p>
+            </article>
+          );
+        })}
+      </section>
+
+      {role === "student" ? <><section className="today-section">
         <div className="section-title-row">
           <div>
             <span className="eyebrow">Para hoy</span>
-            <h2>Un paso a la vez</h2>
+            <h2>Tu siguiente paso</h2>
           </div>
-          <span className="date-chip">Jueves 23</span>
+          <span className="date-chip">{dateLabel}</span>
         </div>
         <div className="focus-grid">
-          {nextReview && (
-            <article className="focus-card violet-card">
-              <div className="focus-card-top">
-                <span className="subject-icon">
-                  <BookOpen size={20} />
-                </span>
-                <span className="soft-tag">{nextReview.subject}</span>
-              </div>
-              <span className="card-kicker">Repaso recomendado</span>
-              <h3>{nextReview.title}</h3>
-              <p>{nextReview.duration} min · Puedes continuar donde te quedaste.</p>
-              <div className="linear-progress">
-                <span style={{ width: `${nextReview.progress}%` }} />
-              </div>
-              <button
-                className="card-action"
-                onClick={() =>
-                  updateState(
-                    (previous) => ({
-                      ...previous,
-                      reviews: previous.reviews.map((review) =>
-                        review.id === nextReview.id
-                          ? {
-                              ...review,
-                              progress: Math.min(100, review.progress + 50),
-                              status:
-                                review.progress + 50 >= 100
-                                  ? "completed"
-                                  : review.status,
-                            }
-                          : review,
-                      ),
-                    }),
-                    "Tu avance quedó guardado",
-                  )
-                }
-              >
-                {nextReview.progress ? "Continuar repaso" : "Comenzar repaso"}
-                <ArrowRight size={17} />
-              </button>
-            </article>
-          )}
-          {nextTask && (
-            <article className="focus-card coral-card">
-              <div className="focus-card-top">
-                <span className="subject-icon">
-                  <ClipboardCheck size={20} />
-                </span>
-                <span className="soft-tag">{nextTask.subject}</span>
-              </div>
-              <span className="card-kicker">Próxima entrega</span>
-              <h3>{nextTask.title}</h3>
-              <p>{nextTask.dueLabel} · Aún estás a tiempo.</p>
-              <div className="due-line">
-                <Clock3 size={16} /> Falta 1 día
-              </div>
-              <button
-                className="card-action"
-                onClick={() => navigate("tasks")}
-              >
-                Abrir tarea <ArrowRight size={17} />
-              </button>
-            </article>
-          )}
+          <article className="focus-card violet-card">
+            <div className="focus-card-top"><span className="subject-icon"><BookOpen size={20} /></span><span className="soft-tag">{dashboard.nextReview?.subject ?? "Repasos"}</span></div>
+            <span className="card-kicker">{dashboard.nextReview ? "Repaso recomendado" : "Repasos al día"}</span>
+            <h3>{dashboard.nextReview?.title ?? "No tienes repasos pendientes"}</h3>
+            <p>{dashboard.nextReview ? `${dashboard.nextReview.duration} min · ${dashboard.nextReview.myAttempt?.progress ?? 0}% completado.` : "Cuando se publique un nuevo repaso aparecerá aquí."}</p>
+            {dashboard.nextReview && <div className="linear-progress"><span style={{ width: `${dashboard.nextReview.myAttempt?.progress ?? 0}%` }} /></div>}
+            <button className="card-action" onClick={() => navigate("weekly-review")}>{dashboard.nextReview?.myAttempt?.progress ? "Continuar repaso" : "Ver repasos"}<ArrowRight size={17} /></button>
+          </article>
+          <article className="focus-card coral-card">
+            <div className="focus-card-top"><span className="subject-icon"><ClipboardCheck size={20} /></span><span className="soft-tag">{dashboard.nextTask?.subject ?? "Tareas"}</span></div>
+            <span className="card-kicker">{dashboard.nextTask ? "Próxima entrega" : "Tareas al día"}</span>
+            <h3>{dashboard.nextTask?.title ?? "No tienes entregas pendientes"}</h3>
+            <p>{dashboard.nextTask ? `${dashboard.nextTask.description || "Revisa las instrucciones de la actividad."}` : "Las nuevas actividades aparecerán aquí cuando se publiquen."}</p>
+            {dashboard.nextTask && <div className="due-line"><Clock3 size={16} /> Entrega {dueLabel}</div>}
+            <button className="card-action" onClick={() => dashboard.nextTask ? openTask(dashboard.nextTask.id) : navigate("tasks")}>{dashboard.nextTask ? "Abrir tarea" : "Ver tareas"}<ArrowRight size={17} /></button>
+          </article>
           <article className="focus-card mint-card">
-            <div className="focus-card-top">
-              <span className="subject-icon">
-                <Paperclip size={20} />
-              </span>
-              <span className="soft-tag">Matemáticas</span>
-            </div>
-            <span className="card-kicker">Recurso de tarea</span>
-            <h3>Guía visual del tema</h3>
-            <p>Consulta el vídeo desde los recursos de tu actividad.</p>
-            <div className="due-line">
-              <CheckCircle2 size={16} /> Recurso obligatorio
-            </div>
-            <button
-              className="card-action"
-              onClick={() => navigate("tasks")}
-            >
-              Ver recursos <ArrowRight size={17} />
-            </button>
+            <div className="focus-card-top"><span className="subject-icon"><Paperclip size={20} /></span><span className="soft-tag">{dashboard.nextMaterial?.subject ?? "Recursos"}</span></div>
+            <span className="card-kicker">{dashboard.nextMaterial ? "Recurso por consultar" : "Recursos al día"}</span>
+            <h3>{dashboard.nextMaterial?.title ?? "Ya consultaste tus recursos"}</h3>
+            <p>{dashboard.nextMaterial?.description ?? "Los materiales nuevos aparecerán aquí."}</p>
+            {dashboard.nextMaterial && <div className="due-line"><CheckCircle2 size={16} /> {dashboard.nextMaterial.required ? "Recurso obligatorio" : "Recurso complementario"}</div>}
+            <button className="card-action" onClick={() => navigate("materials")}>Ver recursos <ArrowRight size={17} /></button>
           </article>
         </div>
       </section>
 
       <section className="two-column student-lower">
         <article className="panel">
-          <PanelHeading title="Así vas esta semana" />
+          <PanelHeading title="Tu seguimiento real" onAction={() => navigate("my-week")} action="Ver calificaciones" />
           <div className="mini-progress-list">
-            {state.progress.slice(0, 3).map((criterion) => (
+            {dashboard.progress.map((criterion) => (
               <div key={criterion.id}>
                 <span className={`status-dot ${criterion.level}`} />
                 <div>
@@ -2547,20 +2662,43 @@ function Dashboard({
             ))}
           </div>
         </article>
-        <article className="panel editorial-card">
-          <span className="eyebrow">Desde el periódico</span>
-          <div className="editorial-art" aria-hidden="true">
-            <span className="leaf leaf-a" />
-            <span className="leaf leaf-b" />
-            <span className="sun-shape" />
-          </div>
-          <h3>{state.wallPosts[0]?.title}</h3>
-          <p>{state.wallPosts[0]?.excerpt}</p>
-          <button className="text-link" onClick={() => navigate("wall-newspaper")}>
-            Leer historia <ArrowRight size={16} />
-          </button>
+        <article className="panel dashboard-report-card">
+          <PanelHeading title="Tu último reporte" onAction={() => navigate("reports")} action="Ver reportes" />
+          {dashboard.latestReport ? <>
+            <span className="soft-tag">{dashboard.latestReport.subject} · {dashboard.latestReport.weekLabel}</span>
+            <h3>{dashboard.latestReport.achievement}</h3>
+            <p><strong>Próximo paso:</strong> {dashboard.latestReport.nextStep}</p>
+            <small>{dashboard.latestReport.teacherName}</small>
+          </> : <div className="dashboard-empty-summary"><FileBarChart size={24} /><strong>Aún no hay un reporte publicado</strong><p>Tu docente lo compartirá aquí cuando esté listo.</p></div>}
         </article>
       </section>
+
+      <section className="panel dashboard-activity-panel">
+        <PanelHeading title="Tu actividad reciente" />
+        <Timeline activities={dashboard.activity} onOpen={openDashboardTarget} />
+      </section>
+      </> : <section className="two-column">
+        <article className="panel">
+          <PanelHeading
+            title={role === "director" ? "Grupos que conviene revisar" : "Tus prioridades"}
+            action={role === "director" ? "Ver comunidad" : "Ver seguimiento"}
+            onAction={() => navigate(role === "director" ? "users" : "my-week")}
+          />
+          <div className="priority-list">
+            {dashboard.priorities.map((item, index) => (
+              <button className="priority-row" key={item.id} onClick={() => openDashboardTarget(item)}>
+                <span className={`priority-number n${index + 1}`}>{index + 1}</span>
+                <span><strong>{item.title}</strong><small>{item.detail}</small></span>
+                <em>{item.status}</em>
+              </button>
+            ))}
+          </div>
+        </article>
+        <article className="panel">
+          <PanelHeading title={role === "director" ? "Actividad institucional reciente" : "Actividad de tus grupos"} />
+          <Timeline activities={dashboard.activity} onOpen={openDashboardTarget} />
+        </article>
+      </section>}
     </div>
   );
 }
@@ -4341,15 +4479,17 @@ function ProgressRing({
 function PanelHeading({
   title,
   action,
+  onAction,
 }: {
   title: string;
   action?: string;
+  onAction?: () => void;
 }) {
   return (
     <div className="panel-heading">
       <h2>{title}</h2>
       {action && (
-        <button className="text-link">
+        <button className="text-link" onClick={onAction} type="button">
           {action} <ArrowRight size={15} />
         </button>
       )}
@@ -4358,21 +4498,33 @@ function PanelHeading({
 }
 
 function Timeline({
-  notifications,
+  activities,
+  onOpen,
 }: {
-  notifications: PortalState["notifications"];
+  activities: DashboardActivity[];
+  onOpen: (activity: DashboardActivity) => void;
 }) {
+  if (!activities.length) {
+    return (
+      <div className="dashboard-empty-summary compact">
+        <Clock3 size={22} />
+        <strong>Aún no hay actividad en este periodo</strong>
+        <p>Las actualizaciones que te correspondan aparecerán aquí.</p>
+      </div>
+    );
+  }
   return (
     <div className="timeline">
-      {notifications.map((item) => (
-        <div key={item.id}>
+      {activities.map((item) => (
+        <button key={item.id} onClick={() => onOpen(item)} type="button">
           <span className={`timeline-dot ${item.category}`} />
           <div>
             <strong>{item.title}</strong>
             <p>{item.detail}</p>
             <small>{item.createdAt}</small>
           </div>
-        </div>
+          <ChevronRight className="timeline-arrow" size={15} aria-hidden="true" />
+        </button>
       ))}
     </div>
   );

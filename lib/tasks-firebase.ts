@@ -1160,12 +1160,15 @@ export function watchTaskNotifications(
       callback(
         snapshot.docs.map((entry) => {
           const data = entry.data();
+          const createdAtIso = asIso(data.createdAt);
           return {
             id: entry.id,
             title: String(data.title ?? "Nueva notificación"),
             detail: String(data.detail ?? ""),
             category: data.category ?? "task",
             createdAt: notificationDate(data.createdAt),
+            createdAtIso,
+            url: data.url ? String(data.url) : undefined,
             read: data.read === true,
           } satisfies AppNotification;
         }),

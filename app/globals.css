@@ -1680,6 +1680,10 @@ code {
   font-size: calc(0.72rem + 0.125rem);
 }
 
+.student-metric-grid .metric-card {
+  min-height: 128px;
+}
+
 .priority-list {
   display: flex;
   flex-direction: column;
@@ -1749,15 +1753,20 @@ code {
   flex-direction: column;
 }
 
-.timeline > div {
+.timeline > button {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 11px 0 11px 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
 }
 
-.timeline > div:not(:last-child)::after {
+.timeline > button:not(:last-child)::after {
   position: absolute;
   top: 28px;
   bottom: -6px;
@@ -1765,6 +1774,15 @@ code {
   width: 1px;
   background: var(--border);
   content: "";
+}
+
+.timeline > button:hover strong {
+  color: var(--violet);
+}
+
+.timeline-arrow {
+  align-self: center;
+  color: var(--muted);
 }
 
 .timeline-dot {
@@ -1785,6 +1803,21 @@ code {
   background: var(--gold);
 }
 
+.timeline-dot.task {
+  background: var(--coral);
+}
+
+.timeline-dot.review,
+.timeline-dot.progress {
+  background: var(--violet);
+}
+
+.timeline-dot.forum,
+.timeline-dot.workshop,
+.timeline-dot.workspace {
+  background: var(--mint);
+}
+
 .timeline strong {
   display: block;
   font-size: calc(0.77rem + 0.125rem);
@@ -1799,6 +1832,69 @@ code {
 .timeline small {
   color: var(--muted);
   font-size: calc(0.64rem + 0.125rem);
+}
+
+.dashboard-activity-panel {
+  padding: 23px;
+}
+
+.dashboard-report-card {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  background:
+    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--gold-soft) 68%, transparent) 0 82px, transparent 83px),
+    var(--surface);
+}
+
+.dashboard-report-card > .soft-tag {
+  align-self: flex-start;
+}
+
+.dashboard-report-card > h3 {
+  margin: 19px 0 11px;
+  font-family: var(--font-display);
+  font-size: calc(1.18rem + 0.125rem);
+  line-height: 1.35;
+}
+
+.dashboard-report-card > p {
+  margin: 0 0 18px;
+  color: var(--muted-strong);
+  font-size: calc(0.75rem + 0.125rem);
+  line-height: 1.55;
+}
+
+.dashboard-report-card > small {
+  margin-top: auto;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.dashboard-empty-summary {
+  display: grid;
+  min-height: 170px;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.dashboard-empty-summary.compact {
+  min-height: 150px;
+}
+
+.dashboard-empty-summary strong {
+  color: var(--foreground);
+  font-size: calc(0.8rem + 0.125rem);
+}
+
+.dashboard-empty-summary p {
+  max-width: 340px;
+  margin: 0;
+  font-size: calc(0.7rem + 0.125rem);
+  line-height: 1.5;
 }
 
 /* Week */
@@ -6995,6 +7091,30 @@ code {
   color: var(--foreground);
 }
 
+.portal-search-submit {
+  display: inline-flex;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--primary);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.portal-search-submit:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.portal-search-submit:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
 .portal-search-panel {
   position: absolute;
   top: calc(100% + 10px);
@@ -7204,7 +7324,8 @@ code {
 
   .portal-search > input,
   .portal-search > kbd,
-  .portal-search > .portal-search-clear {
+  .portal-search > .portal-search-clear,
+  .portal-search > .portal-search-submit {
     display: none;
   }
 
@@ -7223,11 +7344,20 @@ code {
     display: block;
     width: calc(100vw - 32px);
     height: 44px;
-    padding: 0 14px;
+    padding: 0 92px 0 14px;
     border: 1px solid var(--border-strong);
     border-radius: 11px;
     background: var(--surface);
     box-shadow: 0 8px 24px rgba(27, 26, 46, 0.12);
+  }
+
+  .portal-search.is-open > .portal-search-submit {
+    position: fixed;
+    z-index: 3;
+    top: 79px;
+    right: 22px;
+    display: inline-flex;
+    height: 30px;
   }
 
   .portal-search-panel {

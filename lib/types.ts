@@ -895,6 +895,8 @@ export type AppNotification = {
     | "workspace"
     | "system";
   createdAt: string;
+  createdAtIso?: string;
+  url?: string;
   read: boolean;
 };
 

@@ -48,8 +48,9 @@ Algolia. Las eliminaciones retiran el registro.
 
 ## Costos y operación
 
-La búsqueda espera 250 ms después de escribir, solicita como máximo 12 resultados
-y reutiliza la credencial temporal durante la sesión. No hay lecturas de Firestore
-por cada tecla: solo una llamada para obtener la clave y consultas posteriores a
-Algolia. El backfill está limitado a 45,000 registros como margen operativo para
-el plan gratuito.
+Escribir no genera peticiones. Algolia solo se consulta cuando la persona pulsa
+**Buscar** o presiona **Enter**; después, los filtros por tipo se aplican localmente
+sin búsquedas adicionales. Cada consulta solicita como máximo 30 resultados y
+reutiliza la credencial temporal durante la sesión. No hay lecturas de Firestore
+por cada tecla. El backfill está limitado a 45,000 registros como margen operativo
+para el plan gratuito.

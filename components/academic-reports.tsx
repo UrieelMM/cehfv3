@@ -144,7 +144,7 @@ function PublishedReportCard({ report, grade }: { report: StudentWeeklyReport; g
   </article>;
 }
 
-function seedReports(
+export function demoStudentWeeklyReports(
   grades: WeeklyGradeRecord[],
   profile: UserProfile,
   academicConfig: AcademicConfig,
@@ -246,7 +246,7 @@ export function AcademicReportsPage({
           if (saved) demoGrades = JSON.parse(saved) as DailyGradeRecord[];
         } catch { /* ignore demo storage */ }
         setGrades(demoGrades);
-        setReports(seedReports(aggregateDailyGradesByWeek(demoGrades, calendar), profile, academicConfig));
+        setReports(demoStudentWeeklyReports(aggregateDailyGradesByWeek(demoGrades, calendar), profile, academicConfig));
         setLoading(false);
       });
       return;
