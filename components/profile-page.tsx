@@ -1,17 +1,13 @@
 "use client";
 
 import {
-  ArrowRight,
-  Bell,
   BookOpen,
-  CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   FileBarChart,
   GraduationCap,
   LogOut,
   Mail,
-  Palette,
   Paperclip,
   ShieldCheck,
   Users,
@@ -38,7 +34,6 @@ import type {
   ManagedAccount,
   PortalState,
   Role,
-  SectionKey,
   StudentWeeklyReport,
   TaskAssignment,
   TaskSubmission,
@@ -62,8 +57,6 @@ type ProfilePageProps = {
   managedAccounts: ManagedAccount[];
   managedAccountsLoading: boolean;
   firebaseReady: boolean;
-  navigate: (section: SectionKey) => void;
-  openTask: (id: string) => void;
 };
 
 const roleLabels: Record<Role, string> = {
@@ -92,19 +85,6 @@ function formatDate(value?: string) {
   }).format(date);
 }
 
-function formatDueDate(value: string, timeZone: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Consulta los detalles de la actividad.";
-  return `Entrega ${new Intl.DateTimeFormat("es-MX", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone,
-  }).format(date)}`;
-}
-
 function useProfileDashboard({
   profile,
   state,
@@ -122,8 +102,6 @@ function useProfileDashboard({
   | "reviewRecordsLoading"
   | "materialRecordsLoading"
   | "managedAccountsLoading"
-  | "navigate"
-  | "openTask"
 >) {
   const [grades, setGrades] = useState<DailyGradeRecord[]>([]);
   const [reports, setReports] = useState<StudentWeeklyReport[]>([]);
@@ -317,15 +295,11 @@ function useProfileDashboard({
 export function ProfilePage(props: ProfilePageProps) {
   const {
     profile,
-    state,
     taskRecordsLoading,
     reviewRecordsLoading,
     materialRecordsLoading,
     managedAccountsLoading,
-    academicConfig,
     managedAccounts,
-    navigate,
-    openTask,
   } = props;
   const { dashboard, recordsLoading } = useProfileDashboard(props);
   const loading =
@@ -349,13 +323,6 @@ export function ProfilePage(props: ProfilePageProps) {
     )].sort((first, second) => first.localeCompare(second, "es"));
   }, [managedAccounts, profile.role, profile.uid]);
   const createdAt = formatDate(profile.createdAt);
-  const themeLabel =
-    state.settings.theme === "dark"
-      ? "Oscuro"
-      : state.settings.theme === "system"
-        ? "Según el dispositivo"
-        : "Claro";
-  const periodLabel = academicConfig.weekLabel || "Periodo actual";
   const facts = [
     profile.role === "student" && profile.schoolLevel
       ? {
@@ -381,50 +348,6 @@ export function ProfilePage(props: ProfilePageProps) {
     { label: "Estado de la cuenta", value: profile.active === false ? "Inactiva" : "Activa" },
     createdAt ? { label: "Miembro desde", value: createdAt } : null,
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
-  const studentActions = [
-    {
-      key: "task",
-      icon: ClipboardCheck,
-      title: dashboard.nextTask?.title ?? "Tus tareas están al día",
-      detail: dashboard.nextTask
-        ? formatDueDate(
-            dashboard.nextTask.dueAt,
-            academicConfig.timezone || "America/Mexico_City",
-          )
-        : "Consulta tus entregas y actividades recientes.",
-      action: () =>
-        dashboard.nextTask ? openTask(dashboard.nextTask.id) : navigate("tasks"),
-    },
-    {
-      key: "review",
-      icon: BookOpen,
-      title: dashboard.nextReview?.title ?? "No tienes repasos pendientes",
-      detail: dashboard.nextReview
-        ? `${dashboard.nextReview.subject} · ${dashboard.nextReview.myAttempt?.progress ?? 0}% completado`
-        : "Puedes volver a consultar tus repasos completados.",
-      action: () => navigate("weekly-review"),
-    },
-    {
-      key: "report",
-      icon: FileBarChart,
-      title: dashboard.latestReport
-        ? `Reporte de ${dashboard.latestReport.subject}`
-        : "Aún no hay un reporte publicado",
-      detail: dashboard.latestReport
-        ? `${dashboard.latestReport.weekLabel} · ${dashboard.latestReport.teacherName}`
-        : "Aparecerá aquí en cuanto tu docente lo comparta.",
-      action: () => navigate("reports"),
-    },
-  ];
-  const staffActions = dashboard.priorities.map((priority) => ({
-    key: priority.id,
-    icon: priority.section === "reports" ? FileBarChart : priority.section === "users" ? Users : ClipboardCheck,
-    title: priority.title,
-    detail: priority.detail,
-    action: () => priority.taskId ? openTask(priority.taskId) : navigate(priority.section),
-  }));
-  const actions = profile.role === "student" ? studentActions : staffActions;
-
   return (
     <div className="account-profile-layout">
       <aside className="panel account-profile-identity">
@@ -471,9 +394,6 @@ export function ProfilePage(props: ProfilePageProps) {
               <h2>{profile.role === "student" ? "Tu avance, en un vistazo" : "Tu trabajo, en un vistazo"}</h2>
               <p>{loading ? "Estamos reuniendo tu información…" : dashboard.heroDescription}</p>
             </div>
-            <span className="account-profile-period">
-              <CalendarDays size={16} aria-hidden="true" /> {periodLabel}
-            </span>
           </div>
           <div className="account-profile-metrics" aria-label="Resumen con datos actuales">
             {dashboard.metrics.map((metric) => {
@@ -494,56 +414,6 @@ export function ProfilePage(props: ProfilePageProps) {
               : "Datos de demostración para explorar la experiencia"}
           </div>
         </section>
-
-        <div className="account-profile-grid">
-          <section className="panel account-profile-actions">
-            <div className="account-profile-section-heading">
-              <div>
-                <span className="eyebrow">Siguiente paso</span>
-                <h3>{profile.role === "student" ? "Continúa desde aquí" : "Prioridades del periodo"}</h3>
-              </div>
-              <ArrowRight size={19} aria-hidden="true" />
-            </div>
-            <div className="account-profile-action-list">
-              {actions.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button key={item.key} onClick={item.action} type="button">
-                    <span className="account-profile-action-icon"><Icon size={19} aria-hidden="true" /></span>
-                    <span>
-                      <strong>{item.title}</strong>
-                      <small>{item.detail}</small>
-                    </span>
-                    <ArrowRight size={17} aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="panel account-profile-preferences">
-            <div className="account-profile-section-heading">
-              <div>
-                <span className="eyebrow">Preferencias</span>
-                <h3>Tu experiencia</h3>
-              </div>
-              <Palette size={20} aria-hidden="true" />
-            </div>
-            <div className="account-profile-preference-list">
-              <div>
-                <span><Palette size={18} aria-hidden="true" /></span>
-                <div><strong>Tema</strong><small>{themeLabel}</small></div>
-              </div>
-              <div>
-                <span><Bell size={18} aria-hidden="true" /></span>
-                <div><strong>Movimiento</strong><small>{state.settings.reducedMotion ? "Reducido" : "Animaciones activas"}</small></div>
-              </div>
-            </div>
-            <button className="secondary-button" onClick={() => navigate("settings")} type="button">
-              Ajustar preferencias <ArrowRight size={16} aria-hidden="true" />
-            </button>
-          </section>
-        </div>
 
         <aside className="account-profile-privacy">
           <span><ShieldCheck size={21} aria-hidden="true" /></span>

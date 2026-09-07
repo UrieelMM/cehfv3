@@ -1641,22 +1641,24 @@ export function CEHFApp() {
               </div>
             )}
             <div className="page-heading-actions">
-              <span
-                className={"page-week-context is-" + academicConfig.calendarStatus}
-                title={
-                  academicConfig.calendarStatus === "active"
-                    ? [currentWeekRange, academicConfig.termLabel].join(" · ")
-                    : academicConfig.nextWeekLabel
-                      ? "Próxima: " + academicConfig.nextWeekLabel
-                      : "Calendario sin configurar"
-                }
-              >
-                <CalendarDays size={15} />
-                <span>
-                  <small>Semana actual</small>
-                  <strong>{academicConfig.weekLabel}</strong>
+              {activeSection !== "profile" && (
+                <span
+                  className={"page-week-context is-" + academicConfig.calendarStatus}
+                  title={
+                    academicConfig.calendarStatus === "active"
+                      ? [currentWeekRange, academicConfig.termLabel].join(" · ")
+                      : academicConfig.nextWeekLabel
+                        ? "Próxima: " + academicConfig.nextWeekLabel
+                        : "Calendario sin configurar"
+                  }
+                >
+                  <CalendarDays size={15} />
+                  <span>
+                    <small>Semana actual</small>
+                    <strong>{academicConfig.weekLabel}</strong>
+                  </span>
                 </span>
-              </span>
+              )}
               {["teacher", "director"].includes(role) &&
                 (activeSection !== "users" || role === "director") &&
                 [
@@ -2583,8 +2585,6 @@ function SectionContent({
           managedAccounts={managedAccounts}
           managedAccountsLoading={managedAccountsLoading}
           firebaseReady={firebaseReady}
-          navigate={navigate}
-          openTask={openDetail}
         />
       );
     default:
