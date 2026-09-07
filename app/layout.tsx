@@ -14,6 +14,7 @@ import "./whatsapp-settings.css";
 import "./staff-workspace.css";
 import "./form-focus.css";
 import "./profile.css";
+import "./dashboard-home.css";
 
 const themeBootstrapScript = `
   (() => {

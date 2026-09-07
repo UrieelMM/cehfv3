@@ -15,6 +15,12 @@ import type {
 } from "./types";
 
 export type DashboardTone = "coral" | "violet" | "gold" | "mint";
+export type DashboardProgressTone =
+  | "critical"
+  | "low"
+  | "medium"
+  | "high"
+  | "complete";
 
 export type DashboardMetric = {
   key: string;
@@ -98,6 +104,15 @@ const categorySections: Record<AppNotification["category"], SectionKey> = {
 
 function clampPercent(value: number) {
   return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+export function dashboardProgressTone(value: number): DashboardProgressTone {
+  const progress = clampPercent(value);
+  if (progress <= 20) return "critical";
+  if (progress <= 40) return "low";
+  if (progress <= 60) return "medium";
+  if (progress < 80) return "high";
+  return "complete";
 }
 
 function ratio(completed: number, total: number) {

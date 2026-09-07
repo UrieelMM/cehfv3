@@ -1,0 +1,137 @@
+.hero-copy-message {
+  width: min(100%, 680px);
+}
+
+.hero-copy-skeleton {
+  display: grid;
+  width: 100%;
+  gap: 10px;
+  margin: 18px 0 25px;
+}
+
+.hero-copy-skeleton span {
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.13);
+}
+
+.hero-copy-skeleton span::after {
+  display: block;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255 255 255 / 0.2),
+    transparent
+  );
+  content: "";
+  transform: translateX(-110%);
+  animation: dashboard-hero-shimmer 1.25s ease-in-out infinite;
+}
+
+.hero-skeleton-title {
+  width: min(94%, 610px);
+  height: clamp(34px, 4vw, 52px);
+}
+
+.hero-skeleton-title.short {
+  width: min(67%, 430px);
+}
+
+.hero-skeleton-detail {
+  width: min(76%, 490px);
+  height: 15px;
+  margin-top: 7px;
+}
+
+.progress-ring:not(.small) {
+  --progress-start: #fff;
+  --progress-mid: #fff;
+  --progress-end: #fff;
+  background: conic-gradient(
+    from -90deg,
+    var(--progress-start) 0deg,
+    var(--progress-mid) var(--value-mid),
+    var(--progress-end) var(--value),
+    rgb(255 255 255 / 0.15) var(--value) 360deg
+  );
+  transition: background 320ms ease, filter 320ms ease;
+}
+
+.progress-ring:not(.small)::after {
+  background: color-mix(in srgb, var(--progress-start) 7%, #26329d);
+  transition: background 320ms ease;
+}
+
+.progress-ring:not(.small) span {
+  background: linear-gradient(
+    100deg,
+    var(--progress-start),
+    var(--progress-mid) 54%,
+    var(--progress-end)
+  );
+  background-clip: text;
+  color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.progress-tone-critical {
+  --progress-start: #ff3158;
+  --progress-mid: #ef6b7d;
+  --progress-end: #ffb2bd;
+  filter: drop-shadow(0 8px 18px rgb(255 49 88 / 0.17));
+}
+
+.progress-tone-low {
+  --progress-start: #ef5d73;
+  --progress-mid: #f38a68;
+  --progress-end: #ffc59f;
+  filter: drop-shadow(0 8px 18px rgb(239 93 115 / 0.15));
+}
+
+.progress-tone-medium {
+  --progress-start: #e99a45;
+  --progress-mid: #f5c86b;
+  --progress-end: #fff0b7;
+  filter: drop-shadow(0 8px 18px rgb(233 154 69 / 0.14));
+}
+
+.progress-tone-high {
+  --progress-start: #8290ff;
+  --progress-mid: #aeb5ff;
+  --progress-end: #eceeff;
+  filter: drop-shadow(0 8px 18px rgb(174 181 255 / 0.15));
+}
+
+.progress-tone-complete {
+  --progress-start: #cbd0ff;
+  --progress-mid: #f1f2ff;
+  --progress-end: #fff;
+  filter: drop-shadow(0 8px 20px rgb(255 255 255 / 0.15));
+}
+
+.progress-ring.is-loading:not(.small) {
+  --progress-start: rgb(255 255 255 / 0.26);
+  --progress-mid: rgb(255 255 255 / 0.34);
+  --progress-end: rgb(255 255 255 / 0.26);
+  filter: none;
+}
+
+.progress-ring.is-loading:not(.small) span {
+  background: none;
+  color: rgb(255 255 255 / 0.56);
+  -webkit-text-fill-color: currentColor;
+}
+
+@keyframes dashboard-hero-shimmer {
+  to { transform: translateX(230%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-copy-skeleton span::after { animation: none; }
+  .progress-ring:not(.small),
+  .progress-ring:not(.small)::after { transition: none; }
+}

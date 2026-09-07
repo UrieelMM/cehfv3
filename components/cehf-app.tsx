@@ -97,6 +97,7 @@ import {
 import { watchStudentWeeklyReports } from "@/lib/reports-firebase";
 import {
   buildDashboardViewModel,
+  dashboardProgressTone,
   dashboardReviewScope,
   dashboardTaskScope,
   roleMetricIconKey,
@@ -2636,7 +2637,7 @@ function Dashboard({
 }) {
   const [dashboardGrades, setDashboardGrades] = useState<DailyGradeRecord[]>([]);
   const [dashboardReports, setDashboardReports] = useState<StudentWeeklyReport[]>([]);
-  const [dashboardRecordsLoading, setDashboardRecordsLoading] = useState(firebaseReady);
+  const [dashboardRecordsLoading, setDashboardRecordsLoading] = useState(true);
   const [submissionsByTask, setSubmissionsByTask] = useState<Record<string, TaskSubmission[]>>({});
   const [attemptsByReview, setAttemptsByReview] = useState<Record<string, WeeklyReviewAttempt[]>>({});
   const scopedTasks = useMemo(
@@ -2863,8 +2864,20 @@ function Dashboard({
           <span className="pill pill-light">
             <span className="live-dot" /> Desempeño actual
           </span>
-          <h2>{dashboard.heroTitle}</h2>
-          <p>{dashboard.heroDescription}</p>
+          <div className="hero-copy-message" aria-live="polite" aria-atomic="true">
+            {dashboardLoading ? (
+              <div className="hero-copy-skeleton" role="status" aria-label="Calculando resumen">
+                <span className="hero-skeleton-title" />
+                <span className="hero-skeleton-title short" />
+                <span className="hero-skeleton-detail" />
+              </div>
+            ) : (
+              <>
+                <h2>{dashboard.heroTitle}</h2>
+                <p>{dashboard.heroDescription}</p>
+              </>
+            )}
+          </div>
           <button
             className="light-button"
             onClick={() => navigate("my-week")}
@@ -2878,7 +2891,11 @@ function Dashboard({
           </button>
         </div>
         <div className="hero-metric">
-          <ProgressRing value={dashboardLoading ? 0 : dashboard.completion} />
+          <ProgressRing
+            value={dashboardLoading ? 0 : dashboard.completion}
+            tone={dashboardProgressTone(dashboard.completion)}
+            loading={dashboardLoading}
+          />
           <span>{dashboardLoading ? "Calculando resumen…" : dashboard.completionLabel}</span>
         </div>
       </section>
@@ -4676,18 +4693,26 @@ function MobileMore({
 function ProgressRing({
   value,
   small = false,
+  tone,
+  loading = false,
 }: {
   value: number;
   small?: boolean;
+  tone?: ReturnType<typeof dashboardProgressTone>;
+  loading?: boolean;
 }) {
+  const degrees = value * 3.6;
   return (
     <div
-      className={`progress-ring ${small ? "small" : ""}`}
-      style={{ "--value": `${value * 3.6}deg` } as React.CSSProperties}
-      aria-label={`${value}%`}
+      className={`progress-ring ${small ? "small" : ""}${tone && !small ? ` progress-tone-${tone}` : ""}${loading ? " is-loading" : ""}`}
+      style={{
+        "--value": `${degrees}deg`,
+        "--value-mid": `${degrees * 0.58}deg`,
+      } as React.CSSProperties}
+      aria-label={loading ? "Calculando porcentaje" : `${value}%`}
       role="img"
     >
-      <span>{value}%</span>
+      <span>{loading ? "—" : `${value}%`}</span>
     </div>
   );
 }
