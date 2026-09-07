@@ -578,12 +578,17 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
   const snapshot = await getDoc(doc(db, "users", user.uid));
   if (!snapshot.exists()) return null;
   const data = snapshot.data();
+  const name = String(data.name ?? user.displayName ?? "Usuario");
+  const nameParts = name.trim().split(/\s+/);
   return {
     uid: user.uid,
     institutionId: String(data.institutionId ?? ""),
-    name: String(data.name ?? user.displayName ?? "Usuario"),
+    firstName: String(data.firstName ?? nameParts[0] ?? ""),
+    lastName: String(data.lastName ?? nameParts.slice(1).join(" ")),
+    name,
     email: String(data.email ?? user.email ?? ""),
     role: (data.role ?? "student") as Role,
+    active: data.active !== false,
     schoolLevel:
       data.role === "student" || !data.role
         ? readSchoolLevel(data.schoolLevel)
@@ -600,6 +605,8 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
     teacherIds: Array.isArray(data.teacherIds)
       ? data.teacherIds.map(String)
       : undefined,
+    photoURL: data.photoURL ? String(data.photoURL) : undefined,
+    createdAt: data.createdAt ? accountDate(data.createdAt) : undefined,
     initials: String(data.initials ?? "CE"),
   };
 }

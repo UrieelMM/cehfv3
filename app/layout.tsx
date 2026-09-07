@@ -13,6 +13,7 @@ import "./landing.css";
 import "./whatsapp-settings.css";
 import "./staff-workspace.css";
 import "./form-focus.css";
+import "./profile.css";
 
 const themeBootstrapScript = `
   (() => {

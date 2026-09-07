@@ -4,15 +4,20 @@ export type SchoolLevel = "primary" | "secondary";
 export type UserProfile = {
   uid: string;
   institutionId: string;
+  firstName?: string;
+  lastName?: string;
   name: string;
   email: string;
   role: Role;
+  active?: boolean;
   schoolLevel?: SchoolLevel;
   grade?: string;
   group?: string;
   guardianName?: string;
   subjects?: string[];
   teacherIds?: string[];
+  photoURL?: string;
+  createdAt?: string;
   initials: string;
 };
 

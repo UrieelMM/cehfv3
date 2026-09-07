@@ -32,7 +32,6 @@ import {
   LockKeyhole,
   LoaderCircle,
   LogIn,
-  LogOut,
   Mail,
   Menu,
   MessageCircle,
@@ -89,6 +88,7 @@ import {
 } from "@/components/academic-reports";
 import { MaterialCreateModal, MaterialsPage } from "@/components/materials-page";
 import { PortalSearch } from "@/components/portal-search";
+import { ProfilePage } from "@/components/profile-page";
 import { backfillPortalSearch } from "@/lib/portal-search";
 import {
   aggregateDailyGradesByWeek,
@@ -2567,7 +2567,26 @@ function SectionContent({
         />
       );
     case "profile":
-      return <ProfilePage profile={profile} state={state} />;
+      return (
+        <ProfilePage
+          profile={profile}
+          state={state}
+          taskRecords={taskRecords}
+          taskRecordsLoading={taskRecordsLoading}
+          reviewRecords={reviewRecords}
+          reviewRecordsLoading={reviewRecordsLoading}
+          materialRecords={materialRecords}
+          materialRecordsLoading={materialRecordsLoading}
+          viewedMaterialIds={viewedMaterialIds}
+          academicConfig={academicConfig}
+          academicCalendar={academicCalendar}
+          managedAccounts={managedAccounts}
+          managedAccountsLoading={managedAccountsLoading}
+          firebaseReady={firebaseReady}
+          navigate={navigate}
+          openTask={openDetail}
+        />
+      );
     default:
       return null;
   }
@@ -3596,82 +3615,6 @@ function SettingsPage({
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function ProfilePage({
-  profile,
-  state,
-}: {
-  profile: UserProfile;
-  state: PortalState;
-}) {
-  return (
-    <div className="profile-layout">
-      <section className="panel profile-card">
-        <span className="avatar profile-avatar">{profile.initials}</span>
-        <h2>{profile.name}</h2>
-        <span className="role-chip">{roleLabel[profile.role]}</span>
-        <p>{profile.email}</p>
-        <div className="profile-facts">
-          {profile.grade && (
-            <span>
-              <strong>Grado</strong>
-              {profile.grade}
-            </span>
-          )}
-          {profile.group && (
-            <span>
-              <strong>Grupo</strong>
-              {profile.group}
-            </span>
-          )}
-          {profile.subjects?.length ? (
-            <span>
-              <strong>Materias</strong>
-              {profile.subjects.join(", ")}
-            </span>
-          ) : null}
-        </div>
-        <button
-          className="secondary-button logout-button"
-          onClick={() => void logoutFirebase()}
-        >
-          <LogOut size={17} /> Cerrar sesión
-        </button>
-      </section>
-      <section className="profile-main">
-        <article className="panel">
-          <PanelHeading title="Tu actividad" />
-          <div className="profile-stats">
-            <div>
-              <strong>{state.reviews.filter((item) => item.progress === 100).length}</strong>
-              <span>Repasos completados</span>
-            </div>
-            <div>
-              <strong>{state.tasks.filter((item) => item.status !== "published").length}</strong>
-              <span>Tareas entregadas</span>
-            </div>
-            <div>
-              <strong>{state.reports.filter((item) => item.status === "published").length}</strong>
-              <span>Reportes disponibles</span>
-            </div>
-          </div>
-        </article>
-        <article className="panel privacy-panel">
-          <span className="metric-icon mint">
-            <ShieldCheck size={21} />
-          </span>
-          <div>
-            <h3>Tu información está protegida</h3>
-            <p>
-              Tu avance, reportes y correo no aparecen en el foro ni en el
-              periódico. Solo las personas autorizadas pueden consultarlos.
-            </p>
-          </div>
-        </article>
-      </section>
     </div>
   );
 }
