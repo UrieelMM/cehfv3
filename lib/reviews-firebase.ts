@@ -18,6 +18,7 @@ import {
   uploadBytes,
 } from "firebase/storage";
 import { firebase } from "./firebase";
+import { includesSubject } from "./academic-subjects";
 import type {
   AcademicCalendar,
   AcademicConfig,
@@ -507,7 +508,7 @@ export function legacyReviewsToWeeklyReviews(
 ): WeeklyReview[] {
   const students = accounts.filter((account) => account.role === "student" && account.active);
   return reviews.map((review, index) => {
-    const audience = students.filter((student) => student.subjects.includes(review.subject));
+    const audience = students.filter((student) => includesSubject(student.subjects, review.subject));
     const progress = profile.role === "student" ? review.progress : 0;
     const completed = progress === 100;
     const questions = demoQuestions(review.subject).slice(
@@ -591,7 +592,7 @@ export function createDemoWeeklyReview(
     (account) =>
       account.role === "student" &&
       account.active &&
-      account.subjects.includes(input.subject) &&
+      includesSubject(account.subjects, input.subject) &&
       (profile.role === "director" || account.teacherIds.includes(profile.uid)) &&
       (input.targetGroups.length === 0 ||
         input.targetGroups.includes(`${account.grade ?? ""} ${account.group ?? ""}`.trim())),

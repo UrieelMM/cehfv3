@@ -49,6 +49,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { friendlyFirebaseError } from "@/lib/firebase";
+import { subjectsMatch } from "@/lib/academic-subjects";
 import {
   deleteForumTopic,
   forumDateLabel,
@@ -263,7 +264,7 @@ export function ForumPage({
         matchesQuery &&
         (selectedSpace === "all" || topic.forumId === selectedSpace) &&
         (statusFilter === "all" || topic.status === statusFilter) &&
-        (subjectFilter === "all" || topic.subject === subjectFilter)
+        (subjectFilter === "all" || subjectsMatch(topic.subject, subjectFilter))
       );
     });
     if (sort === "participation") {

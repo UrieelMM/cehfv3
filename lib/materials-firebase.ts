@@ -16,6 +16,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
+import { includesSubject } from "./academic-subjects";
 import type {
   AcademicCalendar,
   AcademicConfig,
@@ -453,7 +454,7 @@ export function createDemoLearningMaterial(
     (account) =>
       account.role === "student" &&
       account.active &&
-      account.subjects.includes(input.subject) &&
+      includesSubject(account.subjects, input.subject) &&
       (profile.role === "director" || account.teacherIds.includes(profile.uid)) &&
       (input.targetGroups.length === 0 ||
         input.targetGroups.includes(

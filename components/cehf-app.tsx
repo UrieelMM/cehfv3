@@ -133,6 +133,12 @@ import {
   watchAuth,
 } from "@/lib/firebase";
 import {
+  academicSubjectOptions,
+  gradesBySchoolLevel,
+  sanitizeSubjects,
+  subjectsForGrade,
+} from "@/lib/academic-subjects";
+import {
   createDemoTask,
   createTaskAssignment,
   defaultAcademicCalendar,
@@ -219,23 +225,6 @@ type ForumDraftDetails = {
   closesAt: string;
   allowReplies: boolean;
   allowAttachments: boolean;
-};
-
-const primarySubjectOptions = [
-  "Español",
-  "Matemáticas",
-  "Ciencias",
-  "Historia",
-  "Geografía",
-  "Formación Cívica",
-  "Inglés",
-  "Artes",
-  "Educación Física",
-];
-
-const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
-  primary: ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"],
-  secondary: ["1.º", "2.º", "3.º"],
 };
 
 const schoolLevelLabels: Record<SchoolLevel, string> = {
@@ -3716,10 +3705,16 @@ function AccountRegistrationModal({
     password: string;
   } | null>(null);
   const teachers = accounts.filter((account) => account.role === "teacher");
+  const availableSubjects =
+    accountRole === "student"
+      ? subjectsForGrade(schoolLevel, grade)
+      : academicSubjectOptions;
   const compatibleTeachers = teachers.filter(
     (teacher) =>
       subjects.length === 0 ||
-      teacher.subjects.some((subject) => subjects.includes(subject)),
+      sanitizeSubjects(teacher.subjects).some((subject) =>
+        subjects.includes(subject),
+      ),
   );
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const validGuardianWhatsApp =
@@ -3762,12 +3757,38 @@ function AccountRegistrationModal({
 
   function selectRole(nextRole: "student" | "teacher") {
     setAccountRole(nextRole);
+    setSubjects((current) =>
+      sanitizeSubjects(
+        current,
+        nextRole === "student"
+          ? subjectsForGrade(schoolLevel, grade)
+          : academicSubjectOptions,
+      ),
+    );
     setTeacherIds([]);
   }
 
   function selectSchoolLevel(nextLevel: SchoolLevel) {
+    const nextGrade = nextLevel === "primary" ? "5.º" : "1.º";
+    selectStudentGrade(nextLevel, nextGrade);
+  }
+
+  function selectStudentGrade(nextLevel: SchoolLevel, nextGrade: string) {
+    const nextSubjects = sanitizeSubjects(
+      subjects,
+      subjectsForGrade(nextLevel, nextGrade),
+    );
     setSchoolLevel(nextLevel);
-    setGrade(nextLevel === "primary" ? "5.º" : "1.º");
+    setGrade(nextGrade);
+    setSubjects(nextSubjects);
+    setTeacherIds((current) =>
+      current.filter((teacherId) => {
+        const teacher = teachers.find((account) => account.uid === teacherId);
+        return sanitizeSubjects(teacher?.subjects ?? []).some((subject) =>
+          nextSubjects.includes(subject),
+        );
+      }),
+    );
   }
 
   function selectPhoto(file?: File) {
@@ -3818,7 +3839,9 @@ function AccountRegistrationModal({
     setTeacherIds((current) =>
       current.filter((teacherId) => {
         const teacher = teachers.find((account) => account.uid === teacherId);
-        return teacher?.subjects.some((item) => nextSubjects.includes(item));
+        return sanitizeSubjects(teacher?.subjects ?? []).some((item) =>
+          nextSubjects.includes(item),
+        );
       }),
     );
   }
@@ -3853,6 +3876,7 @@ function AccountRegistrationModal({
     }
     setSubmitting(true);
     try {
+      const sanitizedSubjects = sanitizeSubjects(subjects, availableSubjects);
       const result = firebaseReady
         ? await createManagedAccount(
             {
@@ -3867,7 +3891,7 @@ function AccountRegistrationModal({
                 accountRole === "student" ? guardianName : undefined,
               guardianWhatsApp:
                 accountRole === "student" ? guardianWhatsApp : undefined,
-              subjects,
+              subjects: sanitizedSubjects,
               teacherIds,
               photo,
             },
@@ -3901,7 +3925,7 @@ function AccountRegistrationModal({
                         : undefined,
                     guardianWhatsAppAuthorized:
                       accountRole === "student" ? true : undefined,
-                    subjects,
+                    subjects: sanitizedSubjects,
                     teacherIds: accountRole === "student" ? teacherIds : [],
                     createdAt: new Date().toISOString(),
                   },
@@ -4185,7 +4209,7 @@ function AccountRegistrationModal({
                     {accountRole === "student" && (
                       <div className="registration-grade-grid">
                         <label>Nivel escolar<select value={schoolLevel} onChange={(event) => selectSchoolLevel(event.target.value as SchoolLevel)}><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
-                        <label>Grado<select value={grade} onChange={(event) => setGrade(event.target.value)}>{gradesBySchoolLevel[schoolLevel].map((item) => <option key={item}>{item}</option>)}</select></label>
+                        <label>Grado<select value={grade} onChange={(event) => selectStudentGrade(schoolLevel, event.target.value)}>{gradesBySchoolLevel[schoolLevel].map((item) => <option key={item}>{item}</option>)}</select></label>
                         <label>Grupo<select value={group} onChange={(event) => setGroup(event.target.value)}>{["A", "B", "C"].map((item) => <option key={item}>{item}</option>)}</select></label>
                       </div>
                     )}
@@ -4193,7 +4217,7 @@ function AccountRegistrationModal({
                       <legend>Materias</legend>
                       <p>Selecciona una o varias opciones.</p>
                       <div>
-                        {primarySubjectOptions.map((subject) => (
+                        {availableSubjects.map((subject) => (
                           <motion.button
                             type="button"
                             className={subjects.includes(subject) ? "selected" : ""}
@@ -4223,7 +4247,7 @@ function AccountRegistrationModal({
                               key={teacher.uid}
                             >
                               <span>{teacher.initials}</span>
-                              <div><strong>{teacher.name}</strong><small>{teacher.subjects.filter((subject) => subjects.length === 0 || subjects.includes(subject)).join(" · ")}</small></div>
+                              <div><strong>{teacher.name}</strong><small>{sanitizeSubjects(teacher.subjects).filter((subject) => subjects.length === 0 || subjects.includes(subject)).join(" · ")}</small></div>
                               <i>{teacherIds.includes(teacher.uid) && <Check size={12} />}</i>
                             </motion.button>
                           ))}
@@ -4321,7 +4345,7 @@ function CreateModal({
       ...(forumSubjects ?? []),
       "Ciencias",
       "Matemáticas",
-      "Español",
+      "Lenguaje",
       "Comunidad",
     ]),
   ];

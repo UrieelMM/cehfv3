@@ -3,12 +3,18 @@ import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
-const [source, css] = await Promise.all([
+const [source, css, academicSubjectsSource] = await Promise.all([
   readFile(new URL("../lib/dashboard.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/dashboard-home.css", import.meta.url), "utf8"),
+  readFile(new URL("../lib/academic-subjects.ts", import.meta.url), "utf8"),
 ]);
+const academicSubjectsModule = `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(academicSubjectsSource)).toString("base64")}`;
+const dashboardModule = stripTypeScriptTypes(source).replace(
+  "./academic-subjects",
+  academicSubjectsModule,
+);
 const { dashboardProgressTone } = await import(
-  `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`
+  `data:text/javascript;base64,${Buffer.from(dashboardModule).toString("base64")}`
 );
 
 test("dashboard progress moves from red to white in five stable ranges", () => {

@@ -13,6 +13,7 @@ import type {
   WeeklyReview,
   WeeklyReviewAttempt,
 } from "./types";
+import { includesSubject } from "./academic-subjects";
 
 export type DashboardTone = "coral" | "violet" | "gold" | "mint";
 export type DashboardProgressTone =
@@ -479,7 +480,9 @@ function staffViewModel(
     eligibleStudents.flatMap((student) => {
       const subjects = director
         ? student.subjects
-        : student.subjects.filter((subject) => input.profile.subjects?.includes(subject));
+        : student.subjects.filter((subject) =>
+            includesSubject(input.profile.subjects ?? [], subject),
+          );
       return subjects.map((subject) => `${student.uid}:${subject}`);
     }),
   );

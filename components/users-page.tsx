@@ -29,24 +29,13 @@ import {
   setManagedAccountActive,
   updateManagedAccount,
 } from "@/lib/firebase";
+import {
+  academicSubjectOptions,
+  gradesBySchoolLevel,
+  sanitizeSubjects,
+  subjectsForGrade,
+} from "@/lib/academic-subjects";
 import type { ManagedAccount, Role, SchoolLevel } from "@/lib/types";
-
-const subjectOptions = [
-  "Español",
-  "Matemáticas",
-  "Ciencias",
-  "Historia",
-  "Geografía",
-  "Formación Cívica",
-  "Inglés",
-  "Artes",
-  "Educación Física",
-];
-
-const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
-  primary: ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"],
-  secondary: ["1.º", "2.º", "3.º"],
-};
 
 const schoolLevelLabels: Record<SchoolLevel, string> = {
   primary: "Primaria",
@@ -313,7 +302,14 @@ function AccountEditor({
   const [schoolLevel, setSchoolLevel] = useState<SchoolLevel>(account.schoolLevel ?? "primary");
   const [grade, setGrade] = useState(account.grade ?? "1.º");
   const [group, setGroup] = useState(account.group ?? "A");
-  const [subjects, setSubjects] = useState(account.subjects);
+  const [subjects, setSubjects] = useState<string[]>(() =>
+    sanitizeSubjects(
+      account.subjects,
+      account.role === "student"
+        ? subjectsForGrade(account.schoolLevel ?? "primary", account.grade ?? "1.º")
+        : academicSubjectOptions,
+    ),
+  );
   const [teacherIds, setTeacherIds] = useState(account.teacherIds);
   const [photo, setPhoto] = useState<File | undefined>();
   const [photoPreview, setPhotoPreview] = useState(account.photoURL ?? "");
@@ -321,6 +317,16 @@ function AccountEditor({
   const teachers = useMemo(
     () => accounts.filter((item) => item.role === "teacher" && item.active),
     [accounts],
+  );
+  const availableSubjects = account.role === "student"
+    ? subjectsForGrade(schoolLevel, grade)
+    : academicSubjectOptions;
+  const compatibleTeachers = teachers.filter(
+    (teacher) =>
+      subjects.length === 0 ||
+      sanitizeSubjects(teacher.subjects).some((subject) =>
+        subjects.includes(subject),
+      ),
   );
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const ready = Boolean(
@@ -346,9 +352,36 @@ function AccountEditor({
   }, [photo, photoPreview]);
 
   function toggleSubject(subject: string) {
-    setSubjects((current) => current.includes(subject)
-      ? current.filter((item) => item !== subject)
-      : [...current, subject]);
+    const nextSubjects = subjects.includes(subject)
+      ? subjects.filter((item) => item !== subject)
+      : [...subjects, subject];
+    setSubjects(nextSubjects);
+    setTeacherIds((current) =>
+      current.filter((teacherId) => {
+        const teacher = teachers.find((item) => item.uid === teacherId);
+        return sanitizeSubjects(teacher?.subjects ?? []).some((item) =>
+          nextSubjects.includes(item),
+        );
+      }),
+    );
+  }
+
+  function selectStudentGrade(nextLevel: SchoolLevel, nextGrade: string) {
+    const nextSubjects = sanitizeSubjects(
+      subjects,
+      subjectsForGrade(nextLevel, nextGrade),
+    );
+    setSchoolLevel(nextLevel);
+    setGrade(nextGrade);
+    setSubjects(nextSubjects);
+    setTeacherIds((current) =>
+      current.filter((teacherId) => {
+        const teacher = teachers.find((item) => item.uid === teacherId);
+        return sanitizeSubjects(teacher?.subjects ?? []).some((subject) =>
+          nextSubjects.includes(subject),
+        );
+      }),
+    );
   }
 
   function selectPhoto(file?: File) {
@@ -370,6 +403,7 @@ function AccountEditor({
     }
     setBusy(true);
     try {
+      const sanitizedSubjects = sanitizeSubjects(subjects, availableSubjects);
       const updated = firebaseReady
         ? await updateManagedAccount({
             uid: account.uid,
@@ -383,7 +417,7 @@ function AccountEditor({
             guardianName: account.role === "student" ? guardianName : undefined,
             guardianWhatsApp:
               account.role === "student" ? guardianWhatsApp : undefined,
-            subjects,
+            subjects: sanitizedSubjects,
             teacherIds: account.role === "student" ? teacherIds : [],
             photo,
             currentPhotoURL: account.photoURL,
@@ -395,7 +429,7 @@ function AccountEditor({
             name: `${firstName.trim()} ${lastName.trim()}`,
             email: email.trim().toLowerCase(),
             initials: `${firstName.trim()[0] ?? ""}${lastName.trim()[0] ?? ""}`.toUpperCase(),
-            subjects,
+            subjects: sanitizedSubjects,
             teacherIds: account.role === "student" ? teacherIds : [],
             ...(account.role === "student"
               ? {
@@ -479,14 +513,14 @@ function AccountEditor({
             <div className="registration-section-heading"><span>02</span><div><strong>Asignación académica</strong><small>Materias{account.role === "student" ? ", grupo y acompañamiento" : " del maestro"}</small></div></div>
             {account.role === "student" && (
               <div className="registration-grade-grid account-editor-assignment">
-                <label>Nivel<select value={schoolLevel} onChange={(event) => { const level = event.target.value as SchoolLevel; setSchoolLevel(level); setGrade(gradesBySchoolLevel[level][0]); }}><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
-                <label>Grado<select value={grade} onChange={(event) => setGrade(event.target.value)}>{gradesBySchoolLevel[schoolLevel].map((item) => <option key={item}>{item}</option>)}</select></label>
+                <label>Nivel<select value={schoolLevel} onChange={(event) => { const level = event.target.value as SchoolLevel; selectStudentGrade(level, gradesBySchoolLevel[level][0]); }}><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
+                <label>Grado<select value={grade} onChange={(event) => selectStudentGrade(schoolLevel, event.target.value)}>{gradesBySchoolLevel[schoolLevel].map((item) => <option key={item}>{item}</option>)}</select></label>
                 <label>Grupo<select value={group} onChange={(event) => setGroup(event.target.value)}>{["A", "B", "C"].map((item) => <option key={item}>{item}</option>)}</select></label>
               </div>
             )}
-            <fieldset className="registration-multiselect"><legend>Materias</legend><div>{subjectOptions.map((subject) => <button className={subjects.includes(subject) ? "selected" : ""} type="button" key={subject} onClick={() => toggleSubject(subject)}>{subjects.includes(subject) && <Check size={13} />}{subject}</button>)}</div></fieldset>
+            <fieldset className="registration-multiselect"><legend>Materias</legend><div>{availableSubjects.map((subject) => <button className={subjects.includes(subject) ? "selected" : ""} type="button" key={subject} onClick={() => toggleSubject(subject)}>{subjects.includes(subject) && <Check size={13} />}{subject}</button>)}</div></fieldset>
             {account.role === "student" && (
-              <fieldset className="registration-teachers"><legend>Acompañamiento</legend><div>{teachers.map((teacher) => <button className={teacherIds.includes(teacher.uid) ? "selected" : ""} type="button" key={teacher.uid} onClick={() => setTeacherIds((current) => current.includes(teacher.uid) ? current.filter((id) => id !== teacher.uid) : [...current, teacher.uid])}><span className="avatar small">{teacher.initials}</span><div><strong>{teacher.name}</strong><small>{teacher.subjects.join(" · ")}</small></div><i>{teacherIds.includes(teacher.uid) && <Check size={12} />}</i></button>)}</div></fieldset>
+              <fieldset className="registration-teachers"><legend>Acompañamiento</legend><div>{compatibleTeachers.map((teacher) => <button className={teacherIds.includes(teacher.uid) ? "selected" : ""} type="button" key={teacher.uid} onClick={() => setTeacherIds((current) => current.includes(teacher.uid) ? current.filter((id) => id !== teacher.uid) : [...current, teacher.uid])}><span className="avatar small">{teacher.initials}</span><div><strong>{teacher.name}</strong><small>{sanitizeSubjects(teacher.subjects).filter((subject) => subjects.length === 0 || subjects.includes(subject)).join(" · ")}</small></div><i>{teacherIds.includes(teacher.uid) && <Check size={12} />}</i></button>)}</div></fieldset>
             )}
           </section>
         </div>

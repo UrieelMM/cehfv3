@@ -45,6 +45,14 @@ import {
   type DailyParticipationStatus,
 } from "./whatsapp-core.js";
 import { clearDemoData, seedDemoData } from "./demo-seed.js";
+import {
+  academicSubjectOptions,
+  gradesBySchoolLevel,
+  sanitizeSubjects,
+  subjectsBelongToCatalog,
+  subjectsForGrade,
+  type SchoolLevel,
+} from "./academic-subjects.js";
 
 export {
   backfillPortalSearch,
@@ -400,28 +408,34 @@ export const updateManagedAccount = onCall(async (request) => {
   const name = `${firstName} ${lastName}`;
   const email = accountEmail(input.email);
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
-  const subjects = accountStringList(input.subjects, "Las materias");
+  const rawSubjects = accountStringList(input.subjects, "Las materias");
   const teacherIds =
     role === "student"
       ? accountStringList(input.teacherIds, "El acompañamiento")
       : [];
   let studentAssignment: Record<string, string> = {};
+  let studentSchoolLevel: SchoolLevel | null = null;
+  let studentGrade = "";
   if (role === "student") {
     const schoolLevel = String(input.schoolLevel ?? "");
     const grade = String(input.grade ?? "").trim();
     const group = String(input.group ?? "").trim();
-    const grades =
-      schoolLevel === "secondary"
-        ? ["1.º", "2.º", "3.º"]
-        : schoolLevel === "primary"
-          ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"]
-          : [];
-    if (!grades.includes(grade) || !["A", "B", "C"].includes(group)) {
+    const validSchoolLevel =
+      schoolLevel === "primary" || schoolLevel === "secondary"
+        ? schoolLevel
+        : null;
+    if (
+      !validSchoolLevel ||
+      !gradesBySchoolLevel[validSchoolLevel].includes(grade) ||
+      !["A", "B", "C"].includes(group)
+    ) {
       throw new HttpsError(
         "invalid-argument",
         "Selecciona un nivel, grado y grupo válidos.",
       );
     }
+    studentSchoolLevel = validSchoolLevel;
+    studentGrade = grade;
     let guardianWhatsApp: string;
     const guardianName = accountText(
       input.guardianName,
@@ -463,6 +477,16 @@ export const updateManagedAccount = onCall(async (request) => {
       guardianWhatsApp,
     };
   }
+  const allowedSubjects = studentSchoolLevel
+    ? subjectsForGrade(studentSchoolLevel, studentGrade)
+    : academicSubjectOptions;
+  if (!subjectsBelongToCatalog(rawSubjects, allowedSubjects)) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Selecciona únicamente materias correspondientes al grado.",
+    );
+  }
+  const subjects = sanitizeSubjects(rawSubjects, allowedSubjects);
   const photoURL = input.photoURL ? String(input.photoURL).trim() : "";
   if (
     photoURL &&

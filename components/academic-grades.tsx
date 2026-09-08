@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
   aggregateDailyGradesByWeek,
   buildGradePeriodSummaries,
@@ -122,7 +123,7 @@ export function demoDailyGrades(
           ? { uid: profile.uid, name: profile.name, subjects: profile.subjects ?? [] }
           : undefined);
         if (!teacher) return;
-        teacher.subjects.filter((subject) => student.subjects.includes(subject)).forEach((subject, subjectIndex) => {
+        teacher.subjects.filter((subject) => includesSubject(student.subjects, subject)).forEach((subject, subjectIndex) => {
           days.forEach((gradeDate, dayIndex) => {
             const base = 76 + ((studentIndex * 7 + subjectIndex * 5 + weekIndex * 3 + dayIndex * 4) % 21);
             const scores: WeeklyGradeScores = {
@@ -345,7 +346,7 @@ export function AcademicGradesPanel({
   const summaries = buildGradePeriodSummaries(cycleRecords, calendar);
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const matches = (record: { studentName: string; studentGrade?: string; studentGroup?: string; subject: string; teacherName: string }) => (
-    (activeSubject === "all" || !activeSubject || record.subject === activeSubject) &&
+    (activeSubject === "all" || !activeSubject || subjectsMatch(record.subject, activeSubject)) &&
     (!normalizedSearch || `${record.studentName} ${record.studentGrade ?? ""} ${record.studentGroup ?? ""} ${record.subject} ${record.teacherName}`.toLocaleLowerCase("es").includes(normalizedSearch))
   );
   const dailyVisible = cycleRecords.filter((record) => (
@@ -365,10 +366,10 @@ export function AcademicGradesPanel({
   const pagedSummary = summaryVisible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const eligibleStudents = accounts.filter((account) => (
-    account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && account.subjects.includes(activeSubject)
+    account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && includesSubject(account.subjects, activeSubject)
   )).filter((student) => !normalizedSearch || `${student.name} ${student.grade ?? ""} ${student.group ?? ""}`.toLocaleLowerCase("es").includes(normalizedSearch));
   const capturePageStudents = eligibleStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const daySubjectRecords = cycleRecords.filter((record) => record.weekId === selectedWeek?.id && record.gradeDate === activeDate && record.subject === activeSubject && record.teacherId === profile.uid);
+  const daySubjectRecords = cycleRecords.filter((record) => record.weekId === selectedWeek?.id && record.gradeDate === activeDate && subjectsMatch(record.subject, activeSubject) && record.teacherId === profile.uid);
   const weeklyRecords = aggregateDailyGradesByWeek(cycleRecords, calendar).filter((record) => record.weekId === selectedWeek?.id && matches(record));
   const average = (items: Array<{ weightedScore: number }>) => items.length
     ? Math.round(items.reduce((sum, record) => sum + record.weightedScore, 0) / items.length * 10) / 10

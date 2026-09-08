@@ -20,7 +20,7 @@ export const demoProfiles: Record<Role, UserProfile> = {
     name: "Mariana López",
     email: "mariana.lopez@cehf.edu.mx",
     role: "teacher",
-    subjects: ["Español", "Ciencias"],
+    subjects: ["Lenguaje", "Ciencias"],
     group: "5.º A",
     initials: "ML",
   },
@@ -49,7 +49,7 @@ export const demoManagedAccounts: ManagedAccount[] = [
     grade: "5.º",
     group: "A",
     guardianName: "Patricia Hernández",
-    subjects: ["Español", "Matemáticas", "Ciencias"],
+    subjects: ["Lenguaje", "Matemáticas", "Ciencias"],
     teacherIds: ["demo-teacher-mariana"],
     createdAt: "2026-07-15T14:00:00.000Z",
   },
@@ -66,7 +66,7 @@ export const demoManagedAccounts: ManagedAccount[] = [
     grade: "5.º",
     group: "A",
     guardianName: "Daniel Ramírez",
-    subjects: ["Español", "Matemáticas", "Ciencias"],
+    subjects: ["Lenguaje", "Matemáticas", "Ciencias"],
     teacherIds: ["demo-teacher-mariana"],
     createdAt: "2026-07-16T14:00:00.000Z",
   },
@@ -80,7 +80,7 @@ export const demoManagedAccounts: ManagedAccount[] = [
     initials: "ML",
     active: true,
     group: "5.º A",
-    subjects: ["Español", "Ciencias"],
+    subjects: ["Lenguaje", "Ciencias"],
     teacherIds: [],
     createdAt: "2026-07-10T14:00:00.000Z",
   },
@@ -148,7 +148,7 @@ export const createDemoState = (): PortalState => ({
     {
       id: "review-lectura",
       title: "Ideas que explican",
-      subject: "Español",
+      subject: "Lenguaje",
       purpose: "Recordar",
       duration: 6,
       questions: 4,
@@ -173,7 +173,7 @@ export const createDemoState = (): PortalState => ({
     {
       id: "task-lectura",
       title: "Lectura: El jardín de Ana",
-      subject: "Español",
+      subject: "Lenguaje",
       description:
         "Lee el cuento y escribe la idea principal en tres oraciones.",
       dueLabel: "Viernes, 18:00",
@@ -219,7 +219,7 @@ export const createDemoState = (): PortalState => ({
     {
       id: "material-audio",
       title: "El jardín de Ana",
-      subject: "Español",
+      subject: "Lenguaje",
       description: "Lectura en audio con transcripción completa.",
       type: "Audio",
       day: "Jueves",
@@ -433,7 +433,7 @@ export const createDemoState = (): PortalState => ({
       title: "El jardín de Ana: decisiones que cambian historias",
       prompt: "¿Qué decisión del personaje cambió el final de la historia?",
       kind: "reading_club",
-      subject: "Español",
+      subject: "Lenguaje",
       group: "5.º A",
       responsible: "Mariana López",
       participants: ["Mariana", "Sofía", "Diego", "Emilia"],
@@ -655,7 +655,7 @@ export const createDemoState = (): PortalState => ({
 export const subjectColors: Record<string, string> = {
   Ciencias: "mint",
   Matemáticas: "gold",
-  Español: "coral",
+  Lenguaje: "coral",
   Comunidad: "violet",
 };
 

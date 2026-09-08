@@ -31,6 +31,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { friendlyFirebaseError } from "@/lib/firebase";
+import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
   getLearningMaterialAttachmentUrl,
   isFirebaseLearningMaterial,
@@ -204,7 +205,7 @@ export function MaterialsPage({
       return (
         (!term || haystack.includes(term)) &&
         (week === "all" || material.weekId === week) &&
-        (subject === "all" || material.subject === subject) &&
+        (subject === "all" || subjectsMatch(material.subject, subject)) &&
         (type === "all" || material.type === type) &&
         (required === "all" ||
           (required === "required" ? material.required : !material.required))
@@ -536,7 +537,7 @@ export function MaterialCreateModal({
   const [error, setError] = useState("");
 
   const compatibleStudents = useMemo(
-    () => accounts.filter((account) => account.role === "student" && account.active && account.subjects.includes(subject) && (profile.role === "director" || account.teacherIds.includes(profile.uid))),
+    () => accounts.filter((account) => account.role === "student" && account.active && includesSubject(account.subjects, subject) && (profile.role === "director" || account.teacherIds.includes(profile.uid))),
     [accounts, profile.role, profile.uid, subject],
   );
   const groups = useMemo(

@@ -21,12 +21,12 @@ const studentNames = [
 ] as const;
 
 const teacherData = [
-  ["demo-teacher-01", "Mariana", "López", ["Español", "Ciencias"]],
+  ["demo-teacher-01", "Mariana", "López", ["Lenguaje", "Ciencias"]],
   ["demo-teacher-02", "Roberto", "Díaz", ["Matemáticas", "Geografía"]],
   ["demo-teacher-03", "Fernanda", "Ruiz", ["Inglés", "Cívica"]],
 ] as const;
 
-const subjects = ["Español", "Matemáticas", "Ciencias"];
+const subjects = ["Lenguaje", "Matemáticas", "Ciencias"];
 const subjectId = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const initials = (first: string, last: string) => `${first[0]}${last[0]}`.toUpperCase();
 const stamp = (iso: string) => Timestamp.fromDate(new Date(iso));

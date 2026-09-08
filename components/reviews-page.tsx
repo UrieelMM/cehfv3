@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
+import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { toast } from "sonner";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
@@ -185,7 +186,7 @@ export function ReviewsPage({
       return (
         (!term || haystack.includes(term)) &&
         (week === "all" || review.weekId === week) &&
-        (subject === "all" || review.subject === subject) &&
+        (subject === "all" || subjectsMatch(review.subject, subject)) &&
         (status === "all" || reviewState === status)
       );
     });
@@ -1087,7 +1088,7 @@ export function ReviewCreateModal({
   const [error, setError] = useState("");
 
   const compatibleStudents = useMemo(
-    () => accounts.filter((account) => account.role === "student" && account.active && account.subjects.includes(subject) && (profile.role === "director" || account.teacherIds.includes(profile.uid))),
+    () => accounts.filter((account) => account.role === "student" && account.active && includesSubject(account.subjects, subject) && (profile.role === "director" || account.teacherIds.includes(profile.uid))),
     [accounts, profile.role, profile.uid, subject],
   );
   const groups = useMemo(

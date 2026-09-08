@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
   demoDailyGrades,
   DEMO_DAILY_GRADES_KEY,
@@ -209,7 +210,7 @@ export function AcademicReportsPage({
     ? profile.subjects ?? []
     : [...new Set([...grades.map((item) => item.subject), ...reports.map((item) => item.subject)])].sort((a, b) => a.localeCompare(b, "es")), [grades, profile.role, profile.subjects, reports]);
   const [subject, setSubject] = useState(profile.role === "teacher" ? profile.subjects?.[0] ?? "" : "all");
-  const activeSubject = profile.role === "teacher" ? (profile.subjects?.includes(subject) ? subject : profile.subjects?.[0] ?? "") : subject;
+  const activeSubject = profile.role === "teacher" ? (includesSubject(profile.subjects ?? [], subject) ? subject : profile.subjects?.[0] ?? "") : subject;
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
@@ -265,19 +266,19 @@ export function AcademicReportsPage({
   );
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const matchesSearch = (value: { studentName: string; studentGrade?: string; studentGroup?: string }) => !normalizedSearch || `${value.studentName} ${value.studentGrade ?? ""} ${value.studentGroup ?? ""}`.toLocaleLowerCase("es").includes(normalizedSearch);
-  const eligibleStudents = accounts.filter((account) => account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && account.subjects.includes(activeSubject) && matchesSearch({ studentName: account.name, studentGrade: account.grade, studentGroup: account.group }));
+  const eligibleStudents = accounts.filter((account) => account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && includesSubject(account.subjects, activeSubject) && matchesSearch({ studentName: account.name, studentGrade: account.grade, studentGroup: account.group }));
   const visibleReports = reports.filter((report) => (
     report.schoolYearId === academicConfig.schoolYearId &&
     report.weekId === week?.id &&
     (profile.role !== "student" || report.status === "published") &&
-    (activeSubject === "all" || !activeSubject || report.subject === activeSubject) &&
+    (activeSubject === "all" || !activeSubject || subjectsMatch(report.subject, activeSubject)) &&
     (status === "all" || report.status === status) &&
     matchesSearch(report)
   ));
   const total = profile.role === "teacher" ? eligibleStudents.length : visibleReports.length;
   const pagedStudents = eligibleStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pagedReports = visibleReports.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const weekSubjectGrades = weeklyGrades.filter((grade) => grade.weekId === week?.id && (activeSubject === "all" || !activeSubject || grade.subject === activeSubject));
+  const weekSubjectGrades = weeklyGrades.filter((grade) => grade.weekId === week?.id && (activeSubject === "all" || !activeSubject || subjectsMatch(grade.subject, activeSubject)));
 
   async function persist(student: ManagedAccount, values: Pick<StudentWeeklyReport, "achievement" | "supportArea" | "nextStep" | "status">) {
     if (!week || !term || !activeSubject) {
@@ -335,7 +336,7 @@ export function AcademicReportsPage({
     }
   }
 
-  const publishedCount = reports.filter((report) => report.weekId === week?.id && report.status === "published" && (activeSubject === "all" || report.subject === activeSubject)).length;
+  const publishedCount = reports.filter((report) => report.weekId === week?.id && report.status === "published" && (activeSubject === "all" || subjectsMatch(report.subject, activeSubject))).length;
   return <section className="academic-reports-shell">
     <header className="academic-reports-hero"><div><span className="eyebrow">Seguimiento semanal</span><h2>Reportes con evidencia, alumno por alumno</h2><p>{profile.role === "teacher" ? "Consulta el desempeño de la semana y redacta los tres acuerdos de acompañamiento por materia." : "Consulta los reportes publicados y el contexto de calificaciones que los respalda."}</p></div><div className="academic-reports-cycle"><CalendarRange size={20} /><span><small>Ciclo en curso</small><strong>{academicConfig.schoolYearLabel}</strong></span></div></header>
     <div className="academic-reports-context">
@@ -349,7 +350,7 @@ export function AcademicReportsPage({
     {loading ? <div className="report-loading"><span /><span /><span /></div> : profile.role === "teacher" ? (
       <div className="report-editor-list">{!pagedStudents.length ? <div className="report-empty"><Search size={27} /><h3>No encontramos alumnos</h3><p>Revisa la materia seleccionada o ajusta la búsqueda.</p></div> : pagedStudents.map((student) => {
         const grade = weekSubjectGrades.find((item) => item.studentId === student.uid && item.teacherId === profile.uid);
-        const report = reports.find((item) => item.weekId === week?.id && item.subject === activeSubject && item.studentId === student.uid && item.teacherId === profile.uid);
+        const report = reports.find((item) => item.weekId === week?.id && subjectsMatch(item.subject, activeSubject) && item.studentId === student.uid && item.teacherId === profile.uid);
         return <div id={report ? `report-${report.id}` : undefined} key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`}><ReportEditor student={student} grade={grade} report={report} onSave={persist} /></div>;
       })}</div>
     ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} />)}</div>}

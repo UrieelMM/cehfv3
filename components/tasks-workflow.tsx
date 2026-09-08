@@ -35,6 +35,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { TaskResourceViewer } from "@/components/task-resource-viewer";
+import { academicSubjectOptions, subjectsMatch } from "@/lib/academic-subjects";
 import {
   closeTaskAssignment,
   extendTaskForGroup,
@@ -70,22 +71,10 @@ const TASK_PAGE_SIZE = 6;
 const acceptedTaskFiles =
   ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.txt,.csv,audio/*,video/*";
 
-const subjectOptions = [
-  "Español",
-  "Matemáticas",
-  "Ciencias",
-  "Historia",
-  "Geografía",
-  "Formación Cívica",
-  "Inglés",
-  "Artes",
-  "Educación Física",
-];
-
 const subjectTone: Record<string, string> = {
   Ciencias: "mint",
   Matemáticas: "gold",
-  Español: "coral",
+  Lenguaje: "coral",
   Historia: "violet",
   Geografía: "mint",
   Inglés: "coral",
@@ -169,7 +158,7 @@ export function TaskListPage({
       return (
         matchesTerm &&
         (status === "all" || visualStatus === status) &&
-        (subject === "all" || task.subject === subject) &&
+        (subject === "all" || subjectsMatch(task.subject, subject)) &&
         (week === "all" || task.weekId === week)
       );
     });
@@ -559,7 +548,7 @@ export function TaskCreateModal({
               <label>
                 Materia
                 <select value={subject} onChange={(event) => setSubject(event.target.value)}>
-                  {subjectOptions.map((item) => (
+                  {academicSubjectOptions.map((item) => (
                     <option key={item}>{item}</option>
                   ))}
                 </select>

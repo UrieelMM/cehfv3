@@ -46,6 +46,63 @@ service cloud.firestore {
       return isActive() && data.institutionId == profile().institutionId;
     }
 
+    function validManagedAccountSubjects(data) {
+      let primaryLower = [
+        "Lenguaje", "Matemáticas", "Cívica", "Historia", "Física", "Inglés"
+      ];
+      let primaryUpper = [
+        "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía",
+        "Inglés", "Cívica", "Lectura y comprensión"
+      ];
+      let primarySixth = [
+        "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés"
+      ];
+      let secondaryFirst = [
+        "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés"
+      ];
+      let allSubjects = [
+        "Lenguaje", "Matemáticas", "Cívica", "Historia", "Física", "Inglés",
+        "Ciencias", "Geografía", "Lectura y comprensión", "Biología"
+      ];
+      return data.subjects is list
+        && data.subjects.size() > 0
+        && data.subjects.toSet().size() == data.subjects.size()
+        && data.subjects.hasOnly(allSubjects)
+        && (
+          data.role == "teacher"
+          || (
+            data.role == "student"
+            && (
+              (
+                data.schoolLevel == "primary"
+                && data.grade in ["1.º", "2.º", "3.º"]
+                && data.subjects.hasOnly(primaryLower)
+              )
+              || (
+                data.schoolLevel == "primary"
+                && data.grade in ["4.º", "5.º"]
+                && data.subjects.hasOnly(primaryUpper)
+              )
+              || (
+                data.schoolLevel == "primary"
+                && data.grade == "6.º"
+                && data.subjects.hasOnly(primarySixth)
+              )
+              || (
+                data.schoolLevel == "secondary"
+                && data.grade == "1.º"
+                && data.subjects.hasOnly(secondaryFirst)
+              )
+              || (
+                data.schoolLevel == "secondary"
+                && data.grade in ["2.º", "3.º"]
+                && data.subjects.hasOnly(primaryLower)
+              )
+            )
+          )
+        );
+    }
+
     function canQueryAcademicTask(data) {
       return sameInstitution(data) && (
         isDirector() ||
@@ -156,7 +213,8 @@ service cloud.firestore {
       allow create: if isDirector()
         && request.resource.data.role in ["student", "teacher"]
         && request.resource.data.active == true
-        && request.resource.data.institutionId == profile().institutionId;
+        && request.resource.data.institutionId == profile().institutionId
+        && validManagedAccountSubjects(request.resource.data);
       allow update: if (
         isDirector()
         && resource.data.institutionId == profile().institutionId
@@ -169,6 +227,7 @@ service cloud.firestore {
           ) || (
             request.auth.uid != userId
             && request.resource.data.role in ["student", "teacher"]
+            && validManagedAccountSubjects(request.resource.data)
           )
         )
       ) || (

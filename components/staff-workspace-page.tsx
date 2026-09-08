@@ -18,6 +18,7 @@ import {
 } from "@/components/staff-workspace-rich-editor";
 import { workspaceTemplateDraft } from "@/lib/staff-workspace-content";
 import { friendlyFirebaseError } from "@/lib/firebase";
+import { subjectsMatch } from "@/lib/academic-subjects";
 import {
   createStaffWorkspaceComment, createStaffWorkspaceItem,
   deleteStaffWorkspaceFile, deleteStaffWorkspaceItem,
@@ -277,7 +278,7 @@ function demoWorkspaceItems(profile: UserProfile): StaffWorkspaceItem[] {
     {
       ...emptyDraft("planning"), id: "demo-planning", institutionId: profile.institutionId,
       ownerId: profile.uid, ownerName: profile.name, title: "Secuencia de lectura · Semana 8",
-      subject: "Español", group: "4° A", visibility: "private", pinned: true,
+      subject: "Lenguaje", group: "4° A", visibility: "private", pinned: true,
       createdAt: now.toISOString(), updatedAt: now.toISOString(),
     },
     {
@@ -616,7 +617,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
       if (filter !== "all" && item.type !== filter) return false;
       if (scope === "private" && item.visibility !== "private") return false;
       if (scope === "shared" && item.visibility === "private") return false;
-      if (subjectFilter && item.subject !== subjectFilter) return false;
+      if (subjectFilter && !subjectsMatch(item.subject ?? "", subjectFilter)) return false;
       if (groupFilter && item.group !== groupFilter) return false;
       if (ownerFilter && item.ownerId !== ownerFilter) return false;
       if (folderFilter && item.folder !== folderFilter) return false;
@@ -1302,7 +1303,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
               <label className="staff-workspace-title-field"><span>Título</span><input data-autofocus maxLength={120} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} placeholder={activeDetails.titlePlaceholder} value={draft.title} /></label>
 
               {draft.type === "planning" && <div className="staff-workspace-metadata-grid planning">
-                <label><span>Materia</span><input onChange={(event) => setDraft((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. Español" value={draft.subject} /></label>
+                <label><span>Materia</span><input onChange={(event) => setDraft((current) => ({ ...current, subject: event.target.value }))} placeholder="Ej. Lenguaje" value={draft.subject} /></label>
                 <label><span>Grupo</span><input onChange={(event) => setDraft((current) => ({ ...current, group: event.target.value }))} placeholder="Ej. 4° A" value={draft.group} /></label>
                 <label><span>Fecha</span><input onChange={(event) => setDraft((current) => ({ ...current, eventAt: event.target.value }))} type="date" value={draft.eventAt?.slice(0, 10)} /></label>
               </div>}

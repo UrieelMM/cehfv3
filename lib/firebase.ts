@@ -45,6 +45,13 @@ import {
   type StorageReference,
 } from "firebase/storage";
 import { createDemoState } from "./demo-data";
+import {
+  academicSubjectOptions,
+  gradesBySchoolLevel,
+  sanitizeSubjects,
+  subjectsBelongToCatalog,
+  subjectsForGrade,
+} from "./academic-subjects";
 import type {
   ManagedAccount,
   PortalSettings,
@@ -147,11 +154,6 @@ export function generateTemporaryPassword() {
   }
   return characters.join("");
 }
-
-const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
-  primary: ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"],
-  secondary: ["1.º", "2.º", "3.º"],
-};
 
 function readSchoolLevel(value: unknown): SchoolLevel {
   return value === "secondary" ? "secondary" : "primary";
@@ -258,6 +260,11 @@ export async function listManagedAccounts(
     const nameParts = name.trim().split(/\s+/);
     const role = data.role;
     if (role !== "student" && role !== "teacher") continue;
+    const schoolLevel = readSchoolLevel(data.schoolLevel);
+    const grade = data.grade ? String(data.grade) : "";
+    const rawSubjects = Array.isArray(data.subjects)
+      ? data.subjects.map(String)
+      : [];
     accounts.push({
       uid: entry.id,
       firstName: String(data.firstName ?? nameParts[0] ?? ""),
@@ -267,8 +274,8 @@ export async function listManagedAccounts(
       role,
       initials: String(data.initials ?? "CE"),
       active: data.active !== false,
-      schoolLevel: role === "student" ? readSchoolLevel(data.schoolLevel) : undefined,
-      grade: data.grade ? String(data.grade) : undefined,
+      schoolLevel: role === "student" ? schoolLevel : undefined,
+      grade: role === "student" && grade ? grade : undefined,
       group: data.group ? String(data.group) : undefined,
       guardianName:
         role === "student" && data.guardianName
@@ -280,7 +287,12 @@ export async function listManagedAccounts(
           : undefined,
       guardianWhatsAppAuthorized:
         role === "student" ? data.guardianWhatsAppAuthorized !== false : undefined,
-      subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
+      subjects: sanitizeSubjects(
+        rawSubjects,
+        role === "student"
+          ? subjectsForGrade(schoolLevel, grade)
+          : academicSubjectOptions,
+      ),
       teacherIds: Array.isArray(data.teacherIds)
         ? data.teacherIds.map(String)
         : [],
@@ -349,6 +361,15 @@ export async function createManagedAccount(
   if (input.subjects.length === 0) {
     throw accountValidationError("Selecciona al menos una materia.");
   }
+  const allowedSubjects = input.role === "student"
+    ? subjectsForGrade(schoolLevel ?? "primary", grade ?? "")
+    : academicSubjectOptions;
+  if (!subjectsBelongToCatalog(input.subjects, allowedSubjects)) {
+    throw accountValidationError(
+      "Selecciona únicamente materias correspondientes al grado.",
+    );
+  }
+  const subjects = sanitizeSubjects(input.subjects, allowedSubjects);
   if (input.role === "student" && input.teacherIds.length === 0) {
     throw accountValidationError("Asigna al menos un maestro al alumno.");
   }
@@ -403,7 +424,7 @@ export async function createManagedAccount(
       guardianWhatsApp,
       guardianWhatsAppAuthorized:
         input.role === "student" ? true : undefined,
-      subjects: input.subjects,
+      subjects,
       teacherIds: input.role === "student" ? input.teacherIds : [],
       photoURL,
       createdAt: new Date().toISOString(),
@@ -465,6 +486,15 @@ export async function updateManagedAccount(
 ) {
   if (!storage) throw new Error("Firebase Storage no está configurado.");
   const callableFunctions = await requireManagedAccountAdmin();
+  const allowedSubjects = input.role === "student"
+    ? subjectsForGrade(input.schoolLevel ?? "primary", input.grade ?? "")
+    : academicSubjectOptions;
+  if (!subjectsBelongToCatalog(input.subjects, allowedSubjects)) {
+    throw accountValidationError(
+      "Selecciona únicamente materias correspondientes al grado.",
+    );
+  }
+  const subjects = sanitizeSubjects(input.subjects, allowedSubjects);
   let uploadedPhotoReference: StorageReference | null = null;
   let photoURL: string | undefined;
   if (input.photo) {
@@ -496,7 +526,7 @@ export async function updateManagedAccount(
       lastName: input.lastName,
       email: input.email,
       role: input.role,
-      subjects: input.subjects,
+      subjects,
       teacherIds: input.teacherIds,
       ...(input.role === "student"
         ? {
@@ -580,6 +610,9 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
   const data = snapshot.data();
   const name = String(data.name ?? user.displayName ?? "Usuario");
   const nameParts = name.trim().split(/\s+/);
+  const role = (data.role ?? "student") as Role;
+  const schoolLevel = readSchoolLevel(data.schoolLevel);
+  const grade = data.grade ? String(data.grade) : "";
   return {
     uid: user.uid,
     institutionId: String(data.institutionId ?? ""),
@@ -587,20 +620,25 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
     lastName: String(data.lastName ?? nameParts.slice(1).join(" ")),
     name,
     email: String(data.email ?? user.email ?? ""),
-    role: (data.role ?? "student") as Role,
+    role,
     active: data.active !== false,
     schoolLevel:
-      data.role === "student" || !data.role
-        ? readSchoolLevel(data.schoolLevel)
+      role === "student"
+        ? schoolLevel
         : undefined,
-    grade: data.grade ? String(data.grade) : undefined,
+    grade: grade || undefined,
     group: data.group ? String(data.group) : undefined,
     guardianName:
       data.role === "student" && data.guardianName
         ? String(data.guardianName)
         : undefined,
     subjects: Array.isArray(data.subjects)
-      ? data.subjects.map(String)
+      ? sanitizeSubjects(
+          data.subjects.map(String),
+          role === "student"
+            ? subjectsForGrade(schoolLevel, grade)
+            : academicSubjectOptions,
+        )
       : undefined,
     teacherIds: Array.isArray(data.teacherIds)
       ? data.teacherIds.map(String)

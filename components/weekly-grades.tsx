@@ -26,6 +26,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
   calculateWeightedGrade,
   DEFAULT_GRADING_WEIGHTS,
@@ -161,7 +162,7 @@ function demoRecords(
         uid: "demo-teacher-mariana",
         name: "Mariana López",
         institutionId: profile.institutionId,
-        subjects: ["Español", "Ciencias"],
+        subjects: ["Lenguaje", "Ciencias"],
       };
   const students = accounts.filter((account) => (
     account.role === "student" &&
@@ -172,7 +173,7 @@ function demoRecords(
     { classWork: 82, homework: 88, participation: 85, attendance: 100, exam: 84 },
   ];
   return students.flatMap((student, studentIndex) => (
-    (teacher.subjects ?? []).filter((subject) => student.subjects.includes(subject))
+    (teacher.subjects ?? []).filter((subject) => includesSubject(student.subjects, subject))
       .map((subject, subjectIndex) => {
         const scores = seedScores[(studentIndex + subjectIndex) % seedScores.length];
         return {
@@ -576,7 +577,7 @@ function GradeSubjectAverages({ records }: { records: WeeklyGradeRecord[] }) {
       subject,
       value: average(
         records
-          .filter((record) => record.subject === subject)
+          .filter((record) => subjectsMatch(record.subject, subject))
           .map((record) => record.weightedScore),
       ),
     }))
@@ -903,7 +904,7 @@ function GradeSummaryDashboard({
         account.role === "student" &&
         account.active &&
         account.teacherIds.includes(profile.uid) &&
-        account.subjects.includes(subject)
+        includesSubject(account.subjects, subject)
       )).length, 0)
     : records.length;
   const completion = assignedExpected
@@ -1242,7 +1243,7 @@ function GradeExportDialog({
   const filteredRecords = records.filter((record) => (
     (teacherId === "all" || record.teacherId === teacherId) &&
     (group === "all" || recordGroup(record) === group) &&
-    (subject === "all" || record.subject === subject) &&
+    (subject === "all" || subjectsMatch(record.subject, subject)) &&
     (studentId === "all" || record.studentId === studentId)
   ));
   const filteredStudentIds = Array.from(new Set(
@@ -1417,7 +1418,7 @@ export function WeeklyGradesPanel({
   const activeWeekId = calendar.weeks.some((week) => week.id === selectedWeekId)
     ? selectedWeekId
     : choices.current?.id;
-  const activeSubject = subjects.includes(selectedSubject)
+  const activeSubject = includesSubject(subjects, selectedSubject)
     ? selectedSubject
     : subjects[0] ?? "";
 
@@ -1484,7 +1485,7 @@ export function WeeklyGradesPanel({
     account.role === "student" &&
     account.active &&
     account.teacherIds.includes(profile.uid) &&
-    account.subjects.includes(activeSubject)
+    includesSubject(account.subjects, activeSubject)
   ));
   const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase("es");
   const filteredStudents = eligibleStudents.filter((student) => (
@@ -1494,7 +1495,7 @@ export function WeeklyGradesPanel({
       .includes(normalizedStudentSearch)
   ));
   const subjectRecords = visibleRecords.filter((record) => (
-    record.subject === activeSubject && record.teacherId === profile.uid
+    subjectsMatch(record.subject, activeSubject) && record.teacherId === profile.uid
   ));
   const gradedStudentIds = new Set(subjectRecords.map((record) => record.studentId));
   const gradedStudents = eligibleStudents.filter((student) => (
@@ -1554,7 +1555,7 @@ export function WeeklyGradesPanel({
       } else {
         const existing = records.find((record) => (
           record.weekId === selectedWeek.id &&
-          record.subject === activeSubject &&
+          subjectsMatch(record.subject, activeSubject) &&
           record.studentId === student.uid &&
           record.teacherId === profile.uid
         ));

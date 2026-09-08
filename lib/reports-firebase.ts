@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { firebase } from "./firebase";
 import { gradeSubjectId } from "./grades-firebase";
+import { includesSubject } from "./academic-subjects";
 import type {
   AcademicConfig,
   AcademicTerm,
@@ -112,11 +113,11 @@ export async function saveStudentWeeklyReport(
   input: SaveStudentWeeklyReportInput,
 ) {
   if (profile.role !== "teacher") throw new Error("Sólo los docentes pueden elaborar reportes.");
-  if (!profile.subjects?.includes(input.subject)) throw new Error("Esta materia no está asignada a tu perfil.");
+  if (!includesSubject(profile.subjects ?? [], input.subject)) throw new Error("Esta materia no está asignada a tu perfil.");
   if (
     input.student.role !== "student" ||
     !input.student.teacherIds.includes(profile.uid) ||
-    !input.student.subjects.includes(input.subject)
+    !includesSubject(input.student.subjects, input.subject)
   ) {
     throw new Error("El alumno no está asignado a esta materia contigo.");
   }
