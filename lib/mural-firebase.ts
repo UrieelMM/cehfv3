@@ -117,7 +117,7 @@ function wallPostFromSnapshot(
   snapshot: DocumentSnapshot<DocumentData>,
   likedStoryIds: ReadonlySet<string> = new Set(),
 ): WallPost {
-  const data = snapshot.data();
+  const data = snapshot.data() ?? {};
   const publishedAt = dateFromData(data.publishedAt);
   const createdAt = dateFromData(data.createdAt);
   const category = String(data.category ?? "Comunidad");
