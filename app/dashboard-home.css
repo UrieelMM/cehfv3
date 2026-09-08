@@ -78,35 +78,35 @@
   -webkit-text-fill-color: transparent;
 }
 
-.progress-tone-critical {
+.progress-ring.progress-tone-critical:not(.small) {
   --progress-start: #ff3158;
   --progress-mid: #ef6b7d;
   --progress-end: #ffb2bd;
   filter: drop-shadow(0 8px 18px rgb(255 49 88 / 0.17));
 }
 
-.progress-tone-low {
+.progress-ring.progress-tone-low:not(.small) {
   --progress-start: #ef5d73;
   --progress-mid: #f38a68;
   --progress-end: #ffc59f;
   filter: drop-shadow(0 8px 18px rgb(239 93 115 / 0.15));
 }
 
-.progress-tone-medium {
+.progress-ring.progress-tone-medium:not(.small) {
   --progress-start: #e99a45;
   --progress-mid: #f5c86b;
   --progress-end: #fff0b7;
   filter: drop-shadow(0 8px 18px rgb(233 154 69 / 0.14));
 }
 
-.progress-tone-high {
+.progress-ring.progress-tone-high:not(.small) {
   --progress-start: #8290ff;
   --progress-mid: #aeb5ff;
   --progress-end: #eceeff;
   filter: drop-shadow(0 8px 18px rgb(174 181 255 / 0.15));
 }
 
-.progress-tone-complete {
+.progress-ring.progress-tone-complete:not(.small) {
   --progress-start: #cbd0ff;
   --progress-mid: #f1f2ff;
   --progress-end: #fff;
