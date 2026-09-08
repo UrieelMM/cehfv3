@@ -9,6 +9,10 @@ test("global search only runs after clicking Buscar or pressing Enter", async ()
     new URL("components/portal-search.tsx", projectRoot),
     "utf8",
   );
+  const clientSource = await readFile(
+    new URL("lib/portal-search.ts", projectRoot),
+    "utf8",
+  );
 
   const inputChange = source.match(/onChange=\{\(event\) => \{([\s\S]*?)\n        \}\}/)?.[1] ?? "";
 
@@ -18,4 +22,6 @@ test("global search only runs after clicking Buscar or pressing Enter", async ()
   assert.doesNotMatch(inputChange, /runSearch|searchPortal|searchLocalPortal/);
   assert.doesNotMatch(source, /\}, 250\);/);
   assert.match(source, /await searchPortal\(profile\.uid, term\)/);
+  assert.match(clientSource, /client\.searchForHits<PortalSearchHit>/);
+  assert.doesNotMatch(clientSource, /client\.searchSingleIndex/);
 });

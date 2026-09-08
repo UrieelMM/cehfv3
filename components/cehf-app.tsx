@@ -366,7 +366,6 @@ const navigation: Array<{
   { key: "my-week", label: "Calificaciones", icon: GraduationCap },
   { key: "weekly-review", label: "Repasos", icon: BookOpen },
   { key: "tasks", label: "Tareas", icon: ClipboardCheck },
-  { key: "materials", label: "Recursos", icon: BookOpen },
   {
     key: "weekly-progress",
     label: "Mi espacio",
@@ -433,42 +432,6 @@ type CurrentWeather = {
   icon: IconType;
 };
 
-type WeatherPreviewMode = "live" | "time" | WeatherKind;
-
-const weatherPreviewModes: WeatherPreviewMode[] = [
-  "live",
-  "clear",
-  "cloudy",
-  "fog",
-  "drizzle",
-  "rain",
-  "snow",
-  "storm",
-  "time",
-];
-
-const weatherPreviewCodes: Record<WeatherKind, number> = {
-  clear: 0,
-  cloudy: 3,
-  fog: 45,
-  drizzle: 53,
-  rain: 63,
-  snow: 73,
-  storm: 95,
-};
-
-const weatherPreviewLabels: Record<WeatherPreviewMode, string> = {
-  live: "Clima real",
-  clear: "Despejado",
-  cloudy: "Nublado",
-  fog: "Niebla",
-  drizzle: "Llovizna",
-  rain: "Lluvia",
-  snow: "Nieve",
-  storm: "Tormenta",
-  time: "Por hora",
-};
-
 function weatherForCode(code: number): Omit<CurrentWeather, "temperature" | "timeZone"> {
   if (code === 0) return { kind: "clear", label: "Cielo despejado", icon: Sun };
   if (code <= 3) return { kind: "cloudy", label: code === 3 ? "Cielo nublado" : "Algunas nubes", icon: Cloud };
@@ -519,7 +482,6 @@ function TimeAwareGreeting({
 }) {
   const [now, setNow] = useState(() => new Date());
   const [weather, setWeather] = useState<CurrentWeather | null>(null);
-  const [previewMode, setPreviewMode] = useState<WeatherPreviewMode>("live");
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60_000);
@@ -579,27 +541,10 @@ function TimeAwareGreeting({
     };
   }, [timeZone]);
 
-  const previewWeather = previewMode === "live" || previewMode === "time"
-    ? null
-    : {
-        ...weatherForCode(weatherPreviewCodes[previewMode]),
-        temperature: weather?.temperature ?? 22,
-        timeZone: weather?.timeZone || timeZone,
-      };
-  const displayedWeather = previewMode === "live" ? weather : previewWeather;
-  const phase = dayPhaseAt(now, displayedWeather?.timeZone || timeZone);
-  const GreetingIcon = displayedWeather?.icon || phase.icon;
-  const atmosphere = displayedWeather?.kind || phase.key;
-  const detail = displayedWeather
-    ? `${displayedWeather.label} · ${displayedWeather.temperature}°${previewMode === "live" ? "" : " · Prueba"}`
-    : phase.label;
-
-  function showNextWeatherPreview() {
-    setPreviewMode((current) => {
-      const currentIndex = weatherPreviewModes.indexOf(current);
-      return weatherPreviewModes[(currentIndex + 1) % weatherPreviewModes.length];
-    });
-  }
+  const phase = dayPhaseAt(now, weather?.timeZone || timeZone);
+  const GreetingIcon = weather?.icon || phase.icon;
+  const atmosphere = weather?.kind || phase.key;
+  const detail = weather ? `${weather.label} · ${weather.temperature}°` : phase.label;
 
   return (
     <AnimatePresence mode="wait" initial={false}>
@@ -622,16 +567,6 @@ function TimeAwareGreeting({
             {Array.from({ length: 10 }, (_, index) => <i key={index} />)}
           </span>
         </span>
-        <button
-          type="button"
-          className="weather-test-button"
-          onClick={showNextWeatherPreview}
-          title="Cambiar al siguiente clima de prueba"
-          aria-label={`Cambiar clima de prueba. Vista actual: ${weatherPreviewLabels[previewMode]}`}
-        >
-          <Eye size={12} aria-hidden="true" />
-          <span>{previewMode === "live" ? "Probar clima" : weatherPreviewLabels[previewMode]}</span>
-        </button>
         <motion.span
           className="time-greeting-icon"
           aria-hidden="true"

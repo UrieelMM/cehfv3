@@ -42,9 +42,9 @@ export async function searchPortal(
 ) {
   const access = await getAccess(uid);
   const client = liteClient(access.appId, access.securedApiKey);
-  const response = await client.searchSingleIndex<PortalSearchHit>({
-    indexName: access.indexName,
-    searchParams: {
+  const { results } = await client.searchForHits<PortalSearchHit>({
+    requests: [{
+      indexName: access.indexName,
       query: query.trim(),
       hitsPerPage: 30,
       attributesToHighlight: ["title", "excerpt", "subject", "context"],
@@ -57,9 +57,9 @@ export async function searchPortal(
               .join(" OR ")})`,
           }
         : {}),
-    },
+    }],
   });
-  return response.hits as PortalSearchHit[];
+  return (results[0]?.hits ?? []) as PortalSearchHit[];
 }
 
 export function searchLocalPortal(

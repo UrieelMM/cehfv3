@@ -692,7 +692,7 @@ code {
 .search {
   width: min(460px, 45vw);
   height: 42px;
-  padding: 0 11px 0 13px;
+  padding: 0 13px;
 }
 
 .search input,
@@ -934,7 +934,7 @@ code {
   width: min(620px, 100%);
   min-width: 0;
   overflow: hidden;
-  padding: 14px 116px 14px 18px;
+  padding: 14px 72px 14px 18px;
   border: 1px solid color-mix(in srgb, var(--greeting-accent) 28%, var(--border));
   border-radius: 18px;
   background: linear-gradient(
@@ -991,48 +991,17 @@ code {
 .time-greeting-icon {
   position: absolute;
   z-index: 2;
-  right: 13px;
-  bottom: 9px;
+  top: calc(50% - 22px);
+  right: 19px;
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--greeting-accent) 28%, transparent);
   border-radius: 15px;
   background: color-mix(in srgb, var(--greeting-soft) 22%, var(--surface));
   color: var(--greeting-accent);
   box-shadow: 0 8px 20px color-mix(in srgb, var(--greeting-accent) 14%, transparent);
-}
-
-.weather-test-button {
-  position: absolute;
-  z-index: 3;
-  top: 8px;
-  right: 9px;
-  display: inline-flex;
-  min-height: 23px;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
-  border: 1px dashed color-mix(in srgb, var(--greeting-accent) 42%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 82%, transparent);
-  color: var(--greeting-accent);
-  font-size: 0.62rem;
-  font-weight: 800;
-  line-height: 1;
-  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
-}
-
-.weather-test-button:hover {
-  border-color: var(--greeting-accent);
-  background: color-mix(in srgb, var(--greeting-soft) 24%, var(--surface));
-  transform: translateY(-1px);
-}
-
-.weather-test-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--greeting-accent) 64%, white);
-  outline-offset: 2px;
 }
 
 .time-greeting-glow {
@@ -7526,7 +7495,12 @@ code {
 .portal-search-clear {
   width: 27px;
   height: 27px;
+  margin-left: 2px;
   border-radius: 8px;
+}
+
+.portal-search > kbd {
+  margin-left: 2px;
 }
 
 .portal-search-clear:hover {

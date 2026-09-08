@@ -188,6 +188,14 @@ export function PortalSearch({
           }
         }}
       />
+      <button
+        className="portal-search-submit"
+        type="button"
+        disabled={!query.trim() || loading}
+        onClick={() => void runSearch()}
+      >
+        Buscar
+      </button>
       {query ? (
         <button
           className="portal-search-clear"
@@ -208,14 +216,6 @@ export function PortalSearch({
       ) : (
         <kbd>⌘ K</kbd>
       )}
-      <button
-        className="portal-search-submit"
-        type="button"
-        disabled={!query.trim() || loading}
-        onClick={() => void runSearch()}
-      >
-        Buscar
-      </button>
 
       <AnimatePresence>
         {open && (
