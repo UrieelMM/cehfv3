@@ -9358,9 +9358,11 @@ code {
   line-height: 1.35;
 }
 
-.account-editor-section input::placeholder {
+.account-registration-form input::placeholder,
+.account-editor-modal input::placeholder {
   color: var(--muted);
   font-size: calc(0.62rem + 0.125rem);
+  font-weight: 400;
 }
 
 .account-editor-assignment {
