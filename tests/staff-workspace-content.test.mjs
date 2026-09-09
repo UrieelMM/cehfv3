@@ -4,9 +4,34 @@ import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
 const source = await readFile(new URL("../lib/staff-workspace-content.ts", import.meta.url), "utf8");
-const { countWorkspaceWords, workspaceTemplateDraft } = await import(
+const {
+  countWorkspaceWords,
+  WORKSPACE_TAG_OPTIONS,
+  workspaceDefaultContent,
+  workspaceTemplateDraft,
+} = await import(
   `data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString("base64")}`
 );
+
+test("workspace uses a fixed catalog of ten practical labels", () => {
+  assert.equal(WORKSPACE_TAG_OPTIONS.length, 10);
+  assert.deepEqual([...WORKSPACE_TAG_OPTIONS], [
+    "Planeación", "Evaluación", "Reunión", "Seguimiento", "Recursos",
+    "Pendiente", "Urgente", "Familias", "Inclusión", "Proyecto",
+  ]);
+});
+
+test("the schedule starter is a professional table with defined columns", () => {
+  const blocks = JSON.parse(workspaceDefaultContent("schedule"));
+  const table = blocks.find((block) => block.type === "table");
+
+  assert.equal(table.content.type, "tableContent");
+  assert.equal(table.content.headerRows, 1);
+  assert.deepEqual(table.content.rows[0].cells, [
+    "Hora", "Actividad o clase", "Grupo", "Responsable", "Espacio / enlace",
+  ]);
+  assert.equal(table.content.rows.length, 6);
+});
 
 test("word counts preserve words split by formatting and include nested lists and table cells", () => {
   assert.equal(countWorkspaceWords([

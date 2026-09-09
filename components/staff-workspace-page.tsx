@@ -16,7 +16,11 @@ import {
   StaffWorkspaceRichEditor, WorkspaceEditorHint,
   type WorkspaceMentionMember,
 } from "@/components/staff-workspace-rich-editor";
-import { workspaceTemplateDraft } from "@/lib/staff-workspace-content";
+import {
+  WORKSPACE_TAG_OPTIONS,
+  workspaceDefaultContent,
+  workspaceTemplateDraft,
+} from "@/lib/staff-workspace-content";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import { subjectsMatch } from "@/lib/academic-subjects";
 import {
@@ -111,71 +115,6 @@ const typeDetails: Record<StaffWorkspaceItemType, {
     titlePlaceholder: "Ej. Acuerdos de la junta docente", icon: StickyNote,
   },
 };
-
-function templateContent(type: StaffWorkspaceItemType) {
-  const paragraph = (content: string) => ({ type: "paragraph", content });
-  const heading = (content: string, level: 2 | 3 = 2) => ({
-    type: "heading",
-    props: { level },
-    content,
-  });
-  const bullet = (content: string) => ({ type: "bulletListItem", content });
-  const task = (content: string) => ({
-    type: "checkListItem",
-    props: { checked: false },
-    content,
-  });
-  const templates: Record<StaffWorkspaceItemType, object[]> = {
-    planning: [
-      heading("Propósito de aprendizaje"),
-      paragraph("Describe el aprendizaje esperado y la evidencia que permitirá comprobarlo."),
-      heading("Preparación"),
-      bullet("Materiales y recursos:"),
-      bullet("Conocimientos previos:"),
-      bullet("Adecuaciones o apoyos:"),
-      heading("Secuencia didáctica"),
-      heading("Inicio", 3),
-      task("Actividad de apertura y recuperación de saberes previos."),
-      heading("Desarrollo", 3),
-      task("Actividad central, acompañamiento y preguntas guía."),
-      heading("Cierre", 3),
-      task("Síntesis, producto o reflexión final."),
-      heading("Evaluación"),
-      paragraph("Criterios, instrumento y retroalimentación prevista."),
-    ],
-    resource: [
-      heading("Descripción del recurso"),
-      paragraph("Explica brevemente qué contiene y qué necesidad resuelve."),
-      heading("Uso sugerido"),
-      bullet("Materia o área:"),
-      bullet("Grado o grupo recomendado:"),
-      bullet("Momento de la clase:"),
-      heading("Indicaciones"),
-      paragraph("Agrega pasos, recomendaciones o adaptaciones para aprovechar el archivo."),
-    ],
-    schedule: [
-      heading("Objetivo"),
-      paragraph("Describe el propósito de la reunión, actividad o recordatorio."),
-      heading("Agenda"),
-      task("Tema principal."),
-      task("Responsables o participantes."),
-      task("Material que debe prepararse."),
-      heading("Acuerdos y seguimiento"),
-      bullet("Acuerdo:"),
-      bullet("Responsable y fecha:"),
-    ],
-    note: [
-      heading("Idea principal"),
-      paragraph("Escribe aquí el contexto o la idea que quieres conservar."),
-      heading("Puntos clave"),
-      bullet("Dato, hallazgo o acuerdo importante."),
-      bullet("Referencia o persona relacionada."),
-      heading("Próximos pasos"),
-      task("Acción pendiente."),
-    ],
-  };
-  return JSON.stringify(templates[type]);
-}
 
 function emptyDraft(type: StaffWorkspaceItemType = "note"): StaffWorkspaceItemInput {
   return {
@@ -407,7 +346,6 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   const [editorOpen, setEditorOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<StaffWorkspaceItem | null>(null);
   const [draft, setDraft] = useState<StaffWorkspaceItemInput>(() => emptyDraft());
-  const [tagsText, setTagsText] = useState("");
   const [draftId, setDraftId] = useState("");
   const [draftSaveState, setDraftSaveState] = useState<DraftSaveState>("idle");
   const [recoverableDraft, setRecoverableDraft] = useState<StoredWorkspaceDraft | null>(null);
@@ -613,7 +551,6 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   function prepareEditor(nextDraft: StaffWorkspaceItemInput, itemId: string, item: StaffWorkspaceItem | null, focused = false, baseline?: string) {
     setSelectedItem(item);
     setDraft(nextDraft);
-    setTagsText(nextDraft.tags.join(", "));
     setDraftId(itemId);
     setDraftBaseline(baseline ?? JSON.stringify(nextDraft));
     setInitialAttachmentPaths(nextDraft.attachments.map((attachment) => attachment.storagePath));
@@ -645,7 +582,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   }
 
   function openNewItem(type: StaffWorkspaceItemType = "note", isTemplate = false, withStructure = false) {
-    startNewDraft({ ...emptyDraft(type), isTemplate, content: withStructure ? templateContent(type) : "" });
+    startNewDraft({ ...emptyDraft(type), isTemplate, content: withStructure ? workspaceDefaultContent(type) : "" });
   }
 
   function openItem(item: StaffWorkspaceItem, focused = false, syncRoute = true) {
@@ -837,6 +774,15 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
       sharedWithIds: current.sharedWithIds.includes(memberId)
         ? current.sharedWithIds.filter((id) => id !== memberId)
         : [...current.sharedWithIds, memberId],
+    }));
+  }
+
+  function toggleDraftTag(tag: string) {
+    setDraft((current) => ({
+      ...current,
+      tags: current.tags.includes(tag)
+        ? current.tags.filter((currentTag) => currentTag !== tag)
+        : [...current.tags, tag],
     }));
   }
 
@@ -1221,7 +1167,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
                     <footer>
                       <span>{owned ? "Tú" : item.ownerName} · {relativeDate(item.updatedAt)}</span>
                       <div className="staff-workspace-card-actions">
-                        {item.isTemplate && !item.archived && <button onClick={() => createFromTemplate(item)} type="button"><Copy size={14} /> Usar plantilla</button>}
+                        {item.isTemplate && !item.archived && <button className="staff-workspace-use-template" onClick={() => createFromTemplate(item)} type="button"><Copy size={14} /> Usar plantilla</button>}
                         <details className="staff-workspace-item-menu">
                           <summary aria-label={`Acciones de ${item.title}`}><MoreHorizontal size={19} /></summary>
                           <div>
@@ -1285,7 +1231,17 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
               <details className="staff-workspace-details"><summary>Organización y etiquetas</summary>
               <div className="staff-workspace-metadata-grid organization">
                 <label><span>Carpeta</span><span className="staff-workspace-input-with-icon"><Folder size={14} /><input list="workspace-folders" maxLength={80} onChange={(event) => setDraft((current) => ({ ...current, folder: event.target.value }))} placeholder="Ej. Planeaciones 4° A" value={draft.folder} /></span><datalist id="workspace-folders">{filterOptions.folders.map((folder) => <option key={folder} value={folder} />)}</datalist></label>
-                <label><span>Etiquetas</span><span className="staff-workspace-input-with-icon"><Tag size={14} /><input maxLength={240} onChange={(event) => { const value = event.target.value; setTagsText(value); setDraft((current) => ({ ...current, tags: value.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 12) })); }} placeholder="lectura, semana 8" value={tagsText} /></span></label>
+                <fieldset className="staff-workspace-tag-picker">
+                  <legend><Tag size={14} /> Etiquetas</legend>
+                  <p>Selecciona una o varias categorías para encontrar el documento con facilidad.</p>
+                  <div>
+                    {WORKSPACE_TAG_OPTIONS.map((tag) => {
+                      const selected = draft.tags.includes(tag);
+                      return <button aria-pressed={selected} className={selected ? "selected" : ""} key={tag} onClick={() => toggleDraftTag(tag)} type="button">{selected && <Check size={13} />}{tag}</button>;
+                    })}
+                  </div>
+                  {draft.tags.some((tag) => !WORKSPACE_TAG_OPTIONS.includes(tag as typeof WORKSPACE_TAG_OPTIONS[number])) && <div className="staff-workspace-legacy-tags"><span>Etiquetas anteriores</span>{draft.tags.filter((tag) => !WORKSPACE_TAG_OPTIONS.includes(tag as typeof WORKSPACE_TAG_OPTIONS[number])).map((tag) => <button aria-label={`Quitar etiqueta ${tag}`} key={tag} onClick={() => toggleDraftTag(tag)} type="button">{tag}<X size={12} /></button>)}</div>}
+                </fieldset>
               </div>
 
               </details>

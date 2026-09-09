@@ -22,6 +22,8 @@ test("ships the organized and reusable Mi espacio workflow", async () => {
   assert.match(source, /Filtrar por carpeta/);
   assert.match(source, /Filtrar por etiqueta/);
   assert.match(source, /Guardar como plantilla/);
+  assert.match(source, /WORKSPACE_TAG_OPTIONS\.map/);
+  assert.doesNotMatch(source, /setTagsText/);
   assert.match(source, /createFromTemplate/);
   assert.match(source, /toggleArchived/);
   assert.match(typeSource, /assigneeIds: string\[\]/);
@@ -32,6 +34,8 @@ test("ships the organized and reusable Mi espacio workflow", async () => {
   assert.match(css, /\.staff-workspace-view-tabs/);
   assert.match(css, /\.staff-workspace-advanced-filters/);
   assert.match(css, /\.staff-workspace-draft-banner/);
+  assert.match(css, /\.staff-workspace-tag-picker/);
+  assert.match(css, /\.staff-workspace-use-template/);
   assert.doesNotMatch(source, /<h2>Mi espacio<\/h2>/);
   assert.match(source, /Nuevo documento/);
   assert.match(css, /\.staff-workspace-editor-form \.staff-workspace-title-field input[\s\S]*?border: 1px solid var\(--border\)/);

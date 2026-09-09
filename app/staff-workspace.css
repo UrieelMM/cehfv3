@@ -2042,3 +2042,281 @@
 .staff-workspace-item-menu > div button:disabled { opacity: .5; cursor: not-allowed; }
 .staff-workspace-item-menu.editor-actions > div { left: 0; right: auto; }
 .staff-workspace-editor-form > footer button { font-size: .7rem; }
+
+/* Production polish: consistent type scale, control alignment and compact actions. */
+.staff-workspace-hero {
+  gap: 16px 24px;
+  padding: clamp(20px, 2.6vw, 30px);
+}
+
+.staff-workspace-hero h2 {
+  font-size: clamp(1.55rem, 2.5vw, 2.15rem);
+  line-height: 1.08;
+}
+
+.staff-workspace-hero p { font-size: 0.875rem; }
+
+.staff-workspace-toolbar > button,
+.staff-workspace-view-tabs button,
+.staff-workspace-saved-views button {
+  font-size: 0.875rem;
+  line-height: 1.2;
+  min-height: 40px;
+}
+
+.staff-workspace-view-tabs em {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.staff-workspace-search {
+  min-height: 40px;
+}
+
+.staff-workspace-search input,
+.staff-workspace-page :is(input:not([type="checkbox"]):not([type="file"]), textarea, select) {
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.staff-workspace-advanced-filters {
+  gap: 10px;
+  padding: 12px;
+}
+
+.staff-workspace-advanced-filters label {
+  gap: 6px;
+}
+
+.staff-workspace-advanced-filters label > span {
+  font-size: 0.75rem;
+  letter-spacing: 0.025em;
+}
+
+.staff-workspace-advanced-filters select,
+.staff-workspace-saved-views select,
+.staff-workspace-transfer select,
+.staff-workspace-document-type select {
+  height: 40px;
+  line-height: 1.2;
+  padding: 0 34px 0 12px;
+}
+
+.staff-workspace-saved-views {
+  gap: 8px;
+}
+
+.staff-workspace-saved-views label {
+  grid-template-columns: auto minmax(190px, 1fr);
+}
+
+.staff-workspace-result-count,
+.staff-workspace-card footer > span,
+.staff-workspace-card-taxonomy,
+.staff-workspace-card-assignees {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.staff-workspace-template-guide p,
+.staff-workspace-template-starters small {
+  font-size: 0.8rem;
+}
+
+.staff-workspace-template-starters strong,
+.staff-workspace-card-open p {
+  font-size: 0.875rem;
+}
+
+.staff-workspace-template-starters button {
+  min-height: 58px;
+  padding: 10px 12px;
+}
+
+.staff-workspace-card footer .staff-workspace-use-template {
+  background: var(--violet-soft);
+  color: var(--violet);
+  font-size: 0.8rem;
+  font-weight: 760;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  white-space: nowrap;
+  width: auto;
+}
+
+.staff-workspace-card footer .staff-workspace-use-template:hover {
+  background: color-mix(in srgb, var(--violet-soft) 72%, var(--surface));
+  color: var(--violet);
+}
+
+.staff-workspace-item-menu summary {
+  font-size: 0.82rem;
+  line-height: 1.2;
+  min-height: 34px;
+}
+
+.staff-workspace-item-menu > div {
+  border-radius: 12px;
+  padding: 7px;
+}
+
+.staff-workspace-item-menu > div button {
+  font-size: 0.875rem;
+  line-height: 1.25;
+  min-height: 40px;
+  padding: 9px 10px;
+}
+
+.staff-workspace-editor-form label,
+.staff-workspace-editor-form label > span,
+.staff-workspace-field-heading > span,
+.staff-workspace-details > summary,
+.staff-workspace-visibility-picker legend,
+.staff-workspace-assignee-picker legend {
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+.staff-workspace-field-heading small,
+.staff-workspace-template-notice,
+.staff-workspace-autosave,
+.staff-workspace-word-count,
+.staff-workspace-editor-help summary,
+.staff-workspace-editor-hint,
+.staff-workspace-editor-hint span {
+  font-size: 0.75rem;
+}
+
+.staff-workspace-document-type {
+  min-height: 40px;
+}
+
+.staff-workspace-document-type select {
+  min-width: 180px;
+}
+
+.staff-workspace-metadata-grid.organization {
+  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1.45fr);
+}
+
+.staff-workspace-tag-picker {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  min-width: 0;
+  padding: 12px;
+}
+
+.staff-workspace-tag-picker legend {
+  align-items: center;
+  color: var(--muted-strong);
+  display: inline-flex;
+  font-size: 0.875rem;
+  font-weight: 760;
+  gap: 6px;
+  padding: 0 5px;
+}
+
+.staff-workspace-tag-picker > p {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.staff-workspace-tag-picker > div:not(.staff-workspace-legacy-tags) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.staff-workspace-tag-picker > div:not(.staff-workspace-legacy-tags) button,
+.staff-workspace-legacy-tags button {
+  align-items: center;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 680;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
+.staff-workspace-tag-picker > div button.selected {
+  background: var(--violet-soft);
+  border-color: color-mix(in srgb, var(--violet) 42%, var(--border));
+  color: var(--violet);
+}
+
+.staff-workspace-legacy-tags {
+  align-items: center;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 9px;
+}
+
+.staff-workspace-legacy-tags > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.staff-workspace-legacy-tags button {
+  min-height: 30px;
+  padding: 4px 9px;
+}
+
+.staff-workspace-visibility-picker button strong,
+.staff-workspace-assignee-picker label,
+.staff-workspace-member-grid label > span:nth-of-type(2) {
+  font-size: 0.875rem;
+}
+
+.staff-workspace-visibility-picker button small,
+.staff-workspace-assignee-picker > p,
+.staff-workspace-member-picker > div:first-child,
+.staff-workspace-member-picker > div:first-child span {
+  font-size: 0.75rem;
+}
+
+.staff-workspace-editor-form > footer button {
+  font-size: 0.875rem;
+  min-height: 40px;
+}
+
+.bn-container.staff-workspace-blocknote .bn-editor {
+  font-size: 0.9375rem;
+}
+
+.staff-workspace-blocknote table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.staff-workspace-blocknote th,
+.staff-workspace-blocknote td {
+  font-size: 0.875rem;
+  min-width: 120px;
+  padding: 9px 10px;
+  vertical-align: middle;
+}
+
+.staff-workspace-blocknote th {
+  background: var(--violet-soft);
+  color: var(--foreground);
+  font-weight: 760;
+}
+
+@media (max-width: 720px) {
+  .staff-workspace-metadata-grid.organization { grid-template-columns: 1fr; }
+  .staff-workspace-card footer { align-items: flex-end; }
+  .staff-workspace-card-actions { flex-wrap: wrap; justify-content: flex-end; }
+}
