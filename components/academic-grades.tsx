@@ -23,7 +23,6 @@ import {
   calculateWeightedGrade,
   DEFAULT_GRADING_WEIGHTS,
   DEFAULT_WEEKLY_GRADE_SCORES,
-  gradeSubjectId,
   GRADING_CRITERIA,
   saveDailyGrade,
   watchDailyGrades,
@@ -44,7 +43,6 @@ import type {
 } from "@/lib/types";
 
 const PAGE_SIZE = 10;
-export const DEMO_DAILY_GRADES_KEY = "cehf-demo-daily-grades-v2";
 
 function score(value: number) {
   return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
@@ -95,74 +93,6 @@ function defaultConfig(profile: UserProfile): TeacherGradingConfig {
     weights: { ...DEFAULT_GRADING_WEIGHTS },
     subjects: profile.subjects ?? [],
   };
-}
-
-export function demoDailyGrades(
-  profile: UserProfile,
-  calendar: AcademicCalendar,
-  academicConfig: AcademicConfig,
-  accounts: ManagedAccount[],
-) {
-  try {
-    const saved = window.localStorage.getItem(DEMO_DAILY_GRADES_KEY);
-    if (saved) return JSON.parse(saved) as DailyGradeRecord[];
-  } catch {
-    window.localStorage.removeItem(DEMO_DAILY_GRADES_KEY);
-  }
-  const teachers = accounts.filter((account) => account.role === "teacher");
-  const students = accounts.filter((account) => account.role === "student" && account.active);
-  const records: DailyGradeRecord[] = [];
-  calendar.weeks.forEach((week, weekIndex) => {
-    const term = termForWeek(calendar, week.id);
-    if (!term) return;
-    const days = workingDatesForWeek(calendar, week);
-    students.forEach((student, studentIndex) => {
-      student.teacherIds.forEach((teacherId) => {
-        const account = teachers.find((candidate) => candidate.uid === teacherId);
-        const teacher = account ?? (teacherId === profile.uid && profile.role === "teacher"
-          ? { uid: profile.uid, name: profile.name, subjects: profile.subjects ?? [] }
-          : undefined);
-        if (!teacher) return;
-        teacher.subjects.filter((subject) => includesSubject(student.subjects, subject)).forEach((subject, subjectIndex) => {
-          days.forEach((gradeDate, dayIndex) => {
-            const base = 76 + ((studentIndex * 7 + subjectIndex * 5 + weekIndex * 3 + dayIndex * 4) % 21);
-            const scores: WeeklyGradeScores = {
-              classWork: Math.min(100, base + 3),
-              homework: Math.min(100, base + 1),
-              participation: Math.min(100, base + 5),
-              attendance: dayIndex === 2 && studentIndex % 2 ? 85 : 100,
-              exam: Math.min(100, base - 1),
-            };
-            records.push({
-              id: [academicConfig.schoolYearId, week.id, gradeDate, gradeSubjectId(subject), teacher.uid, student.uid].join("__"),
-              institutionId: profile.institutionId,
-              schoolYearId: academicConfig.schoolYearId,
-              schoolYearLabel: academicConfig.schoolYearLabel,
-              termId: term.id,
-              termLabel: term.label,
-              weekId: week.id,
-              weekLabel: week.label,
-              gradeDate,
-              subjectId: gradeSubjectId(subject),
-              subject,
-              teacherId: teacher.uid,
-              teacherName: teacher.name,
-              studentId: student.uid,
-              studentName: student.name,
-              studentGrade: student.grade,
-              studentGroup: student.group,
-              scores,
-              weights: { ...DEFAULT_GRADING_WEIGHTS },
-              weightedScore: calculateWeightedGrade(scores, DEFAULT_GRADING_WEIGHTS),
-              createdAt: `${gradeDate}T18:00:00.000Z`,
-              updatedAt: `${gradeDate}T18:00:00.000Z`,
-            });
-          });
-        });
-      });
-    });
-  });
-  return records;
 }
 
 function Pagination({ page, total, onChange }: { page: number; total: number; onChange: (page: number) => void }) {
@@ -322,13 +252,6 @@ export function AcademicGradesPanel({
   const activeSubject = profile.role === "teacher" ? (teacherSubjects.includes(subject) ? subject : teacherSubjects[0] ?? "") : subject;
 
   useEffect(() => {
-    if (!firebaseReady) {
-      queueMicrotask(() => {
-        setRecords(demoDailyGrades(profile, calendar, academicConfig, accounts));
-        setLoading(false);
-      });
-      return;
-    }
     const stopGrades = watchDailyGrades(profile, (next) => {
       setRecords(next);
       setLoading(false);
@@ -340,7 +263,7 @@ export function AcademicGradesPanel({
       ? watchTeacherGradingConfig(profile, setConfig, () => toast.error("No pudimos cargar la ponderación."))
       : () => undefined;
     return () => { stopGrades(); stopConfig(); };
-  }, [accounts, academicConfig, calendar, firebaseReady, profile]);
+  }, [profile]);
 
   const cycleRecords = records.filter((record) => record.schoolYearId === academicConfig.schoolYearId);
   const summaries = buildGradePeriodSummaries(cycleRecords, calendar);
@@ -381,39 +304,7 @@ export function AcademicGradesPanel({
       return;
     }
     try {
-      if (firebaseReady) {
-        await saveDailyGrade(profile, config, academicConfig, calendar, selectedWeek, selectedTerm, activeDate, student, activeSubject, scores);
-      } else {
-        const id = [academicConfig.schoolYearId, selectedWeek.id, activeDate, gradeSubjectId(activeSubject), profile.uid, student.uid].join("__");
-        const existing = records.find((record) => record.id === id);
-        const nextRecord: DailyGradeRecord = {
-          id,
-          institutionId: profile.institutionId,
-          schoolYearId: academicConfig.schoolYearId,
-          schoolYearLabel: academicConfig.schoolYearLabel,
-          termId: selectedTerm.id,
-          termLabel: selectedTerm.label,
-          weekId: selectedWeek.id,
-          weekLabel: selectedWeek.label,
-          gradeDate: activeDate,
-          subjectId: gradeSubjectId(activeSubject),
-          subject: activeSubject,
-          teacherId: profile.uid,
-          teacherName: profile.name,
-          studentId: student.uid,
-          studentName: student.name,
-          studentGrade: student.grade,
-          studentGroup: student.group,
-          scores,
-          weights: config.weights,
-          weightedScore: calculateWeightedGrade(scores, config.weights),
-          createdAt: existing?.createdAt ?? new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        const next = existing ? records.map((record) => record.id === id ? nextRecord : record) : [nextRecord, ...records];
-        setRecords(next);
-        window.localStorage.setItem(DEMO_DAILY_GRADES_KEY, JSON.stringify(next));
-      }
+      await saveDailyGrade(profile, config, academicConfig, calendar, selectedWeek, selectedTerm, activeDate, student, activeSubject, scores);
       toast.success(`Calificación diaria de ${student.name} guardada`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No pudimos guardar la calificación.");

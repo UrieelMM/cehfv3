@@ -280,8 +280,8 @@ function WorkshopTaskCreateDialog({
   const roster = rosterIds.map((studentId) =>
     accountById.get(studentId) ?? {
       uid: studentId,
-      name: studentId === "demo-student" ? "Sofía Martínez" : "Alumno asignado",
-      initials: studentId === "demo-student" ? "SM" : "CE",
+      name: "Alumno asignado",
+      initials: "CE",
       grade: "",
       group: "",
     },

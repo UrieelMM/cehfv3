@@ -51,9 +51,6 @@ import type {
   WeeklyGradeScores,
 } from "@/lib/types";
 
-const DEMO_CONFIG_KEY = "cehf-demo-grading-config";
-const DEMO_GRADES_KEY = "cehf-demo-weekly-grades";
-
 function defaultConfig(profile: UserProfile): TeacherGradingConfig {
   return {
     teacherId: profile.uid,
@@ -62,21 +59,6 @@ function defaultConfig(profile: UserProfile): TeacherGradingConfig {
     weights: { ...DEFAULT_GRADING_WEIGHTS },
     subjects: profile.subjects ?? [],
   };
-}
-
-function readDemoConfig(profile: UserProfile) {
-  try {
-    const saved = window.localStorage.getItem(`${DEMO_CONFIG_KEY}-${profile.uid}`);
-    if (!saved) return defaultConfig(profile);
-    const parsed = JSON.parse(saved) as TeacherGradingConfig;
-    return {
-      ...defaultConfig(profile),
-      ...parsed,
-      weights: { ...DEFAULT_GRADING_WEIGHTS, ...parsed.weights },
-    };
-  } catch {
-    return defaultConfig(profile);
-  }
 }
 
 function gradeTone(score: number) {
@@ -140,72 +122,8 @@ function termForWeek(calendar: AcademicCalendar, weekId: string) {
   return calendar.terms.find((term) => term.weekIds.includes(weekId));
 }
 
-function demoRecords(
-  profile: UserProfile,
-  calendar: AcademicCalendar,
-  academicConfig: AcademicConfig,
-  accounts: ManagedAccount[],
-) {
-  try {
-    const saved = window.localStorage.getItem(DEMO_GRADES_KEY);
-    if (saved) return JSON.parse(saved) as WeeklyGradeRecord[];
-  } catch {
-    window.localStorage.removeItem(DEMO_GRADES_KEY);
-  }
-  const choices = resolveWeekChoices(calendar, academicConfig);
-  const week = choices.current;
-  const term = week ? termForWeek(calendar, week.id) : undefined;
-  if (!week || !term) return [];
-  const teacher = profile.role === "teacher"
-    ? profile
-    : {
-        uid: "demo-teacher-mariana",
-        name: "Mariana López",
-        institutionId: profile.institutionId,
-        subjects: ["Lenguaje", "Ciencias"],
-      };
-  const students = accounts.filter((account) => (
-    account.role === "student" &&
-    account.teacherIds.includes(teacher.uid)
-  ));
-  const seedScores: WeeklyGradeScores[] = [
-    { classWork: 94, homework: 90, participation: 96, attendance: 100, exam: 92 },
-    { classWork: 82, homework: 88, participation: 85, attendance: 100, exam: 84 },
-  ];
-  return students.flatMap((student, studentIndex) => (
-    (teacher.subjects ?? []).filter((subject) => includesSubject(student.subjects, subject))
-      .map((subject, subjectIndex) => {
-        const scores = seedScores[(studentIndex + subjectIndex) % seedScores.length];
-        return {
-          id: `${week.id}-${subject}-${student.uid}`,
-          institutionId: profile.institutionId,
-          schoolYearId: academicConfig.schoolYearId,
-          schoolYearLabel: academicConfig.schoolYearLabel,
-          termId: term.id,
-          termLabel: term.label,
-          weekId: week.id,
-          weekLabel: week.label,
-          subjectId: subject.toLowerCase(),
-          subject,
-          teacherId: teacher.uid,
-          teacherName: teacher.name,
-          studentId: student.uid,
-          studentName: student.name,
-          studentGrade: student.grade,
-          studentGroup: student.group,
-          scores,
-          weights: { ...DEFAULT_GRADING_WEIGHTS },
-          weightedScore: calculateWeightedGrade(scores, DEFAULT_GRADING_WEIGHTS),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        } satisfies WeeklyGradeRecord;
-      })
-  ));
-}
-
 export function GradingWeightsCard({
   profile,
-  firebaseReady,
 }: {
   profile: UserProfile;
   firebaseReady: boolean;
@@ -216,14 +134,6 @@ export function GradingWeightsCard({
   const total = gradingWeightTotal(form);
 
   useEffect(() => {
-    if (!firebaseReady) {
-      const next = readDemoConfig(profile);
-      queueMicrotask(() => {
-        setConfig(next);
-        setForm(next.weights);
-      });
-      return;
-    }
     return watchTeacherGradingConfig(
       profile,
       (next) => {
@@ -232,27 +142,12 @@ export function GradingWeightsCard({
       },
       () => toast.error("No pudimos cargar tu ponderación."),
     );
-  }, [firebaseReady, profile]);
+  }, [profile]);
 
   const persist = async (weights: GradingWeights, message: string) => {
     setSaving(true);
     try {
-      if (firebaseReady) {
-        await saveTeacherGradingConfig(profile, weights);
-      } else {
-        const next = {
-          ...config,
-          weights,
-          subjects: profile.subjects ?? [],
-          updatedAt: new Date().toISOString(),
-        };
-        window.localStorage.setItem(
-          `${DEMO_CONFIG_KEY}-${profile.uid}`,
-          JSON.stringify(next),
-        );
-        setConfig(next);
-        setForm(weights);
-      }
+      await saveTeacherGradingConfig(profile, weights);
       toast.success(message);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No pudimos guardar la ponderación.");
@@ -1423,14 +1318,6 @@ export function WeeklyGradesPanel({
     : subjects[0] ?? "";
 
   useEffect(() => {
-    if (!firebaseReady) {
-      queueMicrotask(() => {
-        setConfig(readDemoConfig(profile));
-        setRecords(demoRecords(profile, calendar, academicConfig, accounts));
-        setLoading(false);
-      });
-      return;
-    }
     queueMicrotask(() => setLoading(true));
     const stopGrades = watchWeeklyGrades(
       profile,
@@ -1460,7 +1347,7 @@ export function WeeklyGradesPanel({
       stopConfig();
       stopDirectors();
     };
-  }, [accounts, academicConfig, calendar, firebaseReady, profile]);
+  }, [profile]);
 
   const selectedWeek = calendar.weeks.find((week) => week.id === activeWeekId);
   const selectedTerm = selectedWeek
@@ -1541,53 +1428,16 @@ export function WeeklyGradesPanel({
       return;
     }
     try {
-      if (firebaseReady) {
-        await saveWeeklyGrade(
-          profile,
-          config,
-          academicConfig,
-          selectedWeek,
-          selectedTerm,
-          student,
-          activeSubject,
-          scores,
-        );
-      } else {
-        const existing = records.find((record) => (
-          record.weekId === selectedWeek.id &&
-          subjectsMatch(record.subject, activeSubject) &&
-          record.studentId === student.uid &&
-          record.teacherId === profile.uid
-        ));
-        const nextRecord: WeeklyGradeRecord = {
-          id: existing?.id ?? `${selectedWeek.id}-${activeSubject}-${student.uid}`,
-          institutionId: profile.institutionId,
-          schoolYearId: academicConfig.schoolYearId,
-          schoolYearLabel: academicConfig.schoolYearLabel,
-          termId: selectedTerm.id,
-          termLabel: selectedTerm.label,
-          weekId: selectedWeek.id,
-          weekLabel: selectedWeek.label,
-          subjectId: activeSubject.toLowerCase(),
-          subject: activeSubject,
-          teacherId: profile.uid,
-          teacherName: profile.name,
-          studentId: student.uid,
-          studentName: student.name,
-          studentGrade: student.grade,
-          studentGroup: student.group,
-          scores,
-          weights: config.weights,
-          weightedScore: calculateWeightedGrade(scores, config.weights),
-          createdAt: existing?.createdAt ?? new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        const next = existing
-          ? records.map((record) => record.id === existing.id ? nextRecord : record)
-          : [nextRecord, ...records];
-        setRecords(next);
-        window.localStorage.setItem(DEMO_GRADES_KEY, JSON.stringify(next));
-      }
+      await saveWeeklyGrade(
+        profile,
+        config,
+        academicConfig,
+        selectedWeek,
+        selectedTerm,
+        student,
+        activeSubject,
+        scores,
+      );
       toast.success(`Calificación de ${student.name} guardada`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No pudimos guardar la calificación.");

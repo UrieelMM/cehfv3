@@ -1753,7 +1753,7 @@ export function WallNewspaperPage({
         const teacher = accounts.find((account) => account.uid === input.teacherId);
         const periodLabel = input.periodType === "month" ? muralMonthLabel(input.month) : input.seasonName;
         const nextEdition: MuralEdition = {
-          id: edition.id || `demo-edition-${input.month}`,
+          id: edition.id || `edition-${input.month}`,
           institutionId: profile.institutionId,
           active: true,
           periodType: input.periodType,

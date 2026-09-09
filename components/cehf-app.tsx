@@ -73,27 +73,13 @@ import { WhatsAppAdminPanel } from "@/components/whatsapp-admin-panel";
 import { StaffWorkspacePage } from "@/components/staff-workspace-page";
 import { WorkshopsPage } from "@/components/workshops-page";
 import { GradingWeightsCard } from "@/components/weekly-grades";
-import {
-  clearInstitutionDemoData,
-  loadInstitutionDemoData,
-  type DemoSeedCounts,
-} from "@/lib/demo-seed-firebase";
-import {
-  AcademicGradesPanel,
-  demoDailyGrades,
-} from "@/components/academic-grades";
-import {
-  AcademicReportsPage,
-  demoStudentWeeklyReports,
-} from "@/components/academic-reports";
+import { AcademicGradesPanel } from "@/components/academic-grades";
+import { AcademicReportsPage } from "@/components/academic-reports";
 import { MaterialCreateModal, MaterialsPage } from "@/components/materials-page";
 import { PortalSearch } from "@/components/portal-search";
 import { ProfilePage } from "@/components/profile-page";
 import { backfillPortalSearch } from "@/lib/portal-search";
-import {
-  aggregateDailyGradesByWeek,
-  watchDailyGrades,
-} from "@/lib/grades-firebase";
+import { watchDailyGrades } from "@/lib/grades-firebase";
 import { watchStudentWeeklyReports } from "@/lib/reports-firebase";
 import {
   buildDashboardViewModel,
@@ -118,7 +104,6 @@ import {
   firebaseConfigured,
   firebaseErrorDetails,
   friendlyFirebaseError,
-  generateTemporaryPassword,
   getProfile,
   listManagedAccounts,
   loadPortalState,
@@ -139,12 +124,10 @@ import {
   subjectsForGrade,
 } from "@/lib/academic-subjects";
 import {
-  createDemoTask,
   createTaskAssignment,
   defaultAcademicCalendar,
   defaultAcademicConfig,
   isFirebaseTaskAssignment,
-  legacyTasksToAssignments,
   markTaskNotificationsRead,
   resolveAcademicConfig,
   saveAcademicCalendar,
@@ -155,25 +138,20 @@ import {
   watchTaskSubmissions,
 } from "@/lib/tasks-firebase";
 import {
-  createDemoWeeklyReview,
   createWeeklyReview,
-  legacyReviewsToWeeklyReviews,
   watchWeeklyReviewAttempts,
   watchWeeklyReviews,
 } from "@/lib/reviews-firebase";
 import {
-  createDemoLearningMaterial,
   createLearningMaterial,
-  legacyMaterialsToLearningMaterials,
   loadViewedLearningMaterialIds,
   watchLearningMaterials,
 } from "@/lib/materials-firebase";
 import {
-  createDemoState,
-  demoManagedAccounts,
-  demoProfiles,
+  createInitialPortalState,
+  pendingProfile,
   roleLabel,
-} from "@/lib/demo-data";
+} from "@/lib/portal-defaults";
 import {
   createForumTopic,
   watchForumWorkspace,
@@ -303,57 +281,6 @@ function academicWeekRange(config: AcademicConfig) {
       new Date(`${value}T12:00:00`),
     );
   return `${format(config.weekStartDate)}–${format(config.weekEndDate)}`;
-}
-
-function demoCalendarFromInput(input: AcademicCalendarInput): AcademicCalendar {
-  const weeks = [...input.weeks]
-    .sort((first, second) => first.startDate.localeCompare(second.startDate))
-    .map((week, index) => {
-      const endExclusive = new Date(`${week.endDate}T12:00:00`);
-      endExclusive.setDate(endExclusive.getDate() + 1);
-      return {
-        ...week,
-        startAt: new Date(`${week.startDate}T00:00:00`).toISOString(),
-        endAt: new Date(
-          `${endExclusive.toISOString().slice(0, 10)}T00:00:00`,
-        ).toISOString(),
-        order: index + 1,
-        active: true,
-      };
-    });
-  const terms = input.terms.map((term, index) => {
-    const selected = weeks.filter((week) => term.weekIds.includes(week.id));
-    return {
-      ...term,
-      startDate: selected[0]?.startDate ?? "",
-      endDate: selected.at(-1)?.endDate ?? "",
-      order: index + 1,
-      active: true,
-    };
-  });
-  return {
-    schoolYearId: input.schoolYearId,
-    configured: true,
-    weeks,
-    terms,
-    nonWorkingDays: (input.nonWorkingDays ?? []).map((day) => {
-      const week = weeks.find(
-        (candidate) => day.date >= candidate.startDate && day.date <= candidate.endDate,
-      );
-      const term = week
-        ? terms.find((candidate) => candidate.weekIds.includes(week.id))
-        : undefined;
-      return {
-        id: day.date,
-        ...day,
-        weekId: week?.id ?? "",
-        weekLabel: week?.label ?? "Semana",
-        termId: term?.id ?? "",
-        termLabel: term?.label ?? "Bimestre",
-        active: true,
-      };
-    }),
-  };
 }
 
 const navigation: Array<{
@@ -615,9 +542,7 @@ export function CEHFApp() {
   const [authFailure, setAuthFailure] = useState<string | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [demoRole, setDemoRole] = useState<Role>("student");
-  const [demoStarted, setDemoStarted] = useState(false);
-  const [state, setState] = useState<PortalState>(createDemoState);
+  const [state, setState] = useState<PortalState>(createInitialPortalState);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -641,46 +566,23 @@ export function CEHFApp() {
     useState(false);
   const [academicCalendarOpen, setAcademicCalendarOpen] = useState(false);
   const [academicCalendarSaving, setAcademicCalendarSaving] = useState(false);
-  const [taskRecords, setTaskRecords] = useState<TaskAssignment[]>(() =>
-    legacyTasksToAssignments(
-      createDemoState().tasks,
-      defaultAcademicConfig,
-      demoProfiles.student,
-    ),
-  );
+  const [taskRecords, setTaskRecords] = useState<TaskAssignment[]>([]);
   const [taskRecordsLoading, setTaskRecordsLoading] = useState(false);
-  const [reviewRecords, setReviewRecords] = useState<WeeklyReview[]>(() =>
-    legacyReviewsToWeeklyReviews(
-      createDemoState().reviews,
-      demoProfiles.student,
-      defaultAcademicConfig,
-      demoManagedAccounts,
-    ),
-  );
+  const [reviewRecords, setReviewRecords] = useState<WeeklyReview[]>([]);
   const [reviewRecordsLoading, setReviewRecordsLoading] = useState(false);
   const [reviewRecordsRevision, setReviewRecordsRevision] = useState(0);
-  const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>(() =>
-    legacyMaterialsToLearningMaterials(
-      createDemoState().materials,
-      demoProfiles.student,
-      defaultAcademicConfig,
-      demoManagedAccounts,
-    ),
-  );
+  const [materialRecords, setMaterialRecords] = useState<LearningMaterial[]>([]);
   const [materialRecordsLoading, setMaterialRecordsLoading] = useState(false);
   const [viewedMaterialIds, setViewedMaterialIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [mobileMore, setMobileMore] = useState(false);
   const [systemPrefersDark, setSystemPrefersDark] = useState(false);
-  const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>(
-    demoManagedAccounts,
-  );
+  const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>([]);
   const [managedAccountsLoading, setManagedAccountsLoading] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
-  const currentProfile = profile ?? demoProfiles[demoRole];
-  const usingDemo = !firebaseUser;
+  const currentProfile = profile ?? pendingProfile;
   const role = currentProfile.role;
   const unread = state.notifications.filter((item) => !item.read).length;
   const darkModeActive =
@@ -780,58 +682,6 @@ export function CEHFApp() {
       setDetailOpen(taskIdFromPath(window.location.pathname));
     };
     window.addEventListener("popstate", onPopState);
-    const saved = window.localStorage.getItem("cehf-demo-state");
-    if (saved) {
-      try {
-        const restored = JSON.parse(saved) as PortalState;
-        const defaults = createDemoState();
-        const hasCurrentForumModel = restored.forumTopics?.some(
-          (topic) => "forumId" in topic && "allowReplies" in topic,
-        );
-        const migratedWallPosts = (restored.wallPosts ?? defaults.wallPosts).map(
-          (post) => {
-            const editorial = defaults.wallPosts.find(
-              (defaultPost) => defaultPost.id === post.id,
-            );
-            return {
-              ...editorial,
-              ...post,
-              section: post.section ?? editorial?.section,
-              lead: post.lead ?? editorial?.lead,
-              paragraphs: post.paragraphs ?? editorial?.paragraphs,
-              quote: post.quote ?? editorial?.quote,
-              readingTime: post.readingTime ?? editorial?.readingTime,
-            };
-          },
-        );
-        const migrated = hasCurrentForumModel
-          ? {
-              ...defaults,
-              ...restored,
-              weeklyVerse: restored.weeklyVerse ?? defaults.weeklyVerse,
-              wallPosts: migratedWallPosts,
-              forumModeration:
-                restored.forumModeration ?? defaults.forumModeration,
-              forumBans: restored.forumBans ?? defaults.forumBans,
-            }
-          : {
-              ...defaults,
-              ...restored,
-              weeklyVerse: restored.weeklyVerse ?? defaults.weeklyVerse,
-              wallPosts: migratedWallPosts,
-              forumTopics: defaults.forumTopics,
-              forumModeration: defaults.forumModeration,
-              forumBans: defaults.forumBans,
-            };
-        window.localStorage.setItem(
-          "cehf-demo-state",
-          JSON.stringify(migrated),
-        );
-        queueMicrotask(() => setState(migrated));
-      } catch {
-        window.localStorage.removeItem("cehf-demo-state");
-      }
-    }
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       void navigator.serviceWorker.register("/sw.js");
     }
@@ -896,22 +746,6 @@ export function CEHFApp() {
   }, [academicConfig, firebaseUser, profile]);
 
   useEffect(() => {
-    if (firebaseUser) return;
-    queueMicrotask(() => {
-      setStoredAcademicConfig(defaultAcademicConfig);
-      setAcademicCalendar(defaultAcademicCalendar);
-      setTaskRecords(
-        legacyTasksToAssignments(
-          createDemoState().tasks,
-          defaultAcademicConfig,
-          demoProfiles[demoRole],
-        ),
-      );
-      setTaskRecordsLoading(false);
-    });
-  }, [demoRole, firebaseUser]);
-
-  useEffect(() => {
     if (!firebaseUser || !profile) return;
     queueMicrotask(() => {
       setReviewRecords([]);
@@ -929,21 +763,6 @@ export function CEHFApp() {
       },
     );
   }, [firebaseUser, profile, reviewRecordsRevision]);
-
-  useEffect(() => {
-    if (firebaseUser) return;
-    queueMicrotask(() => {
-      setReviewRecords(
-        legacyReviewsToWeeklyReviews(
-          state.reviews,
-          currentProfile,
-          academicConfig,
-          managedAccounts,
-        ),
-      );
-      setReviewRecordsLoading(false);
-    });
-  }, [academicConfig, currentProfile, demoRole, firebaseUser, managedAccounts, state.reviews]);
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
@@ -970,28 +789,6 @@ export function CEHFApp() {
       },
     );
   }, [firebaseUser, profile]);
-
-  useEffect(() => {
-    if (firebaseUser) return;
-    queueMicrotask(() => {
-      setMaterialRecords(
-        legacyMaterialsToLearningMaterials(
-          state.materials,
-          currentProfile,
-          academicConfig,
-          managedAccounts,
-        ),
-      );
-      setMaterialRecordsLoading(false);
-      setViewedMaterialIds(
-        new Set(
-          state.materials
-            .filter((material) => material.reviewed)
-            .map((material) => material.id),
-        ),
-      );
-    });
-  }, [academicConfig, currentProfile, demoRole, firebaseUser, managedAccounts, state.materials]);
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
@@ -1097,20 +894,6 @@ export function CEHFApp() {
   }, [firebaseUser, profile, role]);
 
   useEffect(() => {
-    if (firebaseUser) return;
-    const savedAccounts = window.localStorage.getItem("cehf-demo-accounts");
-    if (!savedAccounts) return;
-    try {
-      const restored = JSON.parse(savedAccounts) as ManagedAccount[];
-      if (Array.isArray(restored)) {
-        queueMicrotask(() => setManagedAccounts(restored));
-      }
-    } catch {
-      window.localStorage.removeItem("cehf-demo-accounts");
-    }
-  }, [firebaseUser]);
-
-  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const syncPreference = () => setSystemPrefersDark(media.matches);
     syncPreference();
@@ -1155,9 +938,7 @@ export function CEHFApp() {
   ) {
     setState((previous) => {
       const next = updater(previous);
-      if (usingDemo) {
-        window.localStorage.setItem("cehf-demo-state", JSON.stringify(next));
-      } else if (profile) {
+      if (profile) {
         void savePortalState(next, profile).catch((error) =>
           reportFirebaseError("guardar estado del portal", error),
         );
@@ -1174,9 +955,7 @@ export function CEHFApp() {
     setState((previous) => {
       const settings = updater(previous.settings);
       const next = { ...previous, settings };
-      if (usingDemo) {
-        window.localStorage.setItem("cehf-demo-state", JSON.stringify(next));
-      } else if (profile) {
+      if (profile) {
         void savePortalSettings(settings, profile).catch((error) =>
           reportFirebaseError("guardar preferencias de apariencia", error),
         );
@@ -1194,49 +973,30 @@ export function CEHFApp() {
   }
 
   function addManagedAccount(account: ManagedAccount) {
-    setManagedAccounts((previous) => {
-      const next = [account, ...previous].sort((first, second) =>
+    setManagedAccounts((previous) =>
+      [account, ...previous].sort((first, second) =>
         first.name.localeCompare(second.name, "es"),
-      );
-      if (usingDemo) {
-        window.localStorage.setItem("cehf-demo-accounts", JSON.stringify(next));
-      }
-      return next;
-    });
+      ),
+    );
   }
 
   function replaceManagedAccount(account: ManagedAccount) {
-    setManagedAccounts((previous) => {
-      const next = previous
+    setManagedAccounts((previous) =>
+      previous
         .map((item) => (item.uid === account.uid ? account : item))
-        .sort((first, second) => first.name.localeCompare(second.name, "es"));
-      if (usingDemo) {
-        window.localStorage.setItem("cehf-demo-accounts", JSON.stringify(next));
-      }
-      return next;
-    });
+        .sort((first, second) => first.name.localeCompare(second.name, "es")),
+    );
   }
 
   function removeManagedAccount(uid: string) {
-    setManagedAccounts((previous) => {
-      const next = previous.filter((item) => item.uid !== uid);
-      if (usingDemo) {
-        window.localStorage.setItem("cehf-demo-accounts", JSON.stringify(next));
-      }
-      return next;
-    });
+    setManagedAccounts((previous) =>
+      previous.filter((item) => item.uid !== uid),
+    );
   }
 
   if (!authReady) return <LoadingScreen />;
 
-  if (!demoStarted && !firebaseUser) {
-    return (
-      <LoginScreen
-        configured={firebaseConfigured}
-        onDemo={() => setDemoStarted(true)}
-      />
-    );
-  }
+  if (!firebaseUser) return <LoginScreen configured={firebaseConfigured} />;
 
   if (firebaseUser && authFailure) {
     return (
@@ -1421,25 +1181,6 @@ export function CEHFApp() {
             <UserRound size={19} aria-hidden="true" />
             <span>Perfil</span>
           </button>
-          {usingDemo && (
-            <div className="demo-switcher">
-              <span>Vista de demostración</span>
-              <select
-                aria-label="Cambiar rol de demostración"
-                value={demoRole}
-                onChange={(event) => {
-                  setDemoRole(event.target.value as Role);
-                  toast.info(
-                    `Ahora estás viendo el portal como ${roleLabel[event.target.value as Role].toLowerCase()}.`,
-                  );
-                }}
-              >
-                <option value="student">Estudiante</option>
-                <option value="teacher">Docente</option>
-                <option value="director">Dirección</option>
-              </select>
-            </div>
-          )}
         </div>
       </aside>
 
@@ -1459,7 +1200,6 @@ export function CEHFApp() {
             onOpen={openSearchResult}
           />
           <div className="topbar-actions">
-            {usingDemo && <span className="demo-badge">Demo</span>}
             <button
               type="button"
               className={`theme-switch ${darkModeActive ? "is-dark" : ""}`}
@@ -1646,27 +1386,10 @@ export function CEHFApp() {
               onMaterialViewed={(materialId) =>
                 setViewedMaterialIds((current) => new Set(current).add(materialId))
               }
-              onDemoReviewChange={(updatedReview) =>
-                setReviewRecords((previous) =>
-                  previous.map((review) =>
-                    review.id === updatedReview.id ? updatedReview : review,
-                  ),
-                )
-              }
               academicConfig={academicConfig}
               academicCalendar={academicCalendar}
               saveAcademicCalendarConfiguration={async (input) => {
-                if (firebaseUser) {
-                  await saveAcademicCalendar(input);
-                } else {
-                  setStoredAcademicConfig((current) => ({
-                    ...current,
-                    schoolYearId: input.schoolYearId,
-                    schoolYearLabel: input.schoolYearLabel,
-                    timezone: input.timezone,
-                  }));
-                  setAcademicCalendar(demoCalendarFromInput(input));
-                }
+                await saveAcademicCalendar(input);
               }}
               managedAccounts={managedAccounts}
               managedAccountsLoading={managedAccountsLoading}
@@ -1695,33 +1418,12 @@ export function CEHFApp() {
             onPublish={async (file) => {
               setAcademicCalendarSaving(true);
               try {
-                if (firebaseUser && profile) {
-                  const publishedCalendar = await publishAcademicCalendarImage(
-                    file,
-                    profile,
-                    academicCalendarImage,
-                  );
-                  setAcademicCalendarImage(publishedCalendar);
-                } else {
-                  const imageUrl = await new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(String(reader.result ?? ""));
-                    reader.onerror = () => reject(new Error("No pudimos leer la imagen."));
-                    reader.readAsDataURL(file);
-                  });
-                  setAcademicCalendarImage({
-                    institutionId: currentProfile.institutionId,
-                    imagePath: "demo/academic-calendar",
-                    imageUrl,
-                    fileName: file.name,
-                    contentType: file.type,
-                    size: file.size,
-                    published: true,
-                    updatedBy: currentProfile.uid,
-                    updatedByName: currentProfile.name,
-                    updatedAt: new Date().toISOString(),
-                  });
-                }
+                const publishedCalendar = await publishAcademicCalendarImage(
+                  file,
+                  currentProfile,
+                  academicCalendarImage,
+                );
+                setAcademicCalendarImage(publishedCalendar);
                 toast.success("Calendario académico publicado", {
                   description: "Alumnos y maestros ya pueden consultarlo desde el sidebar.",
                 });
@@ -1737,9 +1439,7 @@ export function CEHFApp() {
               if (!academicCalendarImage) return;
               setAcademicCalendarSaving(true);
               try {
-                if (firebaseUser && profile) {
-                  await unpublishAcademicCalendarImage(profile, academicCalendarImage);
-                }
+                await unpublishAcademicCalendarImage(currentProfile, academicCalendarImage);
                 setAcademicCalendarImage(null);
                 toast.success("Calendario retirado", {
                   description: "Puedes publicar una nueva imagen cuando esté lista.",
@@ -1767,43 +1467,24 @@ export function CEHFApp() {
             accounts={managedAccounts}
             onClose={() => setCreateOpen(false)}
             onCreate={async (input: WeeklyReviewCreateInput) => {
-              if (firebaseUser && profile) {
-                const result = await createWeeklyReview(
-                  input,
-                  profile,
-                  academicConfig,
-                  academicCalendar,
-                );
-                setReviewRecordsRevision((current) => current + 1);
-                toast.success(
-                  input.status === "published"
-                    ? "Repaso publicado"
-                    : "Borrador guardado",
-                  {
-                    description:
-                      input.status === "published"
-                        ? `${result.recipientCount} ${result.recipientCount === 1 ? "alumno fue notificado" : "alumnos fueron notificados"}.`
-                        : "Puedes publicarlo cuando esté listo.",
-                  },
-                );
-              } else {
-                const review = createDemoWeeklyReview(
-                  input,
-                  currentProfile,
-                  academicConfig,
-                  academicCalendar,
-                  managedAccounts,
-                );
-                setReviewRecords((previous) => [review, ...previous]);
-                toast.success(
-                  input.status === "published"
-                    ? "Repaso publicado en la demostración"
-                    : "Borrador guardado en la demostración",
-                  {
-                    description: `${review.audienceCount} destinatarios preparados.`,
-                  },
-                );
-              }
+              const result = await createWeeklyReview(
+                input,
+                currentProfile,
+                academicConfig,
+                academicCalendar,
+              );
+              setReviewRecordsRevision((current) => current + 1);
+              toast.success(
+                input.status === "published"
+                  ? "Repaso publicado"
+                  : "Borrador guardado",
+                {
+                  description:
+                    input.status === "published"
+                      ? `${result.recipientCount} ${result.recipientCount === 1 ? "alumno fue notificado" : "alumnos fueron notificados"}.`
+                      : "Puedes publicarlo cuando esté listo.",
+                },
+              );
             }}
           />
         ) : createOpen && activeSection === "tasks" ? (
@@ -1812,14 +1493,7 @@ export function CEHFApp() {
             accounts={managedAccounts}
             onClose={() => setCreateOpen(false)}
             onCreate={async (input: TaskCreateInput) => {
-              if (firebaseUser && profile) {
-                await createTaskAssignment(input, profile, academicConfig);
-              } else {
-                setTaskRecords((previous) => [
-                  createDemoTask(input, currentProfile, academicConfig),
-                  ...previous,
-                ]);
-              }
+              await createTaskAssignment(input, currentProfile, academicConfig);
               toast.success(
                 input.publicationMode === "now"
                   ? "Tarea publicada y notificación preparada"
@@ -1837,30 +1511,19 @@ export function CEHFApp() {
             accounts={managedAccounts}
             onClose={() => setCreateOpen(false)}
             onCreate={async (input: LearningMaterialCreateInput) => {
-              if (firebaseUser && profile) {
-                await createLearningMaterial(
-                  input,
-                  profile,
-                  academicConfig,
-                  academicCalendar,
-                );
-              } else {
-                const material = createDemoLearningMaterial(
-                  input,
-                  currentProfile,
-                  academicConfig,
-                  academicCalendar,
-                  managedAccounts,
-                );
-                setMaterialRecords((current) => [material, ...current]);
-              }
+              await createLearningMaterial(
+                input,
+                currentProfile,
+                academicConfig,
+                academicCalendar,
+              );
               toast.success("Material publicado");
             }}
           />
         ) : createOpen && activeSection === "users" ? (
           <AccountRegistrationModal
             accounts={managedAccounts}
-            firebaseReady={firebaseConfigured && Boolean(firebaseUser)}
+            firebaseReady
             institutionId={currentProfile.institutionId}
             onClose={() => setCreateOpen(false)}
             onCreated={addManagedAccount}
@@ -1881,118 +1544,16 @@ export function CEHFApp() {
             forumSubjects={currentProfile.subjects ?? []}
             onClose={() => setCreateOpen(false)}
             onCreate={async (titleValue, subject, forumDraft) => {
-              if (
-                activeSection === "forum" &&
-                firebaseUser &&
-                profile &&
-                forumDraft
-              ) {
-                await createForumTopic({
-                  title: titleValue,
-                  subject,
-                  ...forumDraft,
-                });
-                toast.success(
-                  forumDraft.status === "scheduled"
-                    ? "Conversación programada y grupo notificado"
-                    : "Conversación publicada y grupo notificado",
-                );
-                setCreateOpen(false);
-                return;
-              }
-              const id = `${activeSection}-${Date.now()}`;
-              updateState((previous) => {
-                if (activeSection === "tasks") {
-                  return {
-                    ...previous,
-                    tasks: [
-                      {
-                        id,
-                        title: titleValue,
-                        subject,
-                        description:
-                          "Actividad creada desde el portal. Añade instrucciones antes de publicar.",
-                        dueLabel: "Viernes, 20:00",
-                        dueAt: new Date().toISOString(),
-                        status: "draft",
-                        type: "Actividad",
-                        objective: previous.week.objectives[0],
-                      },
-                      ...previous.tasks,
-                    ],
-                  };
-                }
-                if (activeSection === "weekly-review") {
-                  return {
-                    ...previous,
-                    reviews: [
-                      {
-                        id,
-                        title: titleValue,
-                        subject,
-                        purpose: "Practicar",
-                        duration: 8,
-                        questions: 0,
-                        progress: 0,
-                        attempts: 2,
-                        status: "draft",
-                      },
-                      ...previous.reviews,
-                    ],
-                  };
-                }
-                if (activeSection === "forum") {
-                  const details = forumDraft ?? {
-                    prompt:
-                      "Escribe una consigna clara para iniciar la conversación.",
-                    group: "5.º A",
-                    forumName: `${subject} · 5.º A`,
-                    kind: "subject" as const,
-                    status: "open" as const,
-                    opensAt: "Publicado ahora",
-                    closesAt: "Sin fecha de cierre",
-                    allowReplies: true,
-                    allowAttachments: false,
-                  };
-                  return {
-                    ...previous,
-                    forumTopics: [
-                      {
-                        id,
-                        forumId: `custom-${Date.now()}`,
-                        forumName: details.forumName,
-                        title: titleValue,
-                        prompt: details.prompt,
-                        kind: details.kind,
-                        subject,
-                        group: details.group,
-                        responsible: currentProfile.name,
-                        participants: [
-                          currentProfile.name.split(" ")[0],
-                          "Sofía",
-                          "Diego",
-                          "Emilia",
-                        ],
-                        opensAt: details.opensAt,
-                        closesAt: details.closesAt,
-                        status: details.status,
-                        allowReplies: details.allowReplies,
-                        allowAttachments: details.allowAttachments,
-                        lastActivity:
-                          details.status === "scheduled" ? "Programado" : "Ahora",
-                        replies: [],
-                      },
-                      ...previous.forumTopics,
-                    ],
-                  };
-                }
-                return previous;
-              },
-              activeSection === "forum"
-                ? forumDraft?.status === "scheduled"
-                  ? "Conversación programada"
-                  : "Conversación publicada"
-                : "Borrador creado",
+              if (activeSection !== "forum" || !forumDraft) return;
+              await createForumTopic({
+                title: titleValue,
+                subject,
+                ...forumDraft,
+              });
+              toast.success(
+                forumDraft.status === "scheduled"
+                  ? "Conversación programada y grupo notificado"
+                  : "Conversación publicada y grupo notificado",
               );
               setCreateOpen(false);
             }}
@@ -2003,13 +1564,7 @@ export function CEHFApp() {
             task={taskRecords.find((task) => task.id === detailOpen)!}
             profile={currentProfile}
             accounts={managedAccounts}
-            firebaseReady={Boolean(firebaseUser && profile)}
             onClose={closeTaskDetail}
-            onDemoTaskChange={(updatedTask) =>
-              setTaskRecords((previous) =>
-                previous.map((task) => (task.id === updatedTask.id ? updatedTask : task)),
-              )
-            }
           />
         )}
       </AnimatePresence>
@@ -2017,13 +1572,7 @@ export function CEHFApp() {
   );
 }
 
-function LoginScreen({
-  configured,
-  onDemo,
-}: {
-  configured: boolean;
-  onDemo: () => void;
-}) {
+function LoginScreen({ configured }: { configured: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
@@ -2038,7 +1587,7 @@ function LoginScreen({
 
     if (!configured) {
       setError(
-        "El acceso institucional no está disponible en este entorno. Puedes explorar la demostración.",
+        "El acceso institucional no está configurado. Contacta al administrador del sistema.",
       );
       return;
     }
@@ -2168,7 +1717,7 @@ function LoginScreen({
               <AlertCircle size={17} />
               <span>
                 {error ||
-                  "El acceso institucional no está disponible en este entorno. Puedes explorar la demostración."}
+                  "El acceso institucional no está configurado. Contacta al administrador del sistema."}
               </span>
             </div>
           )}
@@ -2266,17 +1815,6 @@ function LoginScreen({
               : "Entrar a CEHF"}
           </button>
 
-          <div className="demo-divider">
-            <span>o</span>
-          </div>
-          <button
-            className="secondary-button demo-button"
-            type="button"
-            onClick={onDemo}
-          >
-            <Sparkles size={18} />
-            Explorar la demostración
-          </button>
           <div className="login-security">
             <ShieldCheck size={15} /> Acceso cifrado y protegido por Firebase
           </div>
@@ -2307,7 +1845,6 @@ function SectionContent({
   materialRecordsLoading,
   viewedMaterialIds,
   onMaterialViewed,
-  onDemoReviewChange,
   academicConfig,
   academicCalendar,
   saveAcademicCalendarConfiguration,
@@ -2339,7 +1876,6 @@ function SectionContent({
   materialRecordsLoading: boolean;
   viewedMaterialIds: Set<string>;
   onMaterialViewed: (materialId: string) => void;
-  onDemoReviewChange: (review: WeeklyReview) => void;
   academicConfig: AcademicConfig;
   academicCalendar: AcademicCalendar;
   saveAcademicCalendarConfiguration: (
@@ -2394,7 +1930,6 @@ function SectionContent({
           calendar={academicCalendar}
           accounts={managedAccounts}
           firebaseReady={firebaseReady}
-          onDemoReviewChange={onDemoReviewChange}
         />
       );
     case "tasks":
@@ -2532,10 +2067,8 @@ function Dashboard({
   materialRecordsLoading,
   viewedMaterialIds,
   academicConfig,
-  academicCalendar,
   managedAccounts,
   managedAccountsLoading,
-  firebaseReady,
 }: {
   role: Role;
   profile: UserProfile;
@@ -2574,27 +2107,6 @@ function Dashboard({
   );
 
   useEffect(() => {
-    if (!firebaseReady) {
-      queueMicrotask(() => {
-        const grades = demoDailyGrades(
-          profile,
-          academicCalendar,
-          academicConfig,
-          managedAccounts,
-        );
-        setDashboardGrades(grades);
-        setDashboardReports(
-          demoStudentWeeklyReports(
-            aggregateDailyGradesByWeek(grades, academicCalendar),
-            profile,
-            academicConfig,
-          ),
-        );
-        setDashboardRecordsLoading(false);
-      });
-      return;
-    }
-
     let gradesReady = false;
     let reportsReady = false;
     queueMicrotask(() => setDashboardRecordsLoading(true));
@@ -2631,38 +2143,9 @@ function Dashboard({
       stopGrades();
       stopReports();
     };
-  }, [academicCalendar, academicConfig, firebaseReady, managedAccounts, profile]);
+  }, [profile]);
 
   useEffect(() => {
-    if (!firebaseReady) {
-      const taskState = new Map(state.tasks.map((task) => [task.id, task]));
-      const students = managedAccounts.filter((account) => account.role === "student" && account.active);
-      const demoSubmissions: Record<string, TaskSubmission[]> = {};
-      scopedTasks.forEach((task, index) => {
-        const legacy = taskState.get(task.id);
-        if (!legacy || legacy.status === "published") return;
-        const student = role === "student" ? profile : students[index % Math.max(1, students.length)];
-        if (!student) return;
-        const status: TaskSubmission["status"] = legacy.status === "reviewed" ? "reviewed" : "submitted";
-        const updatedAt = new Date(Date.now() - (index + 1) * 45 * 60_000).toISOString();
-        demoSubmissions[task.id] = [{
-            id: student.uid,
-            studentId: student.uid,
-            studentName: student.name,
-            teacherId: task.createdBy,
-            taskId: task.id,
-            content: legacy.description,
-            attachments: [],
-            status,
-            version: 1,
-            submittedAt: updatedAt,
-            updatedAt,
-            reviewedAt: status === "reviewed" ? updatedAt : undefined,
-          }];
-      });
-      queueMicrotask(() => setSubmissionsByTask(demoSubmissions));
-      return;
-    }
     queueMicrotask(() => setSubmissionsByTask({}));
     const stops = scopedTasks
       .filter(isFirebaseTaskAssignment)
@@ -2676,10 +2159,10 @@ function Dashboard({
       ),
     );
     return () => stops.forEach((stop) => stop());
-  }, [firebaseReady, managedAccounts, profile, role, scopedTasks, state.tasks]);
+  }, [profile, scopedTasks]);
 
   useEffect(() => {
-    if (!firebaseReady || role === "student") {
+    if (role === "student") {
       queueMicrotask(() =>
         setAttemptsByReview(
           Object.fromEntries(
@@ -2702,7 +2185,7 @@ function Dashboard({
       ),
     );
     return () => stops.forEach((stop) => stop());
-  }, [firebaseReady, role, scopedReviews]);
+  }, [role, scopedReviews]);
 
   const dashboard = useMemo(
     () =>
@@ -3160,9 +2643,6 @@ function SettingsPage({
         ? "appearance"
         : settingsTabFromPath(window.location.pathname),
     );
-  const [demoSeedLoading, setDemoSeedLoading] = useState(false);
-  const [demoSeedClearing, setDemoSeedClearing] = useState(false);
-  const [demoSeedCounts, setDemoSeedCounts] = useState<DemoSeedCounts | null>(null);
   const [searchBackfillLoading, setSearchBackfillLoading] = useState(false);
 
   useEffect(() => {
@@ -3184,38 +2664,6 @@ function SettingsPage({
   const openSettingsTab = (tab: SettingsTabId) => {
     window.history.pushState({}, "", settingsRoutes[tab]);
     setActiveSettingsTab(tab);
-  };
-
-  const handleDemoSeed = async () => {
-    if (demoSeedLoading) return;
-    setDemoSeedLoading(true);
-    try {
-      const result = await loadInstitutionDemoData();
-      setDemoSeedCounts(result.counts);
-      toast.success("Datos de demostración cargados en Firebase");
-    } catch (error) {
-      toast.error(friendlyFirebaseError(error));
-    } finally {
-      setDemoSeedLoading(false);
-    }
-  };
-
-  const handleDemoSeedClear = async () => {
-    if (demoSeedClearing) return;
-    setDemoSeedClearing(true);
-    try {
-      const result = await clearInstitutionDemoData();
-      setDemoSeedCounts(null);
-      toast.success(
-        result.alreadyClean
-          ? "La semilla ya estaba eliminada"
-          : `${result.deleted} documentos demo eliminados`,
-      );
-    } catch (error) {
-      toast.error(friendlyFirebaseError(error));
-    } finally {
-      setDemoSeedClearing(false);
-    }
   };
 
   const handleSearchBackfill = async () => {
@@ -3503,55 +2951,6 @@ function SettingsPage({
                   </button>
                 </div>
               </section>
-              <section className="panel settings-section demo-seed-card">
-                <div className="settings-heading">
-                  <span className="settings-icon">
-                    <Database size={20} />
-                  </span>
-                  <div>
-                    <h2>Datos de demostración</h2>
-                    <p>Puebla Firebase con información relacionada para revisar todos los módulos.</p>
-                  </div>
-                </div>
-                <div className="setting-row">
-                  <div>
-                    <strong>Carga segura y repetible</strong>
-                    <span>
-                      Crea 12 alumnos, 3 docentes y al menos 10 registros en tareas,
-                      repasos, materiales, reportes, mural, foro y talleres. No activa
-                      mensajes reales ni crea accesos de autenticación.
-                    </span>
-                  </div>
-                  <button
-                    className="primary-button"
-                    disabled={!firebaseReady || demoSeedLoading || demoSeedClearing}
-                    onClick={() => void handleDemoSeed()}
-                    type="button"
-                  >
-                    {demoSeedLoading ? <LoaderCircle className="spin" size={16} /> : <Database size={16} />}
-                    {demoSeedLoading ? "Cargando…" : "Cargar datos demo"}
-                  </button>
-                  <button
-                    className="danger-button"
-                    disabled={!firebaseReady || demoSeedLoading || demoSeedClearing}
-                    onClick={() => void handleDemoSeedClear()}
-                    type="button"
-                  >
-                    {demoSeedClearing ? <LoaderCircle className="spin" size={16} /> : <X size={16} />}
-                    {demoSeedClearing ? "Eliminando…" : "Eliminar datos demo"}
-                  </button>
-                </div>
-                {demoSeedCounts && (
-                  <div className="demo-seed-summary" role="status">
-                    <strong>Carga completada</strong>
-                    <span>{demoSeedCounts.dailyGrades} calificaciones diarias</span>
-                    <span>{demoSeedCounts.weeklyReports} reportes semanales</span>
-                    <span>{demoSeedCounts.tasks} tareas</span>
-                    <span>{demoSeedCounts.reviews} repasos</span>
-                    <span>{demoSeedCounts.wallPosts} publicaciones</span>
-                  </div>
-                )}
-              </section>
             </div>
           </>
         )}
@@ -3812,62 +3211,25 @@ function AccountRegistrationModal({
     setSubmitting(true);
     try {
       const sanitizedSubjects = sanitizeSubjects(subjects, availableSubjects);
-      const result = firebaseReady
-        ? await createManagedAccount(
-            {
-              firstName,
-              lastName,
-              email,
-              role: accountRole,
-              schoolLevel: accountRole === "student" ? schoolLevel : undefined,
-              grade: accountRole === "student" ? grade : undefined,
-              group: accountRole === "student" ? group : undefined,
-              guardianName:
-                accountRole === "student" ? guardianName : undefined,
-              guardianWhatsApp:
-                accountRole === "student" ? guardianWhatsApp : undefined,
-              subjects: sanitizedSubjects,
-              teacherIds,
-              photo,
-            },
-            institutionId,
-          )
-        : await new Promise<{ account: ManagedAccount; password: string }>(
-            (resolve) =>
-              window.setTimeout(() => {
-                const cleanFirstName = firstName.trim();
-                const cleanLastName = lastName.trim();
-                resolve({
-                  account: {
-                    uid: `demo-account-${Date.now()}`,
-                    firstName: cleanFirstName,
-                    lastName: cleanLastName,
-                    name: `${cleanFirstName} ${cleanLastName}`,
-                    email: email.trim().toLowerCase(),
-                    role: accountRole,
-                    initials:
-                      `${cleanFirstName[0] ?? ""}${cleanLastName[0] ?? ""}`.toUpperCase(),
-                    active: true,
-                    schoolLevel:
-                      accountRole === "student" ? schoolLevel : undefined,
-                    grade: accountRole === "student" ? grade : undefined,
-                    group: accountRole === "student" ? group : undefined,
-                    guardianName:
-                      accountRole === "student" ? guardianName.trim() : undefined,
-                    guardianWhatsApp:
-                      accountRole === "student"
-                        ? normalizeGuardianWhatsApp(guardianWhatsApp)
-                        : undefined,
-                    guardianWhatsAppAuthorized:
-                      accountRole === "student" ? true : undefined,
-                    subjects: sanitizedSubjects,
-                    teacherIds: accountRole === "student" ? teacherIds : [],
-                    createdAt: new Date().toISOString(),
-                  },
-                  password: generateTemporaryPassword(),
-                });
-              }, 720),
-          );
+      const result = await createManagedAccount(
+        {
+          firstName,
+          lastName,
+          email,
+          role: accountRole,
+          schoolLevel: accountRole === "student" ? schoolLevel : undefined,
+          grade: accountRole === "student" ? grade : undefined,
+          group: accountRole === "student" ? group : undefined,
+          guardianName:
+            accountRole === "student" ? guardianName : undefined,
+          guardianWhatsApp:
+            accountRole === "student" ? guardianWhatsApp : undefined,
+          subjects: sanitizedSubjects,
+          teacherIds,
+          photo,
+        },
+        institutionId,
+      );
       onCreated(result.account);
       setCredentials(result);
       toast.success(
@@ -3875,9 +3237,7 @@ function AccountRegistrationModal({
           ? "Alumno registrado"
           : "Maestro registrado",
         {
-          description: firebaseReady
-            ? "La cuenta institucional ya puede iniciar sesión."
-            : "Cuenta agregada a la demostración; Firebase está listo para conectarse.",
+          description: "La cuenta institucional ya puede iniciar sesión.",
         },
       );
     } catch (error) {

@@ -13,8 +13,6 @@ import {
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType } from "react";
-import { demoDailyGrades } from "@/components/academic-grades";
-import { demoStudentWeeklyReports } from "@/components/academic-reports";
 import {
   buildDashboardViewModel,
   dashboardReviewScope,
@@ -22,7 +20,7 @@ import {
   roleMetricIconKey,
 } from "@/lib/dashboard";
 import { logoutFirebase } from "@/lib/firebase";
-import { aggregateDailyGradesByWeek, watchDailyGrades } from "@/lib/grades-firebase";
+import { watchDailyGrades } from "@/lib/grades-firebase";
 import { watchStudentWeeklyReports } from "@/lib/reports-firebase";
 import { isFirebaseTaskAssignment, watchTaskSubmissions } from "@/lib/tasks-firebase";
 import { watchWeeklyReviewAttempts } from "@/lib/reviews-firebase";
@@ -93,7 +91,6 @@ function useProfileDashboard({
   materialRecords,
   viewedMaterialIds,
   academicConfig,
-  academicCalendar,
   managedAccounts,
   firebaseReady,
 }: Omit<
@@ -118,27 +115,6 @@ function useProfileDashboard({
   );
 
   useEffect(() => {
-    if (!firebaseReady) {
-      const demoGrades = demoDailyGrades(
-        profile,
-        academicCalendar,
-        academicConfig,
-        managedAccounts,
-      );
-      queueMicrotask(() => {
-        setGrades(demoGrades);
-        setReports(
-          demoStudentWeeklyReports(
-            aggregateDailyGradesByWeek(demoGrades, academicCalendar),
-            profile,
-            academicConfig,
-          ),
-        );
-        setRecordsLoading(false);
-      });
-      return;
-    }
-
     let gradesReady = false;
     let reportsReady = false;
     queueMicrotask(() => setRecordsLoading(true));
@@ -173,44 +149,9 @@ function useProfileDashboard({
       stopGrades();
       stopReports();
     };
-  }, [academicCalendar, academicConfig, firebaseReady, managedAccounts, profile]);
+  }, [profile]);
 
   useEffect(() => {
-    if (!firebaseReady) {
-      const legacyTasks = new Map(state.tasks.map((task) => [task.id, task]));
-      const students = managedAccounts.filter(
-        (account) => account.role === "student" && account.active,
-      );
-      const demoSubmissions: Record<string, TaskSubmission[]> = {};
-      scopedTasks.forEach((task, index) => {
-        const legacy = legacyTasks.get(task.id);
-        if (!legacy || legacy.status === "published") return;
-        const student = profile.role === "student"
-          ? profile
-          : students[index % Math.max(students.length, 1)];
-        if (!student) return;
-        const status: TaskSubmission["status"] =
-          legacy.status === "reviewed" ? "reviewed" : "submitted";
-        const updatedAt = new Date(Date.now() - (index + 1) * 45 * 60_000).toISOString();
-        demoSubmissions[task.id] = [{
-          id: student.uid,
-          studentId: student.uid,
-          studentName: student.name,
-          teacherId: task.createdBy,
-          taskId: task.id,
-          content: legacy.description,
-          attachments: [],
-          status,
-          version: 1,
-          submittedAt: updatedAt,
-          updatedAt,
-          reviewedAt: status === "reviewed" ? updatedAt : undefined,
-        }];
-      });
-      queueMicrotask(() => setSubmissionsByTask(demoSubmissions));
-      return;
-    }
-
     queueMicrotask(() => setSubmissionsByTask({}));
     const stops = scopedTasks
       .filter(isFirebaseTaskAssignment)
@@ -224,10 +165,10 @@ function useProfileDashboard({
         ),
       );
     return () => stops.forEach((stop) => stop());
-  }, [firebaseReady, managedAccounts, profile, scopedTasks, state.tasks]);
+  }, [profile, scopedTasks]);
 
   useEffect(() => {
-    if (!firebaseReady || profile.role === "student") {
+    if (profile.role === "student") {
       queueMicrotask(() =>
         setAttemptsByReview(
           Object.fromEntries(
@@ -251,7 +192,7 @@ function useProfileDashboard({
       ),
     );
     return () => stops.forEach((stop) => stop());
-  }, [firebaseReady, profile.role, scopedReviews]);
+  }, [profile.role, scopedReviews]);
 
   const dashboard = useMemo(
     () =>
@@ -409,9 +350,7 @@ export function ProfilePage(props: ProfilePageProps) {
           </div>
           <div className="account-profile-live-note" role="status">
             <span />
-            {props.firebaseReady
-              ? "Información actualizada con la actividad del portal"
-              : "Datos de demostración para explorar la experiencia"}
+            Información actualizada con la actividad del portal
           </div>
         </section>
 

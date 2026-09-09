@@ -255,7 +255,6 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(taskUiSource, /workingDayCountForWeek/);
   assert.match(taskUiSource, /ACADEMIC_WEEKS_PAGE_SIZE = 5/);
   assert.match(taskUiSource, /academic-week-pagination/);
-  assert.match(appSource, /key: "materials", label: "Recursos"/);
   assert.match(appSource, /name === "weekly-materials"\) return "materials"/);
   assert.match(taskUiSource, /TaskResourceViewer/);
   assert.match(taskUiSource, /PDF, Office, imagen, audio o vídeo/);
@@ -400,6 +399,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(workshopSource, /WorkshopFileViewer/);
   assert.match(workshopFileViewerSource, /Haz clic fuera del recurso/);
   assert.match(workshopFileViewerSource, /createPortal/);
+  assert.doesNotMatch(appSource, /Explorar la demostración|onDemo|demoStarted/);
+  assert.doesNotMatch(functionsSource, /seedInstitutionDemoData|clearInstitutionDemoData/);
   assert.match(firestoreRules, /match \/workshops\/\{workshopId\}/);
   assert.match(firestoreRules, /match \/tasks\/\{taskId\}/);
   assert.match(firestoreRules, /validWorkshopTaskAudience/);

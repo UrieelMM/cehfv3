@@ -376,7 +376,7 @@ export async function deleteWorkshopResource(resource: WorkshopResource) {
 
 export async function getWorkshopResourceUrl(resource: WorkshopResource) {
   if (!resource.storagePath) {
-    throw new Error("Este recurso pertenece a la demostración.");
+    throw new Error("Este recurso no tiene un archivo disponible.");
   }
   const { storage } = requireFirebase();
   return getDownloadURL(ref(storage, resource.storagePath));

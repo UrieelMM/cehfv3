@@ -31,7 +31,6 @@ import type {
   AcademicTerm,
   AcademicWeek,
   AppNotification,
-  Task,
   TaskAssignment,
   TaskAttachment,
   TaskCreateInput,
@@ -160,7 +159,7 @@ export function isFirebaseTaskAssignment(task: TaskAssignment) {
 
 function taskRef(task: TaskAssignment) {
   if (!isFirebaseTaskAssignment(task)) {
-    throw new Error("Esta tarea pertenece al modo demostración, no a Firebase.");
+    throw new Error("La ruta de esta tarea no es válida.");
   }
   const { db } = requireFirebase();
   return doc(db, task.firestorePath);
@@ -1196,110 +1195,4 @@ export async function markTaskNotificationsRead(userId: string) {
   const batch = writeBatch(firebase.db);
   unread.forEach((item) => batch.update(item.ref, { read: true }));
   await batch.commit();
-}
-
-export function legacyTasksToAssignments(
-  tasks: Task[],
-  config: AcademicConfig,
-  profile: UserProfile,
-) {
-  const baseDue = Date.now() + 24 * 60 * 60 * 1000;
-  const targetGroup = profile.role === "student"
-    ? `${profile.grade ?? "5.º"} ${profile.group ?? "A"}`.trim()
-    : profile.group?.trim() || "5.º A";
-  return tasks.map((task, index): TaskAssignment => {
-    const originalDue = new Date(task.dueAt).getTime();
-    const dueAt = new Date(
-      Number.isFinite(originalDue) && originalDue > Date.now()
-        ? originalDue
-        : baseDue + index * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    return {
-      id: task.id,
-      firestorePath: `demo/tasks/${task.id}`,
-      institutionId: config.institutionId,
-      schoolYearId: config.schoolYearId,
-      schoolYearLabel: config.schoolYearLabel,
-      termId: config.termId,
-      termLabel: config.termLabel,
-      weekId: config.weekId,
-      weekLabel: config.weekLabel,
-      subjectId: slugify(task.subject),
-      subject: task.subject,
-      title: task.title,
-      description: task.description,
-      dueAt,
-      status: "published",
-      publicationMode: "now",
-      targetGroup,
-      links: [],
-      attachments: index === 0
-        ? [{
-            id: "demo-resource-guide",
-            name: "Guía visual del tema.png",
-            storagePath: "demo/task-resources/guide.png",
-            contentType: "image/png",
-            size: 248_000,
-            downloadUrl: "/og-campus.png",
-          }]
-        : [],
-      createdBy: "demo-teacher",
-      teacherName: "Mariana López",
-      createdAt: new Date(Date.now() - (index + 1) * 3_600_000).toISOString(),
-      updatedAt: new Date(Date.now() - index * 3_600_000).toISOString(),
-    };
-  });
-}
-
-export function createDemoTask(
-  input: TaskCreateInput,
-  profile: UserProfile,
-  config: AcademicConfig,
-): TaskAssignment {
-  const now = new Date().toISOString();
-  const status =
-    input.publicationMode === "now"
-      ? "published"
-      : input.publicationMode === "scheduled"
-        ? "scheduled"
-        : "draft";
-  const id = `task-${Date.now()}`;
-  return {
-    id,
-    firestorePath: `demo/tasks/${id}`,
-    institutionId: config.institutionId,
-    schoolYearId: config.schoolYearId,
-    schoolYearLabel: config.schoolYearLabel,
-    termId: config.termId,
-    termLabel: config.termLabel,
-    weekId: config.weekId,
-    weekLabel: config.weekLabel,
-    subjectId: input.subjectId,
-    subject: input.subject,
-    title: input.title,
-    description: input.description,
-    dueAt: new Date(input.dueAt).toISOString(),
-    publishAt: input.publishAt
-      ? new Date(input.publishAt).toISOString()
-      : undefined,
-    publishedAt: status === "published" ? now : undefined,
-    status,
-    publicationMode: input.publicationMode,
-    targetGroup: input.targetGroup,
-    links: input.links
-      .filter((link) => link.url.trim())
-      .map((link) => ({ ...link, id: crypto.randomUUID() })),
-    attachments: input.files.map((file) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      storagePath: `demo/${file.name}`,
-      contentType: file.type,
-      size: file.size,
-      downloadUrl: URL.createObjectURL(file),
-    })),
-    createdBy: profile.uid,
-    teacherName: profile.name,
-    createdAt: now,
-    updatedAt: now,
-  };
 }

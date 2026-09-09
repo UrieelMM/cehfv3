@@ -83,7 +83,7 @@ export function defaultMuralEdition(profile: UserProfile): MuralEdition {
     timeZone: "America/Mexico_City",
   }).format(new Date(`${month}-15T12:00:00`));
   return {
-    id: "demo-edition-current",
+    id: `edition-${month}`,
     institutionId: profile.institutionId,
     active: true,
     periodType: "month",
@@ -92,10 +92,10 @@ export function defaultMuralEdition(profile: UserProfile): MuralEdition {
     month,
     seasonName: "",
     group: profile.role === "student"
-      ? `${profile.grade ?? ""} ${profile.group ?? ""}`.trim() || "5.º A"
-      : profile.group ?? "5.º A",
-    teacherId: profile.role === "teacher" ? profile.uid : "demo-teacher-mariana",
-    teacherName: profile.role === "teacher" ? profile.name : "Mariana López",
+      ? `${profile.grade ?? ""} ${profile.group ?? ""}`.trim()
+      : profile.group ?? "",
+    teacherId: profile.role === "teacher" ? profile.uid : "",
+    teacherName: profile.role === "teacher" ? profile.name : "",
     cover: { ...defaultMuralCover },
     gallerySlides: defaultMuralGallerySlides.map((slide) => ({ ...slide })),
   };

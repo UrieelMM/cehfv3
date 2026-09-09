@@ -333,7 +333,7 @@ export function WhatsAppAdminPanel({
         </div>
         <div className="setup-note">
           <ShieldCheck size={19} />
-          <p>El modo demostración no envía mensajes ni guarda teléfonos reales.</p>
+          <p>Inicia sesión para administrar mensajes y teléfonos autorizados.</p>
         </div>
       </section>
     );

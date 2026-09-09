@@ -755,67 +755,24 @@ export function TaskCreateModal({
   );
 }
 
-function demoSubmission(profile: UserProfile): TaskSubmission {
-  const now = new Date().toISOString();
-  return {
-    id: profile.role === "student" ? profile.uid : "demo-student",
-    studentId: profile.role === "student" ? profile.uid : "demo-student",
-    studentName: profile.role === "student" ? profile.name : "Sofía Hernández",
-    teacherId: "demo-teacher",
-    taskId: "demo",
-    content:
-      "Observé cómo un cubo de hielo se convirtió en agua. Tomé notas sobre la temperatura y el tiempo.",
-    attachments: [],
-    status: "submitted",
-    version: 1,
-    submittedAt: now,
-    updatedAt: now,
-  };
-}
-
-function demoHistory(submission: TaskSubmission): TaskHistoryEvent[] {
-  return [
-    {
-      id: "demo-event",
-      type: "submitted",
-      authorId: submission.studentId,
-      authorName: submission.studentName,
-      authorRole: "student",
-      studentId: submission.studentId,
-      studentName: submission.studentName,
-      message: submission.content,
-      version: 1,
-      createdAt: submission.updatedAt,
-    },
-  ];
-}
-
 export function TaskDetailModal({
   task,
   profile,
   accounts,
-  firebaseReady,
   onClose,
-  onDemoTaskChange,
 }: {
   task: TaskAssignment;
   profile: UserProfile;
   accounts: ManagedAccount[];
-  firebaseReady: boolean;
   onClose: () => void;
-  onDemoTaskChange: (task: TaskAssignment) => void;
 }) {
   const staff = profile.role !== "student";
-  const liveFirebaseTask = firebaseReady && isFirebaseTaskAssignment(task);
-  const [submissions, setSubmissions] = useState<TaskSubmission[]>(() =>
-    !liveFirebaseTask && staff ? [demoSubmission(profile)] : [],
-  );
+  const liveFirebaseTask = isFirebaseTaskAssignment(task);
+  const [submissions, setSubmissions] = useState<TaskSubmission[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState(
     profile.role === "student" ? profile.uid : "",
   );
-  const [history, setHistory] = useState<TaskHistoryEvent[]>(() =>
-    !liveFirebaseTask && staff ? demoHistory(demoSubmission(profile)) : [],
-  );
+  const [history, setHistory] = useState<TaskHistoryEvent[]>([]);
   const [taskHistory, setTaskHistory] = useState<TaskHistoryEvent[]>([]);
   const [selectedResource, setSelectedResource] = useState<{
     resource: TaskResource;
@@ -944,40 +901,6 @@ export function TaskDetailModal({
 
   async function submitResponse() {
     if (!response.trim() && !responseFiles.length) return;
-    if (!liveFirebaseTask) {
-      const current = submissions.find((item) => item.studentId === profile.uid);
-      const next: TaskSubmission = {
-        id: profile.uid,
-        studentId: profile.uid,
-        studentName: profile.name,
-        teacherId: task.createdBy,
-        taskId: task.id,
-        content: response.trim(),
-        attachments: [],
-        status: "submitted",
-        version: (current?.version ?? 0) + 1,
-        submittedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setSubmissions([next]);
-      setHistory((currentHistory) => [
-        ...currentHistory,
-        {
-          id: crypto.randomUUID(),
-          type: next.version === 1 ? "submitted" : "resubmitted",
-          authorId: profile.uid,
-          authorName: profile.name,
-          authorRole: "student",
-          message: next.content,
-          version: next.version,
-          createdAt: next.updatedAt,
-        },
-      ]);
-      setResponse("");
-      setResponseFiles([]);
-      toast.success(`Versión ${next.version} entregada`);
-      return;
-    }
     await runAction(
       "submit",
       async () => {
@@ -992,31 +915,6 @@ export function TaskDetailModal({
 
   async function sendFeedback() {
     if (!selectedSubmission || !feedback.trim()) return;
-    if (!liveFirebaseTask) {
-      const now = new Date().toISOString();
-      setSubmissions((current) =>
-        current.map((item) =>
-          item.id === selectedSubmission.id
-            ? { ...item, status: "feedback", teacherFeedback: feedback, updatedAt: now }
-            : item,
-        ),
-      );
-      setHistory((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          type: "feedback",
-          authorId: profile.uid,
-          authorName: profile.name,
-          authorRole: profile.role,
-          message: feedback,
-          createdAt: now,
-        },
-      ]);
-      setFeedback("");
-      toast.success("Retroalimentación enviada al alumno");
-      return;
-    }
     await runAction(
       "feedback",
       async () => {
@@ -1165,8 +1063,6 @@ export function TaskDetailModal({
               sendFeedback={sendFeedback}
               busy={busy}
               runAction={runAction}
-              firebaseReady={liveFirebaseTask}
-              onDemoTaskChange={onDemoTaskChange}
               groupDueAt={groupDueAt}
               setGroupDueAt={setGroupDueAt}
               eligibleStudents={eligibleStudents}
@@ -1356,8 +1252,6 @@ function StaffTaskFlow({
   sendFeedback,
   busy,
   runAction,
-  firebaseReady,
-  onDemoTaskChange,
   groupDueAt,
   setGroupDueAt,
   eligibleStudents,
@@ -1380,8 +1274,6 @@ function StaffTaskFlow({
   sendFeedback: () => Promise<void>;
   busy: string;
   runAction: (key: string, action: () => Promise<void>, success: string) => Promise<void>;
-  firebaseReady: boolean;
-  onDemoTaskChange: (task: TaskAssignment) => void;
   groupDueAt: string;
   setGroupDueAt: (value: string) => void;
   eligibleStudents: ManagedAccount[];
@@ -1396,16 +1288,9 @@ function StaffTaskFlow({
   async function staffAction(
     key: string,
     realAction: () => Promise<void>,
-    demoChanges: Partial<TaskAssignment>,
     success: string,
   ) {
-    await runAction(
-      key,
-      firebaseReady
-        ? realAction
-        : async () => onDemoTaskChange({ ...task, ...demoChanges, updatedAt: new Date().toISOString() }),
-      success,
-    );
+    await runAction(key, realAction, success);
   }
 
   return (
@@ -1429,7 +1314,6 @@ function StaffTaskFlow({
                 void staffAction(
                   "publish",
                   () => publishTaskNow(task, profile),
-                  { status: "published", publicationMode: "now" },
                   "Tarea publicada y grupo notificado",
                 )
               }
@@ -1444,7 +1328,6 @@ function StaffTaskFlow({
                 void staffAction(
                   "close",
                   () => closeTaskAssignment(task, profile),
-                  { status: "closed", closedAt: new Date().toISOString() },
                   "Tarea cerrada para nuevas entregas",
                 )
               }
@@ -1473,11 +1356,6 @@ function StaffTaskFlow({
                 void staffAction(
                   "group-extension",
                   () => extendTaskForGroup(task, profile, new Date(groupDueAt).toISOString()),
-                  {
-                    status: "published",
-                    dueAt: new Date(groupDueAt).toISOString(),
-                    closedAt: undefined,
-                  },
                   task.status === "closed" ? "Tarea reabierta para el grupo" : "Fecha extendida para el grupo",
                 )
               }
@@ -1518,15 +1396,13 @@ function StaffTaskFlow({
                 if (!student) return;
                 void runAction(
                   "individual-extension",
-                  firebaseReady
-                    ? () =>
-                        grantIndividualTaskExtension(
-                          task,
-                          profile,
-                          { uid: student.uid, name: student.name },
-                          new Date(individualDueAt).toISOString(),
-                        )
-                    : async () => undefined,
+                  () =>
+                    grantIndividualTaskExtension(
+                      task,
+                      profile,
+                      { uid: student.uid, name: student.name },
+                      new Date(individualDueAt).toISOString(),
+                    ),
                   `Prórroga enviada a ${student.name}`,
                 );
               }}
@@ -1602,9 +1478,7 @@ function StaffTaskFlow({
                     if (!selectedSubmission) return;
                     void runAction(
                       "reviewed",
-                      firebaseReady
-                        ? () => markTaskSubmissionReviewed(task, selectedSubmission, profile)
-                        : async () => undefined,
+                      () => markTaskSubmissionReviewed(task, selectedSubmission, profile),
                       "Entrega finalizada y alumno notificado",
                     );
                   }}

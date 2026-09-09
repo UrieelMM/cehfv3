@@ -15,10 +15,6 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
-  demoDailyGrades,
-  DEMO_DAILY_GRADES_KEY,
-} from "@/components/academic-grades";
-import {
   aggregateDailyGradesByWeek,
   GRADING_CRITERIA,
   watchDailyGrades,
@@ -39,7 +35,6 @@ import type {
 } from "@/lib/types";
 
 const PAGE_SIZE = 10;
-const DEMO_REPORTS_KEY = "cehf-demo-student-weekly-reports-v2";
 
 function score(value: number) {
   return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
@@ -145,47 +140,6 @@ function PublishedReportCard({ report, grade }: { report: StudentWeeklyReport; g
   </article>;
 }
 
-export function demoStudentWeeklyReports(
-  grades: WeeklyGradeRecord[],
-  profile: UserProfile,
-  academicConfig: AcademicConfig,
-) {
-  try {
-    const saved = window.localStorage.getItem(DEMO_REPORTS_KEY);
-    if (saved) return JSON.parse(saved) as StudentWeeklyReport[];
-  } catch {
-    window.localStorage.removeItem(DEMO_REPORTS_KEY);
-  }
-  return grades.slice(0, 2).map((grade, index) => ({
-    id: [academicConfig.schoolYearId, grade.weekId, grade.subjectId, grade.teacherId, grade.studentId].join("__"),
-    institutionId: profile.institutionId,
-    schoolYearId: academicConfig.schoolYearId,
-    schoolYearLabel: academicConfig.schoolYearLabel,
-    termId: grade.termId,
-    termLabel: grade.termLabel,
-    weekId: grade.weekId,
-    weekLabel: grade.weekLabel,
-    subjectId: grade.subjectId,
-    subject: grade.subject,
-    teacherId: grade.teacherId,
-    teacherName: grade.teacherName,
-    studentId: grade.studentId,
-    studentName: grade.studentName,
-    studentGrade: grade.studentGrade,
-    studentGroup: grade.studentGroup,
-    achievement: "Mostró constancia y explicó con claridad los aprendizajes trabajados durante la semana.",
-    supportArea: "Necesita revisar las indicaciones antes de iniciar para aprovechar mejor sus evidencias.",
-    nextStep: "Organizar sus ideas en tres pasos y comprobar el resultado antes de entregar.",
-    weeklyScore: grade.weightedScore,
-    gradedDays: grade.dayCount ?? 0,
-    workingDays: grade.workingDayCount ?? grade.dayCount ?? 0,
-    status: index === 0 ? "published" : "draft",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    publishedAt: index === 0 ? new Date().toISOString() : undefined,
-  } satisfies StudentWeeklyReport));
-}
-
 export function AcademicReportsPage({
   profile,
   academicConfig,
@@ -239,26 +193,13 @@ export function AcademicReportsPage({
   }, [profile.role, reports]);
 
   useEffect(() => {
-    if (!firebaseReady) {
-      queueMicrotask(() => {
-        let demoGrades = demoDailyGrades(profile, calendar, academicConfig, accounts);
-        try {
-          const saved = window.localStorage.getItem(DEMO_DAILY_GRADES_KEY);
-          if (saved) demoGrades = JSON.parse(saved) as DailyGradeRecord[];
-        } catch { /* ignore demo storage */ }
-        setGrades(demoGrades);
-        setReports(demoStudentWeeklyReports(aggregateDailyGradesByWeek(demoGrades, calendar), profile, academicConfig));
-        setLoading(false);
-      });
-      return;
-    }
     let gradesReady = false;
     let reportsReady = false;
     const done = () => { if (gradesReady && reportsReady) setLoading(false); };
     const stopGrades = watchDailyGrades(profile, (next) => { setGrades(next); gradesReady = true; done(); }, () => { gradesReady = true; done(); toast.error("No pudimos cargar las calificaciones para los reportes."); });
     const stopReports = watchStudentWeeklyReports(profile, (next) => { setReports(next); reportsReady = true; done(); }, () => { reportsReady = true; done(); toast.error("No pudimos cargar los reportes semanales."); });
     return () => { stopGrades(); stopReports(); };
-  }, [academicConfig, accounts, calendar, firebaseReady, profile]);
+  }, [profile]);
 
   const weeklyGrades = aggregateDailyGradesByWeek(
     grades.filter((grade) => grade.schoolYearId === academicConfig.schoolYearId),
@@ -287,49 +228,16 @@ export function AcademicReportsPage({
     }
     const grade = weekSubjectGrades.find((item) => item.studentId === student.uid && item.teacherId === profile.uid);
     try {
-      if (firebaseReady) {
-        await saveStudentWeeklyReport(profile, academicConfig, {
-          week,
-          term,
-          student,
-          subject: activeSubject,
-          ...values,
-          weeklyScore: grade?.weightedScore ?? 0,
-          gradedDays: grade?.dayCount ?? 0,
-          workingDays: grade?.workingDayCount ?? 0,
-        });
-      } else {
-        const id = [academicConfig.schoolYearId, week.id, grade?.subjectId ?? activeSubject.toLowerCase(), profile.uid, student.uid].join("__");
-        const existing = reports.find((item) => item.id === id);
-        const nextReport: StudentWeeklyReport = {
-          id,
-          institutionId: profile.institutionId,
-          schoolYearId: academicConfig.schoolYearId,
-          schoolYearLabel: academicConfig.schoolYearLabel,
-          termId: term.id,
-          termLabel: term.label,
-          weekId: week.id,
-          weekLabel: week.label,
-          subjectId: grade?.subjectId ?? activeSubject.toLowerCase(),
-          subject: activeSubject,
-          teacherId: profile.uid,
-          teacherName: profile.name,
-          studentId: student.uid,
-          studentName: student.name,
-          studentGrade: student.grade,
-          studentGroup: student.group,
-          ...values,
-          weeklyScore: grade?.weightedScore ?? 0,
-          gradedDays: grade?.dayCount ?? 0,
-          workingDays: grade?.workingDayCount ?? 0,
-          createdAt: existing?.createdAt ?? new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          publishedAt: values.status === "published" ? new Date().toISOString() : undefined,
-        };
-        const next = existing ? reports.map((item) => item.id === id ? nextReport : item) : [nextReport, ...reports];
-        setReports(next);
-        window.localStorage.setItem(DEMO_REPORTS_KEY, JSON.stringify(next));
-      }
+      await saveStudentWeeklyReport(profile, academicConfig, {
+        week,
+        term,
+        student,
+        subject: activeSubject,
+        ...values,
+        weeklyScore: grade?.weightedScore ?? 0,
+        gradedDays: grade?.dayCount ?? 0,
+        workingDays: grade?.workingDayCount ?? 0,
+      });
       toast.success(values.status === "published" ? `Reporte de ${student.name} publicado` : `Borrador de ${student.name} guardado`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No pudimos guardar el reporte.");

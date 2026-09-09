@@ -20,10 +20,6 @@ const themeBootstrapScript = `
   (() => {
     try {
       let theme = window.localStorage.getItem("cehf-theme");
-      if (!theme) {
-        const savedState = window.localStorage.getItem("cehf-demo-state");
-        theme = savedState ? JSON.parse(savedState)?.settings?.theme : null;
-      }
       document.documentElement.dataset.theme =
         theme === "dark" || theme === "system" ? theme : "light";
     } catch {

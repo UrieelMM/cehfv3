@@ -44,7 +44,7 @@ import {
   type FirebaseStorage,
   type StorageReference,
 } from "firebase/storage";
-import { createDemoState } from "./demo-data";
+import { createInitialPortalState } from "./portal-defaults";
 import {
   academicSubjectOptions,
   gradesBySchoolLevel,
@@ -71,7 +71,6 @@ const firebaseConfig = {
 };
 
 export const firebaseConfigured =
-  process.env.NEXT_PUBLIC_DATA_PROVIDER !== "demo" &&
   Object.values(firebaseConfig).every(Boolean);
 
 let app: FirebaseApp | null = null;
@@ -703,7 +702,7 @@ async function withPortalPreferences(
     ...state,
     settings: portalSettingsFromData(
       state.settings as unknown as Record<string, unknown>,
-      createDemoState().settings,
+      createInitialPortalState().settings,
     ),
   };
   const preferenceRef = appearancePreferencesRef(profile.uid);
@@ -742,8 +741,8 @@ export async function loadPortalState(
   profile: UserProfile,
 ): Promise<PortalState> {
   const sharedRef = sharedStateRef(profile.institutionId);
-  if (!db || !sharedRef) return createDemoState();
-  const initial = createDemoState();
+  if (!db || !sharedRef) return createInitialPortalState();
+  const initial = createInitialPortalState();
   const sharedSnapshot = await getDoc(sharedRef);
   const sharedState = sharedSnapshot.exists()
     ? ({

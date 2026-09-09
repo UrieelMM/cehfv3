@@ -8,7 +8,6 @@ Portal académico unificado para la comunidad CEHF. Incluye:
 - avance configurable, reportes versionados y notificaciones internas;
 - Periódico Mural con flujo editorial y Foro moderado;
 - configuración institucional, preferencias, modo oscuro y PWA;
-- modo demo local para recorrer todos los flujos sin credenciales;
 - notificaciones de tareas en tiempo real y publicación programada con Cloud Functions;
 - reglas de Firestore y Storage e índices de producción.
 
@@ -29,10 +28,6 @@ Abre `http://localhost:3000`. Las cuentas de Dirección se provisionan de forma 
 
 > Las claves `NEXT_PUBLIC_FIREBASE_*` identifican la aplicación web y no son secretos. Las credenciales administrativas y de WhatsApp nunca deben llevar el prefijo `NEXT_PUBLIC_`.
 
-## Modo demo
-
-Si `.env` no tiene credenciales, la pantalla de acceso permite abrir una demostración persistida en el navegador. Dentro del demo puedes cambiar entre los tres roles desde el pie de la barra lateral.
-
 ## Estructura principal
 
 - [`components/cehf-app.tsx`](./components/cehf-app.tsx): experiencia completa y flujos por rol.
@@ -40,7 +35,7 @@ Si `.env` no tiene credenciales, la pantalla de acceso permite abrir una demostr
 - [`lib/tasks-firebase.ts`](./lib/tasks-firebase.ts): tareas, entregas, archivos, historial y prórrogas.
 - [`components/tasks-workflow.tsx`](./components/tasks-workflow.tsx): interfaz completa por rol.
 - [`functions/src/index.ts`](./functions/src/index.ts): calendario seguro, publicación programada y notificaciones automáticas.
-- [`lib/demo-data.ts`](./lib/demo-data.ts): datos sintéticos del piloto.
+- [`lib/portal-defaults.ts`](./lib/portal-defaults.ts): estado inicial vacío y etiquetas compartidas.
 - [`firestore.rules`](./firestore.rules): aislamiento por rol, propiedad e institución.
 - [`storage.rules`](./storage.rules): archivos privados, tipos y tamaños permitidos.
 

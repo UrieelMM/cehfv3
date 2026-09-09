@@ -270,39 +270,6 @@ function workspacePlainText(content: string) {
   }
 }
 
-function demoWorkspaceItems(profile: UserProfile): StaffWorkspaceItem[] {
-  const now = new Date();
-  const later = new Date(now);
-  later.setHours(13, 30, 0, 0);
-  return [
-    {
-      ...emptyDraft("planning"), id: "demo-planning", institutionId: profile.institutionId,
-      ownerId: profile.uid, ownerName: profile.name, title: "Secuencia de lectura · Semana 8",
-      subject: "Lenguaje", group: "4° A", visibility: "private", pinned: true,
-      createdAt: now.toISOString(), updatedAt: now.toISOString(),
-    },
-    {
-      ...emptyDraft("resource"), id: "demo-resource", institutionId: profile.institutionId,
-      ownerId: "demo-colleague", ownerName: "Mariana López",
-      title: "Banco de actividades socioemocionales",
-      content: JSON.stringify([{ type: "paragraph", content: "Dinámicas breves para apertura y cierre de clase." }]),
-      visibility: "staff", pinned: false,
-      attachments: [{
-        id: "demo-file", name: "Actividades-socioemocionales.pdf",
-        contentType: "application/pdf", size: 1_245_000, storagePath: "",
-        url: "https://example.com/actividades.pdf",
-      }], createdAt: now.toISOString(), updatedAt: now.toISOString(),
-    },
-    {
-      ...emptyDraft("schedule"), id: "demo-schedule", institutionId: profile.institutionId,
-      ownerId: profile.uid, ownerName: profile.name, title: "Reunión de seguimiento",
-      location: "Sala de maestros", visibility: "staff", pinned: false,
-      eventAt: later.toISOString().slice(0, 16), createdAt: now.toISOString(),
-      updatedAt: now.toISOString(),
-    },
-  ];
-}
-
 function shortDate(value?: string) {
   if (!value) return "Sin fecha";
   const date = new Date(value);
@@ -420,7 +387,7 @@ function WorkspaceConfirmationModal({
 
 export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) {
   const reduceMotion = useReducedMotion();
-  const [items, setItems] = useState<StaffWorkspaceItem[]>(() => firebaseReady ? [] : demoWorkspaceItems(profile));
+  const [items, setItems] = useState<StaffWorkspaceItem[]>([]);
   const [loading, setLoading] = useState(firebaseReady);
   const [view, setView] = useState<WorkspaceView>("blocks");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -657,16 +624,7 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     setCommentText("");
     setComments([]);
     setItemReceipts([]);
-    setActivity(item && !firebaseReady ? [{
-      id: `demo-activity-${item.id}`,
-      institutionId: profile.institutionId,
-      itemId: item.id,
-      actorId: item.ownerId,
-      actorName: item.ownerName,
-      action: "created",
-      detail: "Creó el bloque",
-      createdAt: item.createdAt,
-    }] : []);
+    setActivity([]);
     setEditorOpen(true);
   }
 

@@ -16,7 +16,6 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
-import { includesSubject } from "./academic-subjects";
 import type {
   AcademicCalendar,
   AcademicConfig,
@@ -26,8 +25,6 @@ import type {
   LearningMaterialLink,
   LearningMaterialType,
   LearningMaterialView,
-  ManagedAccount,
-  Material,
   UserProfile,
 } from "./types";
 
@@ -385,127 +382,4 @@ export async function loadViewedLearningMaterialIds(
       })),
   );
   return new Set(entries.filter((entry) => entry.viewed).map((entry) => entry.id));
-}
-
-function legacyType(type: Material["type"]): LearningMaterialType {
-  if (type === "PDF" || type === "Ficha") return "pdf";
-  if (type === "Video") return "video";
-  if (type === "Audio") return "audio";
-  if (type === "Enlace") return "link";
-  return "other";
-}
-
-export function legacyMaterialsToLearningMaterials(
-  materials: Material[],
-  profile: UserProfile,
-  config: AcademicConfig,
-  accounts: ManagedAccount[],
-): LearningMaterial[] {
-  const students = accounts.filter((account) => account.role === "student");
-  const audience = students.length
-    ? students.map((student) => student.uid)
-    : [profile.uid];
-  const groups = [
-    ...new Set(
-      students
-        .map((student) => `${student.grade ?? ""} ${student.group ?? ""}`.trim())
-        .filter(Boolean),
-    ),
-  ];
-  return materials.map((material, index) => ({
-    id: material.id,
-    firestorePath: `demo/materials/${material.id}`,
-    institutionId: profile.institutionId,
-    schoolYearId: config.schoolYearId,
-    schoolYearLabel: config.schoolYearLabel,
-    termId: config.termId,
-    termLabel: config.termLabel,
-    weekId: config.weekId,
-    weekLabel: config.weekLabel,
-    subjectId: slugify(material.subject),
-    subject: material.subject,
-    title: material.title,
-    description: material.description,
-    type: legacyType(material.type),
-    links: [],
-    attachments: [],
-    required: material.required,
-    audienceStudentIds: audience,
-    targetGroups: groups,
-    managerIds: profile.role === "teacher" ? [profile.uid] : [],
-    createdBy: profile.role === "student" ? "demo-teacher" : profile.uid,
-    createdByName: profile.role === "student" ? "Mariana López" : profile.name,
-    createdByRole: profile.role === "director" ? "director" : "teacher",
-    createdAt: new Date(Date.now() - index * 3_600_000).toISOString(),
-    updatedAt: new Date(Date.now() - index * 3_600_000).toISOString(),
-  }));
-}
-
-export function createDemoLearningMaterial(
-  input: LearningMaterialCreateInput,
-  profile: UserProfile,
-  config: AcademicConfig,
-  calendar: AcademicCalendar,
-  accounts: ManagedAccount[],
-): LearningMaterial {
-  const week = calendar.weeks.find((item) => item.id === input.weekId);
-  const term = calendar.terms.find((item) => item.weekIds.includes(input.weekId));
-  const students = accounts.filter(
-    (account) =>
-      account.role === "student" &&
-      account.active &&
-      includesSubject(account.subjects, input.subject) &&
-      (profile.role === "director" || account.teacherIds.includes(profile.uid)) &&
-      (input.targetGroups.length === 0 ||
-        input.targetGroups.includes(
-          `${account.grade ?? ""} ${account.group ?? ""}`.trim(),
-        )),
-  );
-  const id = `demo-material-${Date.now()}`;
-  return {
-    id,
-    firestorePath: `demo/materials/${id}`,
-    institutionId: profile.institutionId,
-    schoolYearId: config.schoolYearId,
-    schoolYearLabel: config.schoolYearLabel,
-    termId: term?.id ?? config.termId,
-    termLabel: term?.label ?? config.termLabel,
-    weekId: week?.id ?? config.weekId,
-    weekLabel: week?.label ?? config.weekLabel,
-    subjectId: slugify(input.subject),
-    subject: input.subject,
-    title: input.title.trim(),
-    description: input.description.trim(),
-    type: input.type,
-    links: input.links
-      .filter((link) => link.url.trim())
-      .map((link) => ({
-        id: crypto.randomUUID(),
-        label: link.label.trim() || "Enlace",
-        url: link.url.trim(),
-      })),
-    attachments: input.files.map((file) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      storagePath: "",
-      contentType: file.type || "application/octet-stream",
-      size: file.size,
-      downloadUrl: URL.createObjectURL(file),
-    })),
-    required: input.required,
-    audienceStudentIds: students.map((student) => student.uid),
-    targetGroups: [
-      ...new Set(
-        students.map((student) =>
-          `${student.grade ?? ""} ${student.group ?? ""}`.trim(),
-        ),
-      ),
-    ],
-    managerIds: [profile.uid],
-    createdBy: profile.uid,
-    createdByName: profile.name,
-    createdByRole: profile.role === "director" ? "director" : "teacher",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
 }

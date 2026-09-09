@@ -133,8 +133,6 @@ export function ReviewsPage({
   profile,
   calendar,
   accounts,
-  firebaseReady,
-  onDemoReviewChange,
 }: {
   reviews: WeeklyReview[];
   loading: boolean;
@@ -142,7 +140,6 @@ export function ReviewsPage({
   calendar: AcademicCalendar;
   accounts: ManagedAccount[];
   firebaseReady: boolean;
-  onDemoReviewChange: (review: WeeklyReview) => void;
 }) {
   const [search, setSearch] = useState("");
   const [week, setWeek] = useState("all");
@@ -507,9 +504,7 @@ export function ReviewsPage({
         {selected && profile.role === "student" && (
           <StudentReviewModal
             review={selected}
-            firebaseReady={firebaseReady}
             onClose={closeReview}
-            onDemoChange={onDemoReviewChange}
           />
         )}
         {selected && profile.role !== "student" && (
@@ -517,7 +512,6 @@ export function ReviewsPage({
             review={selected}
             accounts={accounts}
             onClose={closeReview}
-            onDemoChange={onDemoReviewChange}
           />
         )}
       </AnimatePresence>
@@ -527,14 +521,10 @@ export function ReviewsPage({
 
 function StudentReviewModal({
   review,
-  firebaseReady,
   onClose,
-  onDemoChange,
 }: {
   review: WeeklyReview;
-  firebaseReady: boolean;
   onClose: () => void;
-  onDemoChange: (review: WeeklyReview) => void;
 }) {
   const [answers, setAnswers] = useState<Record<string, string>>(
     review.myAttempt?.answers ?? {},
@@ -583,38 +573,14 @@ function StudentReviewModal({
   useEffect(() => {
     if (!dirty || completed || closed) return;
     const timer = window.setTimeout(() => {
-      if (firebaseReady) {
-        setSaving(true);
-        void saveWeeklyReviewProgress(review, answers)
-          .then(() => setDirty(false))
-          .catch((saveError) => setError(friendlyFirebaseError(saveError)))
-          .finally(() => setSaving(false));
-      } else {
-        const progress = review.questions.length
-          ? Math.round((answeredCount / review.questions.length) * 100)
-          : 0;
-        onDemoChange({
-          ...review,
-          startedCount: Math.max(1, review.startedCount),
-          myAttempt: {
-            id: "demo-student",
-            reviewId: review.id,
-            studentId: "demo-student",
-            studentName: "Alumno demo",
-            answers,
-            answeredCount,
-            progress,
-            status: "in_progress",
-            attemptNumber: review.myAttempt?.attemptNumber ?? 1,
-            startedAt: review.myAttempt?.startedAt ?? new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        });
-        setDirty(false);
-      }
+      setSaving(true);
+      void saveWeeklyReviewProgress(review, answers)
+        .then(() => setDirty(false))
+        .catch((saveError) => setError(friendlyFirebaseError(saveError)))
+        .finally(() => setSaving(false));
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [answeredCount, answers, closed, completed, dirty, firebaseReady, onDemoChange, review]);
+  }, [answers, closed, completed, dirty, review]);
 
   function answer(value: string) {
     setAnswers((currentAnswers) => ({
@@ -634,30 +600,6 @@ function StudentReviewModal({
     setError("");
     try {
       const result = await submitWeeklyReview(review, answers);
-      if (!firebaseReady) {
-        onDemoChange({
-          ...review,
-          completedCount: Math.max(1, review.completedCount),
-          startedCount: Math.max(1, review.startedCount),
-          myAttempt: {
-            id: "demo-student",
-            reviewId: review.id,
-            studentId: "demo-student",
-            studentName: "Alumno demo",
-            answers,
-            answeredCount,
-            progress: 100,
-            status: "completed",
-            score: review.questions.filter((item) => item.type !== "reflection").length,
-            maxScore: review.questions.filter((item) => item.type !== "reflection").length,
-            scorePercent: result.scorePercent,
-            attemptNumber: review.myAttempt?.attemptNumber ?? 1,
-            startedAt: review.myAttempt?.startedAt ?? new Date().toISOString(),
-            completedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        });
-      }
       toast.success("¡Repaso completado!", {
         description: `Resultado: ${result.scorePercent}%`,
       });
@@ -676,25 +618,6 @@ function StudentReviewModal({
       const attemptNumber = (review.myAttempt?.attemptNumber ?? 1) + 1;
       setAnswers({});
       setCurrent(0);
-      if (!firebaseReady) {
-        onDemoChange({
-          ...review,
-          completedCount: Math.max(0, review.completedCount - 1),
-          myAttempt: {
-            id: "demo-student",
-            reviewId: review.id,
-            studentId: "demo-student",
-            studentName: "Alumno demo",
-            answers: {},
-            answeredCount: 0,
-            progress: 0,
-            status: "in_progress",
-            attemptNumber,
-            startedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        });
-      }
       toast.success(`Intento ${attemptNumber} listo`);
     } catch (restartError) {
       setError(friendlyFirebaseError(restartError));
@@ -886,12 +809,10 @@ function StaffReviewModal({
   review,
   accounts,
   onClose,
-  onDemoChange,
 }: {
   review: WeeklyReview;
   accounts: ManagedAccount[];
   onClose: () => void;
-  onDemoChange: (review: WeeklyReview) => void;
 }) {
   const [attempts, setAttempts] = useState<WeeklyReviewAttempt[]>([]);
   const [search, setSearch] = useState("");
@@ -945,13 +866,6 @@ function StaffReviewModal({
     setError("");
     try {
       await updateWeeklyReviewStatus(review, status);
-      onDemoChange({
-        ...review,
-        status,
-        updatedAt: new Date().toISOString(),
-        publishedAt: status === "published" ? new Date().toISOString() : review.publishedAt,
-        closedAt: status === "closed" ? new Date().toISOString() : undefined,
-      });
       toast.success(status === "published" ? "Repaso publicado" : status === "closed" ? "Repaso cerrado" : "Repaso guardado como borrador");
     } catch (statusError) {
       setError(friendlyFirebaseError(statusError));

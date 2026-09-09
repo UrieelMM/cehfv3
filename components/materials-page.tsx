@@ -439,7 +439,7 @@ function MaterialViewerModal({
               // eslint-disable-next-line @next/next/no-img-element
               <img className="material-image-preview" src={primaryUrl} alt={material.title} />
             ) : (
-              <div className="material-preview-state"><span><TypeIcon size={28} /></span><strong>{material.attachments.length || material.links.length ? "El recurso está listo" : "Vista de demostración"}</strong><p>{material.attachments.length || material.links.length ? "Ábrelo desde la lista de archivos o enlaces." : "Este ejemplo muestra la experiencia; los materiales reales incluyen su archivo o enlace."}</p></div>
+              <div className="material-preview-state"><span><TypeIcon size={28} /></span><strong>{material.attachments.length || material.links.length ? "El recurso está listo" : "Recurso sin archivo"}</strong><p>{material.attachments.length || material.links.length ? "Ábrelo desde la lista de archivos o enlaces." : "Este material todavía no incluye un archivo o enlace."}</p></div>
             )}
             {viewError && <p className="material-inline-error">{viewError}</p>}
             {material.description && <section className="material-description"><small>Acerca de este material</small><p>{material.description}</p></section>}
