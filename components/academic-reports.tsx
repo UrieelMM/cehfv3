@@ -81,7 +81,7 @@ function WeeklyEvidence({ grade }: { grade?: WeeklyGradeRecord }) {
     return <div className="report-no-evidence"><CircleHelp size={20} /><span><strong>Sin calificaciones esta semana</strong><small>El reporte puede guardarse como borrador, pero conviene capturar las calificaciones diarias primero.</small></span></div>;
   }
   return <section className="report-evidence">
-    <div className="report-evidence-score"><span>Promedio semanal</span><strong>{score(grade.weightedScore)}</strong><small>{grade.dayCount ?? 0} de {grade.workingDayCount ?? grade.dayCount ?? 0} días hábiles{grade.missingDayCount ? " · provisional" : " · completo"}</small></div>
+    <div className="report-evidence-score"><span>Promedio semanal</span><strong>{score(grade.weightedScore)} / 10</strong><small>{grade.dayCount ?? 0} de {grade.workingDayCount ?? grade.dayCount ?? 0} días hábiles{grade.missingDayCount ? " · provisional" : " · completo"}</small></div>
     <div className="report-evidence-rubrics">{GRADING_CRITERIA.map((criterion) => <span key={criterion.key}><small>{criterion.shortLabel}</small><strong>{score(grade.scores[criterion.key])}</strong></span>)}</div>
   </section>;
 }

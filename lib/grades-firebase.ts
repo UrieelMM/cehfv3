@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { firebase } from "./firebase";
 import { includesSubject } from "./academic-subjects";
+import { clampGradeScore, normalizeStoredGradeScore } from "./grade-scale";
 import type {
   AcademicCalendar,
   AcademicConfig,
@@ -40,11 +41,11 @@ export const DEFAULT_GRADING_WEIGHTS: GradingWeights = {
 };
 
 export const DEFAULT_WEEKLY_GRADE_SCORES: WeeklyGradeScores = {
-  classWork: 100,
-  homework: 100,
-  participation: 100,
-  attendance: 100,
-  exam: 100,
+  classWork: 10,
+  homework: 10,
+  participation: 10,
+  attendance: 10,
+  exam: 10,
 };
 
 export type GradeReportDirector = { id: string; name: string };
@@ -80,11 +81,21 @@ export function normalizeGradingWeights(value: unknown): GradingWeights {
 export function normalizeWeeklyGradeScores(value: unknown): WeeklyGradeScores {
   const data = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
-    classWork: normalizePercentage(data.classWork, 0),
-    homework: normalizePercentage(data.homework, 0),
-    participation: normalizePercentage(data.participation, 0),
-    attendance: normalizePercentage(data.attendance, 0),
-    exam: normalizePercentage(data.exam, 0),
+    classWork: normalizeStoredGradeScore(data.classWork),
+    homework: normalizeStoredGradeScore(data.homework),
+    participation: normalizeStoredGradeScore(data.participation),
+    attendance: normalizeStoredGradeScore(data.attendance),
+    exam: normalizeStoredGradeScore(data.exam),
+  };
+}
+
+function clampWeeklyGradeScores(value: WeeklyGradeScores): WeeklyGradeScores {
+  return {
+    classWork: clampGradeScore(value.classWork),
+    homework: clampGradeScore(value.homework),
+    participation: clampGradeScore(value.participation),
+    attendance: clampGradeScore(value.attendance),
+    exam: clampGradeScore(value.exam),
   };
 }
 
@@ -184,7 +195,7 @@ function dailyGradeFromData(id: string, data: DocumentData): DailyGradeRecord {
     studentGroup: data.studentGroup ? String(data.studentGroup) : undefined,
     scores,
     weights,
-    weightedScore: normalizePercentage(data.weightedScore, calculateWeightedGrade(scores, weights)),
+    weightedScore: normalizeStoredGradeScore(data.weightedScore, calculateWeightedGrade(scores, weights)),
     createdAt: asIso(data.createdAt),
     updatedAt: asIso(data.updatedAt),
   };
@@ -420,7 +431,7 @@ export async function saveDailyGrade(
     throw new Error("La fecha seleccionada es fin de semana o está marcada como día no laboral.");
   }
   if (!term.weekIds.includes(week.id)) throw new Error("La semana seleccionada no pertenece a este bimestre.");
-  const normalizedScores = normalizeWeeklyGradeScores(scores);
+  const normalizedScores = clampWeeklyGradeScores(scores);
   const weights = normalizeGradingWeights(config.weights);
   if (Math.abs(gradingWeightTotal(weights) - 100) > 0.001) {
     throw new Error("Configura una ponderación que sume 100% antes de calificar.");

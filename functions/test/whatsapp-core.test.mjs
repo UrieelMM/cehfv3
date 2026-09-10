@@ -80,15 +80,15 @@ test("conserva parámetros repetidos de la plantilla y su orden", () => {
 
 test("convierte las calificaciones diarias en indicadores familiares", () => {
   assert.deepEqual(
-    dailyGradeIndicators({ attendance: 100, participation: 92, homework: 80 }),
+    dailyGradeIndicators({ attendance: 10, participation: 9.2, homework: 8 }),
     { attendance: "present", participation: "positive", homework: "complete" },
   );
   assert.deepEqual(
-    dailyGradeIndicators({ attendance: 60, participation: 70, homework: 65 }),
+    dailyGradeIndicators({ attendance: 6, participation: 7, homework: 6.5 }),
     { attendance: "absent", participation: "neutral", homework: "pending" },
   );
   assert.deepEqual(
-    dailyGradeIndicators({ attendance: 0, participation: 40, homework: 0 }),
+    dailyGradeIndicators({ attendance: 0, participation: 4, homework: 0 }),
     { attendance: "absent", participation: "needs_support", homework: "pending" },
   );
 });

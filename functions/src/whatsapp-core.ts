@@ -180,15 +180,15 @@ export function dailyGradeIndicators(
   homework: DailyHomeworkStatus;
 } {
   return {
-    attendance: (scores.attendance >= 70
+    attendance: (scores.attendance >= 7
       ? "present"
       : "absent") satisfies DailyAttendanceStatus,
-    participation: (scores.participation >= 80
+    participation: (scores.participation >= 8
       ? "positive"
-      : scores.participation >= 60
+      : scores.participation >= 6
         ? "neutral"
         : "needs_support") satisfies DailyParticipationStatus,
-    homework: (scores.homework >= 70
+    homework: (scores.homework >= 7
       ? "complete"
       : "pending") satisfies DailyHomeworkStatus,
   };

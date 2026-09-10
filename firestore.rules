@@ -827,11 +827,11 @@ service cloud.firestore {
           && scores.participation is number
           && scores.attendance is number
           && scores.exam is number
-          && scores.classWork >= 0 && scores.classWork <= 100
-          && scores.homework >= 0 && scores.homework <= 100
-          && scores.participation >= 0 && scores.participation <= 100
-          && scores.attendance >= 0 && scores.attendance <= 100
-          && scores.exam >= 0 && scores.exam <= 100;
+          && scores.classWork >= 0 && scores.classWork <= 10
+          && scores.homework >= 0 && scores.homework <= 10
+          && scores.participation >= 0 && scores.participation <= 10
+          && scores.attendance >= 0 && scores.attendance <= 10
+          && scores.exam >= 0 && scores.exam <= 10;
       }
 
       function gradingStudent(studentId) {
@@ -887,7 +887,7 @@ service cloud.firestore {
           && validGradeScores(data.scores)
           && data.weightedScore is number
           && data.weightedScore >= 0
-          && data.weightedScore <= 100
+          && data.weightedScore <= 10
           && data.weightedScore >= calculatedScore - 0.051
           && data.weightedScore <= calculatedScore + 0.051
           && data.createdAt is timestamp
@@ -940,7 +940,7 @@ service cloud.firestore {
           && validGradeScores(data.scores)
           && data.weightedScore is number
           && data.weightedScore >= 0
-          && data.weightedScore <= 100
+          && data.weightedScore <= 10
           && data.weightedScore >= calculatedScore - 0.051
           && data.weightedScore <= calculatedScore + 0.051
           && data.createdAt is timestamp
@@ -973,7 +973,7 @@ service cloud.firestore {
           && data.nextStep.size() <= 600
           && data.weeklyScore is number
           && data.weeklyScore >= 0
-          && data.weeklyScore <= 100
+          && data.weeklyScore <= 10
           && data.gradedDays is int
           && data.gradedDays >= 0
           && data.workingDays is int

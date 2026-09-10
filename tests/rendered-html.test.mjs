@@ -139,6 +139,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(firestoreRules, /match \/weeklyReports/);
   assert.match(firestoreRules, /match \/gradingConfigs/);
   assert.match(firestoreRules, /match \/weeklyGrades/);
+  assert.match(firestoreRules, /scores\.classWork >= 0 && scores\.classWork <= 10/);
+  assert.match(gradesSource, /classWork: 10/);
+  assert.match(gradesSource, /normalizeStoredGradeScore/);
+  assert.match(gradesUiSource, /Escala de 0 a 10/);
   assert.match(firestoreRules, /function teacherCanGrade\(data\)/);
   assert.match(firestoreRules, /match \/messageOutbox/);
   assert.match(firestoreRules, /function roleIs\(role\)/);

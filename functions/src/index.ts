@@ -4356,7 +4356,8 @@ export const saveWhatsAppConfiguration = onCall(async (request) => {
 
 function whatsappDailyScore(value: unknown) {
   const score = Number(value);
-  return Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
+  if (!Number.isFinite(score) || score < 0 || score > 100) return null;
+  return score > 10 ? score / 10 : score;
 }
 
 async function loadDailyStudentGradeReports(
@@ -4411,11 +4412,11 @@ async function loadDailyStudentGradeReports(
   return new Map(
     [...aggregates.entries()].map(([studentId, aggregate]) => {
       const scores = {
-        attendance: Math.round(aggregate.attendance / aggregate.recordCount),
+        attendance: Math.round(aggregate.attendance / aggregate.recordCount * 10) / 10,
         participation: Math.round(
-          aggregate.participation / aggregate.recordCount,
-        ),
-        homework: Math.round(aggregate.homework / aggregate.recordCount),
+          aggregate.participation / aggregate.recordCount * 10,
+        ) / 10,
+        homework: Math.round(aggregate.homework / aggregate.recordCount * 10) / 10,
       };
       return [
         studentId,
@@ -4491,7 +4492,7 @@ async function createDailySummaryOutbox(
         attendance: "present" as const,
         participation: "positive" as const,
         homework: "complete" as const,
-        scores: { attendance: 100, participation: 95, homework: 100 },
+        scores: { attendance: 10, participation: 9.5, homework: 10 },
         recordCount: 1,
         subjects: ["Datos de prueba"],
       };

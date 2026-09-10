@@ -177,7 +177,8 @@ export function dashboardPerformanceMessage(completion: number, seed: string) {
 
 function scoreLabel(value: number, hasRecords: boolean) {
   if (!hasRecords) return "—";
-  return Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+  const formatted = Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+  return `${formatted} / 10`;
 }
 
 function timestamp(value?: string) {
@@ -414,7 +415,7 @@ function studentViewModel(
       id: "grades",
       label: "Calificaciones de la semana",
       detail: periodGrades.length ? `Tu promedio registrado es ${scoreLabel(gradeAverage, true)}.` : "Aún no hay calificaciones publicadas para esta semana.",
-      level: !periodGrades.length ? "not_observed" : gradeAverage >= 80 ? "achieved" : gradeAverage >= 60 ? "in_progress" : "needs_support",
+      level: !periodGrades.length ? "not_observed" : gradeAverage >= 8 ? "achieved" : gradeAverage >= 6 ? "in_progress" : "needs_support",
     },
     {
       id: "tasks",

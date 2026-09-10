@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { firebase } from "./firebase";
 import { gradeSubjectId } from "./grades-firebase";
+import { clampGradeScore, normalizeStoredGradeScore } from "./grade-scale";
 import { includesSubject } from "./academic-subjects";
 import type {
   AcademicConfig,
@@ -55,7 +56,7 @@ function fromData(id: string, data: DocumentData): StudentWeeklyReport {
     achievement: String(data.achievement ?? ""),
     supportArea: String(data.supportArea ?? ""),
     nextStep: String(data.nextStep ?? ""),
-    weeklyScore: Math.min(100, Math.max(0, Number(data.weeklyScore) || 0)),
+    weeklyScore: normalizeStoredGradeScore(data.weeklyScore),
     gradedDays: Math.max(0, Number(data.gradedDays) || 0),
     workingDays: Math.max(0, Number(data.workingDays) || Number(data.gradedDays) || 0),
     status: data.status === "published" ? "published" : "draft",
@@ -170,7 +171,7 @@ export async function saveStudentWeeklyReport(
     achievement,
     supportArea,
     nextStep,
-    weeklyScore: Math.min(100, Math.max(0, input.weeklyScore)),
+    weeklyScore: clampGradeScore(input.weeklyScore),
     gradedDays: Math.max(0, Math.round(input.gradedDays)),
     workingDays: Math.max(0, Math.round(input.workingDays)),
     status: input.status,

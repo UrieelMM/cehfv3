@@ -153,13 +153,13 @@ function addMetrics(doc: jsPDF, input: GradeReportInput, pageWidth: number) {
   const records = input.records;
   const metrics = input.role === "student"
     ? [
-        ["Promedio", records.length ? score(average(records)) : "—"],
+        ["Promedio (0–10)", records.length ? score(average(records)) : "—"],
         ["Materias", String(uniqueCount(records, "subject"))],
-        ["Mejor resultado", records.length ? score(Math.max(...records.map((record) => record.weightedScore))) : "—"],
+        ["Mejor resultado (0–10)", records.length ? score(Math.max(...records.map((record) => record.weightedScore))) : "—"],
         ["Semana", input.weekLabel],
       ]
     : [
-        ["Promedio general", records.length ? score(average(records)) : "—"],
+        ["Promedio general (0–10)", records.length ? score(average(records)) : "—"],
         ["Alumnos", String(uniqueCount(records, "studentId"))],
         ["Materias", String(uniqueCount(records, "subject"))],
         [input.role === "director" ? "Docentes" : "Registros", input.role === "director"
@@ -243,10 +243,10 @@ export function buildGradeReportPdf(input: GradeReportInput, brandLogo?: Uint8Ar
   addReportContext(doc, input, pageWidth);
   addMetrics(doc, input, pageWidth);
 
-  const studentHead = [["Materia", "Maestro", "Clase", "Tareas", "Particip.", "Asist.", "Evaluación", "Final"]];
+  const studentHead = [["Materia", "Maestro", "Clase", "Tareas", "Particip.", "Asist.", "Evaluación", "Final / 10"]];
   const staffHead = [[
     "Alumno", "Grupo", "Materia", ...(input.role === "director" ? ["Maestro"] : []),
-    "Clase", "Tareas", "Particip.", "Asist.", "Evaluación", "Final",
+    "Clase", "Tareas", "Particip.", "Asist.", "Evaluación", "Final / 10",
   ]];
   const body = sortedRecords.map((record) => (
     input.role === "student"

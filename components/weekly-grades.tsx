@@ -27,6 +27,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
+import { clampGradeScore, gradeScorePercent, GRADE_MAX } from "@/lib/grade-scale";
 import {
   calculateWeightedGrade,
   DEFAULT_GRADING_WEIGHTS,
@@ -62,9 +63,9 @@ function defaultConfig(profile: UserProfile): TeacherGradingConfig {
 }
 
 function gradeTone(score: number) {
-  if (score >= 90) return "excellent";
-  if (score >= 80) return "good";
-  if (score >= 70) return "developing";
+  if (score >= 9) return "excellent";
+  if (score >= 8) return "good";
+  if (score >= 7) return "developing";
   return "support";
 }
 
@@ -337,11 +338,12 @@ function GradeEditorRow({
             <span>{criterion.shortLabel}</span>
             <input
               aria-label={`${criterion.label} de ${student.name}`}
-              max="100"
+              max={GRADE_MAX}
               min="0"
+              step="0.1"
               onChange={(event) => setScores((current) => ({
                 ...current,
-                [criterion.key]: Math.min(100, Math.max(0, Number(event.target.value))),
+                [criterion.key]: clampGradeScore(event.target.value),
               }))}
               type="number"
               value={scores[criterion.key]}
@@ -416,28 +418,28 @@ function GradeChartEmpty() {
 function GradeDistributionChart({ records }: { records: WeeklyGradeRecord[] }) {
   const bands = [
     {
-      label: "90–100",
+      label: "9–10",
       tone: "excellent",
-      count: records.filter((record) => record.weightedScore >= 90).length,
+      count: records.filter((record) => record.weightedScore >= 9).length,
     },
     {
-      label: "80–89",
+      label: "8–8.9",
       tone: "good",
       count: records.filter((record) => (
-        record.weightedScore >= 80 && record.weightedScore < 90
+        record.weightedScore >= 8 && record.weightedScore < 9
       )).length,
     },
     {
-      label: "70–79",
+      label: "7–7.9",
       tone: "developing",
       count: records.filter((record) => (
-        record.weightedScore >= 70 && record.weightedScore < 80
+        record.weightedScore >= 7 && record.weightedScore < 8
       )).length,
     },
     {
-      label: "< 70",
+      label: "< 7",
       tone: "support",
-      count: records.filter((record) => record.weightedScore < 70).length,
+      count: records.filter((record) => record.weightedScore < 7).length,
     },
   ];
   const maximum = Math.max(1, ...bands.map((band) => band.count));
@@ -488,7 +490,7 @@ function GradeSubjectAverages({ records }: { records: WeeklyGradeRecord[] }) {
           <div>
             <motion.i
               initial={{ width: 0 }}
-              animate={{ width: `${item.value}%` }}
+              animate={{ width: `${gradeScorePercent(item.value)}%` }}
               transition={{ duration: 0.5, delay: index * 0.05 }}
             />
           </div>
@@ -512,7 +514,7 @@ function GradeRubricAverages({ records }: { records: WeeklyGradeRecord[] }) {
             <div>
               <motion.i
                 initial={{ width: 0 }}
-                animate={{ width: `${value}%` }}
+                animate={{ width: `${gradeScorePercent(value)}%` }}
                 transition={{ duration: 0.5, delay: index * 0.04 }}
               />
             </div>
@@ -558,7 +560,7 @@ function GradeTrendChart({
             <motion.i
               initial={{ height: 0 }}
               animate={{
-                height: `${Math.max(10, Math.min(100, (entry.value - 60) * 2.5))}%`,
+                height: `${Math.max(10, Math.min(100, (entry.value - 6) * 25))}%`,
               }}
               transition={{ duration: 0.48, delay: index * 0.05 }}
             />
@@ -689,7 +691,7 @@ function DirectorGradeOverview({
         average: evaluated.length
           ? average(evaluated.map((student) => student.average ?? 0))
           : null,
-        attention: evaluated.filter((student) => (student.average ?? 100) < 70).length,
+        attention: evaluated.filter((student) => (student.average ?? GRADE_MAX) < 7).length,
       };
     })
     .sort((first, second) => first.group.localeCompare(second.group, "es"));
@@ -793,7 +795,7 @@ function GradeSummaryDashboard({
   const overall = average(records.map((record) => record.weightedScore));
   const students = new Set(records.map((record) => record.studentId)).size;
   const teachers = new Set(records.map((record) => record.teacherId)).size;
-  const attention = records.filter((record) => record.weightedScore < 70).length;
+  const attention = records.filter((record) => record.weightedScore < 7).length;
   const assignedExpected = profile.role === "teacher"
     ? (profile.subjects ?? []).reduce((total, subject) => total + accounts.filter((account) => (
         account.role === "student" &&
@@ -849,9 +851,9 @@ function GradeSummaryDashboard({
           label: "Rubros destacados",
           value: String(GRADING_CRITERIA.filter((criterion) => (
             records.length &&
-            average(records.map((record) => record.scores[criterion.key])) >= 90
+            average(records.map((record) => record.scores[criterion.key])) >= 9
           )).length),
-          detail: "Con promedio igual o mayor a 90",
+          detail: "Con promedio igual o mayor a 9",
           icon: <Target size={19} />,
           tone: "coral",
         },
@@ -875,15 +877,15 @@ function GradeSummaryDashboard({
         },
         {
           label: "Resultados destacados",
-          value: String(records.filter((record) => record.weightedScore >= 90).length),
-          detail: "Calificaciones de 90 o más",
+          value: String(records.filter((record) => record.weightedScore >= 9).length),
+          detail: "Calificaciones de 9 o más",
           icon: <Sparkles size={19} />,
           tone: "lime",
         },
         {
           label: "Requieren atención",
           value: String(attention),
-          detail: "Calificaciones menores a 70",
+          detail: "Calificaciones menores a 7",
           icon: <Target size={19} />,
           tone: "coral",
         },
@@ -973,7 +975,7 @@ function StudentSubjectGradeCard({
         {GRADING_CRITERIA.map((criterion) => (
           <div key={criterion.key}>
             <span><strong>{criterion.shortLabel}</strong><small>{record.weights[criterion.key]}%</small></span>
-            <div><i style={{ width: `${record.scores[criterion.key]}%` }} /></div>
+            <div><i style={{ width: `${gradeScorePercent(record.scores[criterion.key])}%` }} /></div>
             <b>{record.scores[criterion.key]}</b>
           </div>
         ))}
@@ -1035,7 +1037,7 @@ function StudentGrades({
         <span className="eyebrow">Promedio de la semana</span>
         <strong>{average?.toFixed(1)}</strong>
         <p>{records.length} {records.length === 1 ? "materia calificada" : "materias calificadas"}</p>
-        <div className="student-grade-summary-bar"><span style={{ width: `${average}%` }} /></div>
+        <div className="student-grade-summary-bar"><span style={{ width: `${gradeScorePercent(average ?? 0)}%` }} /></div>
       </motion.article>
       <div className="student-subject-grades">
         {records.slice(0, 3).map((record, index) => (
@@ -1555,7 +1557,7 @@ export function WeeklyGradesPanel({
               <span className="eyebrow">Captura semanal</span>
               <h3>Califica a tus alumnos</h3>
               <p>
-                Registra cada rubro de 0 a 100. El resultado semanal se calcula
+                Registra cada rubro de 0 a 10. El resultado semanal se calcula
                 automáticamente con tu ponderación configurada.
               </p>
             </div>

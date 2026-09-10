@@ -17,6 +17,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
+import { clampGradeScore, GRADE_MAX } from "@/lib/grade-scale";
 import {
   aggregateDailyGradesByWeek,
   buildGradePeriodSummaries,
@@ -138,18 +139,19 @@ function CaptureRow({
               aria-label={`${criterion.label} de ${student.name}`}
               type="number"
               min="0"
-              max="100"
+              max={GRADE_MAX}
+              step="0.1"
               value={scores[criterion.key]}
               onChange={(event) => setScores((current) => ({
                 ...current,
-                [criterion.key]: Math.min(100, Math.max(0, Number(event.target.value))),
+                [criterion.key]: clampGradeScore(event.target.value),
               }))}
             />
           </label>
         ))}
       </div>
       <div className="academic-capture-result">
-        <span className={`academic-score-badge is-${result >= 90 ? "high" : result >= 70 ? "mid" : "low"}`}>{score(result)}</span>
+        <span className={`academic-score-badge is-${result >= 9 ? "high" : result >= 7 ? "mid" : "low"}`}>{score(result)}</span>
         <button
           type="button"
           disabled={saving}
@@ -176,7 +178,7 @@ function SummaryTable({ records, level }: { records: GradePeriodSummary[]; level
         <thead><tr>
           <th>Alumno</th><th>Periodo</th><th>Materia</th>
           {GRADING_CRITERIA.map((criterion) => <th key={criterion.key}>{criterion.shortLabel}</th>)}
-          <th>Promedio</th><th>Evidencias</th>
+          <th>Promedio (0–10)</th><th>Evidencias</th>
         </tr></thead>
         <tbody>{records.map((record) => (
           <tr key={record.id}>
@@ -184,7 +186,7 @@ function SummaryTable({ records, level }: { records: GradePeriodSummary[]; level
             <td><strong>{record.periodLabel}</strong><small>{level === "weekly" ? record.termLabel : record.schoolYearLabel}</small></td>
             <td>{record.subject}<small>{record.teacherName}</small></td>
             {GRADING_CRITERIA.map((criterion) => <td key={criterion.key}>{score(record.scores[criterion.key])}</td>)}
-            <td><span className={`academic-score-badge is-${record.weightedScore >= 90 ? "high" : record.weightedScore >= 70 ? "mid" : "low"}`}>{score(record.weightedScore)}</span></td>
+            <td><span className={`academic-score-badge is-${record.weightedScore >= 9 ? "high" : record.weightedScore >= 7 ? "mid" : "low"}`}>{score(record.weightedScore)}</span></td>
             <td>{level === "weekly"
               ? `${record.evidenceCount} de ${record.expectedEvidenceCount ?? record.evidenceCount} días hábiles`
               : `${record.evidenceCount} ${level === "bimonthly" ? (record.evidenceCount === 1 ? "semana" : "semanas") : (record.evidenceCount === 1 ? "bimestre" : "bimestres")}`}</td>
@@ -202,13 +204,13 @@ function DailyTable({ records }: { records: DailyGradeRecord[] }) {
   return (
     <div className="academic-table-wrap">
       <table className="academic-results-table">
-        <thead><tr><th>Alumno</th><th>Fecha</th><th>Materia</th>{GRADING_CRITERIA.map((criterion) => <th key={criterion.key}>{criterion.shortLabel}</th>)}<th>Resultado</th></tr></thead>
+        <thead><tr><th>Alumno</th><th>Fecha</th><th>Materia</th>{GRADING_CRITERIA.map((criterion) => <th key={criterion.key}>{criterion.shortLabel}</th>)}<th>Resultado (0–10)</th></tr></thead>
         <tbody>{records.map((record) => <tr key={record.id}>
           <td><strong>{record.studentName}</strong><small>{groupLabel(record)}</small></td>
           <td><strong>{dateLabel(record.gradeDate)}</strong><small>{record.weekLabel} · {record.termLabel}</small></td>
           <td>{record.subject}<small>{record.teacherName}</small></td>
           {GRADING_CRITERIA.map((criterion) => <td key={criterion.key}>{score(record.scores[criterion.key])}</td>)}
-          <td><span className={`academic-score-badge is-${record.weightedScore >= 90 ? "high" : record.weightedScore >= 70 ? "mid" : "low"}`}>{score(record.weightedScore)}</span></td>
+          <td><span className={`academic-score-badge is-${record.weightedScore >= 9 ? "high" : record.weightedScore >= 7 ? "mid" : "low"}`}>{score(record.weightedScore)}</span></td>
         </tr>)}</tbody>
       </table>
     </div>
@@ -380,14 +382,14 @@ export function AcademicGradesPanel({
       </section>
 
       <div className="academic-metrics">
-        <article><span>Promedio visible</span><strong>{score(level === "daily" ? average(dailyVisible) : average(summaryVisible))}</strong><small>Escala de 0 a 100</small></article>
+        <article><span>Promedio visible</span><strong>{score(level === "daily" ? average(dailyVisible) : average(summaryVisible))}</strong><small>Escala de 0 a 10</small></article>
         <article><span>{profile.role === "teacher" && level === "daily" ? "Capturados hoy" : "Registros"}</span><strong>{profile.role === "teacher" && level === "daily" ? daySubjectRecords.length : total}</strong><small>{profile.role === "teacher" && level === "daily" ? `de ${eligibleStudents.length} alumnos` : "según filtros"}</small></article>
         <article><span>Regla de cálculo</span><strong>{level === "daily" ? "Captura" : "Promedio"}</strong><small>{level === "weekly" ? `${workingDates.length} días hábiles esperados` : level === "bimonthly" ? "semanas del bimestre" : level === "cycle" ? "bimestres del ciclo" : "cinco criterios"}</small></article>
       </div>
 
       {loading ? <div className="academic-loading"><span /><span /><span /></div> : profile.role === "teacher" && level === "daily" ? (
         <div className="academic-capture-list">
-          <div className="academic-capture-header"><span>Alumno</span><span>Criterios del día · valores de 0 a 100</span><span>Resultado</span></div>
+          <div className="academic-capture-header"><span>Alumno</span><span>Criterios del día · valores de 0 a 10</span><span>Resultado</span></div>
           {!activeSubject ? <div className="academic-empty"><GraduationCap size={28} /><h3>No tienes materias asignadas</h3><p>Dirección debe actualizar tu perfil antes de capturar.</p></div>
             : !capturePageStudents.length ? <div className="academic-empty"><Search size={28} /><h3>No encontramos alumnos</h3><p>Revisa la materia o ajusta la búsqueda.</p></div>
               : capturePageStudents.map((student) => <CaptureRow
