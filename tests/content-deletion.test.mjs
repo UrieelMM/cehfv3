@@ -84,7 +84,7 @@ test("closed tasks remain visible but cannot receive new submissions", async () 
 });
 
 test("managed academic content exposes guarded edit flows", async () => {
-  const [functionsSource, tasks, reviews, reports, materials, workshops, workshopTasks, editDialog, styles] =
+  const [functionsSource, tasks, reviews, reports, materials, workshops, workshopTasks, editDialog, styles, storageRules] =
     await Promise.all([
       readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
       readFile(new URL("components/tasks-workflow.tsx", projectRoot), "utf8"),
@@ -95,6 +95,7 @@ test("managed academic content exposes guarded edit flows", async () => {
       readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
       readFile(new URL("components/content-edit-dialog.tsx", projectRoot), "utf8"),
       readFile(new URL("app/globals.css", projectRoot), "utf8"),
+      readFile(new URL("storage.rules", projectRoot), "utf8"),
     ]);
 
   [tasks, reviews, reports, materials, workshops, workshopTasks].forEach((source) =>
@@ -109,4 +110,11 @@ test("managed academic content exposes guarded edit flows", async () => {
   assert.match(editDialog, /createPortal\(/);
   assert.match(editDialog, /document\.body/);
   assert.match(styles, /\.content-edit-backdrop\s*\{[\s\S]*?z-index:\s*540/);
+  assert.match(tasks, /Archivos adjuntos/);
+  assert.match(tasks, /files: newFiles/);
+  assert.match(functionsSource, /editableTaskAttachments\(input\.attachments, firestorePath\)/);
+  assert.match(functionsSource, /removedStoragePaths/);
+  assert.match(storageRules, /function canManageAcademicTask/);
+  assert.match(storageRules, /allow create: if canManageAcademicTask/);
+  assert.match(storageRules, /allow delete: if canManageAcademicTask/);
 });

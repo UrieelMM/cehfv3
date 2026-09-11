@@ -21,7 +21,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
 import type {
   AcademicCalendar,
@@ -667,11 +667,28 @@ export async function deleteTaskAssignment(task: TaskAssignment) {
 
 export async function updateTaskAssignment(
   task: TaskAssignment,
-  input: Pick<TaskAssignment, "title" | "description" | "dueAt" | "links">,
+  input: Pick<TaskAssignment, "title" | "description" | "dueAt" | "links" | "attachments"> & { files: File[] },
 ) {
   if (!firebase.functions || !isFirebaseTaskAssignment(task)) {
     throw new Error("Esta tarea no se puede editar porque no está sincronizada con Firebase.");
   }
+  const { storage } = requireFirebase();
+  const uploaded = await Promise.all(input.files.map(async (file) => {
+    const id = crypto.randomUUID();
+    const storagePath = `${task.firestorePath}/recursos/${id}`;
+    await uploadBytes(ref(storage, storagePath), file, {
+      contentType: file.type || "application/octet-stream",
+      customMetadata: { originalName: file.name },
+    });
+    return {
+      id,
+      name: file.name,
+      storagePath,
+      contentType: file.type || "application/octet-stream",
+      size: file.size,
+    } satisfies TaskAttachment;
+  }));
+  const attachments = [...input.attachments, ...uploaded];
   const callable = httpsCallable<
     {
       entityType: "task";
@@ -680,10 +697,24 @@ export async function updateTaskAssignment(
       description: string;
       dueAt: string;
       links: TaskAssignment["links"];
+      attachments: TaskAttachment[];
     },
     { updated: boolean }
   >(firebase.functions, "updateManagedContent");
-  return (await callable({ entityType: "task", firestorePath: task.firestorePath, ...input })).data;
+  try {
+    return (await callable({
+      entityType: "task",
+      firestorePath: task.firestorePath,
+      title: input.title,
+      description: input.description,
+      dueAt: input.dueAt,
+      links: input.links,
+      attachments,
+    })).data;
+  } catch (error) {
+    await Promise.all(uploaded.map((attachment) => deleteObject(ref(storage, attachment.storagePath)).catch(() => undefined)));
+    throw error;
+  }
 }
 
 export function watchTaskSubmissions(

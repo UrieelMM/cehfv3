@@ -1155,7 +1155,24 @@ function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAss
   const [description, setDescription] = useState(task.description);
   const [dueAt, setDueAt] = useState(() => toLocalDateTime(new Date(task.dueAt)));
   const [links, setLinks] = useState(task.links);
+  const [attachments, setAttachments] = useState(task.attachments);
+  const [newFiles, setNewFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+
+  function addFiles(files: File[]) {
+    const valid = files.filter((file) => {
+      if (file.size >= 100 * 1024 * 1024) {
+        toast.error(`${file.name} supera el límite de 100 MB.`);
+        return false;
+      }
+      return true;
+    });
+    if (attachments.length + newFiles.length + valid.length > 10) {
+      toast.error("Puedes conservar hasta 10 archivos adjuntos.");
+      return;
+    }
+    setNewFiles((current) => [...current, ...valid]);
+  }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1167,6 +1184,8 @@ function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAss
         description: description.trim(),
         dueAt: new Date(dueAt).toISOString(),
         links: links.filter((link) => link.url.trim()).map((link) => ({ ...link, label: link.label.trim() || "Enlace", url: link.url.trim() })),
+        attachments,
+        files: newFiles,
       });
       toast.success("Tarea actualizada");
       onCancel();
@@ -1178,11 +1197,11 @@ function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAss
   }
 
   return (
-    <ContentEditDialog open={open} eyebrow="Tarea académica" title="Editar tarea" description="Corrige la información sin perder entregas ni historial." note="La materia, semana, grupo y archivos se conservan para proteger las entregas existentes." busy={busy} onCancel={onCancel} onSubmit={save}>
+    <ContentEditDialog open={open} eyebrow="Tarea académica" title="Editar tarea" description="Corrige la información y administra los recursos de apoyo." note="La materia, semana, grupo, entregas e historial permanecen vinculados a la misma tarea." busy={busy} onCancel={onCancel} onSubmit={save}>
       <label>Título<input value={title} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
       <label>Descripción<textarea value={description} maxLength={4000} required onChange={(event) => setDescription(event.target.value)} /></label>
       <label>Fecha límite<input type="datetime-local" value={dueAt} required onChange={(event) => setDueAt(event.target.value)} /></label>
-      <div>
+      <div className="content-edit-section">
         <label>Enlaces de apoyo</label>
         {links.map((link, index) => (
           <div className="content-edit-link" key={link.id}>
@@ -1192,6 +1211,14 @@ function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAss
           </div>
         ))}
         {links.length < 10 && <button type="button" className="secondary-button" onClick={() => setLinks((current) => [...current, { id: crypto.randomUUID(), label: "", url: "" }])}><Plus size={15} /> Agregar enlace</button>}
+      </div>
+      <div className="content-edit-section">
+        <label>Archivos adjuntos</label>
+        <div className="content-edit-files">
+          {attachments.map((attachment) => <span key={attachment.id}><FileText size={17} /><span><strong>{attachment.name}</strong><small>{formatBytes(attachment.size)} · Archivo actual</small></span><button type="button" className="plain-icon" onClick={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))} aria-label={`Quitar ${attachment.name}`}><X size={16} /></button></span>)}
+          {newFiles.map((file, index) => <span key={`${file.name}-${file.lastModified}-${index}`}><UploadCloud size={17} /><span><strong>{file.name}</strong><small>{formatBytes(file.size)} · Nuevo</small></span><button type="button" className="plain-icon" onClick={() => setNewFiles((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Quitar ${file.name}`}><X size={16} /></button></span>)}
+        </div>
+        {attachments.length + newFiles.length < 10 && <label className="content-edit-file-picker"><input type="file" multiple accept={acceptedTaskFiles} onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.currentTarget.value = ""; }} /><UploadCloud size={17} /><span>Agregar archivos</span></label>}
       </div>
     </ContentEditDialog>
   );

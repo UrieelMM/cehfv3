@@ -271,6 +271,18 @@ service firebase.storage {
       );
     }
 
+    function canManageAcademicTask(institutionId, schoolYearId, termId, weekId, subjectId, taskId) {
+      let task = academicTask(
+        institutionId, schoolYearId, termId, weekId, subjectId, taskId
+      );
+      return sameInstitution(institutionId) && (
+        isDirector() || (
+          profile().role == "teacher"
+          && task.createdBy == request.auth.uid
+        )
+      );
+    }
+
     function hasActiveTaskExtension(institutionId, schoolYearId, termId, weekId, subjectId, taskId, studentId) {
       return firestore.exists(
         /databases/(default)/documents/institutions/$(institutionId)/ciclosEscolares/$(schoolYearId)/bimestres/$(termId)/semanas/$(weekId)/materias/$(subjectId)/tareas/$(taskId)/prorrogas/$(studentId)
@@ -301,11 +313,14 @@ service firebase.storage {
       allow read: if canReadAcademicTask(
         institutionId, schoolYearId, termId, weekId, subjectId, taskId
       );
-      allow create: if isStaff()
-        && sameInstitution(institutionId)
+      allow create: if canManageAcademicTask(
+          institutionId, schoolYearId, termId, weekId, subjectId, taskId
+        )
         && taskResourceSafeUpload();
       allow update: if false;
-      allow delete: if isDirector() && sameInstitution(institutionId);
+      allow delete: if canManageAcademicTask(
+        institutionId, schoolYearId, termId, weekId, subjectId, taskId
+      );
     }
 
     match /institutions/{institutionId}/ciclosEscolares/{schoolYearId}/bimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId}/entregas/{studentId}/{versionId}/{assetId} {

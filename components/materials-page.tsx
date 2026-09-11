@@ -558,7 +558,7 @@ function MaterialEditDialog({ material, open, onCancel }: { material: LearningMa
       <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
       <label>Descripción<textarea value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} /></label>
       <label className="content-edit-check"><input type="checkbox" checked={required} onChange={(event) => setRequired(event.target.checked)} /> Marcar como lectura obligatoria</label>
-      <div>
+      <div className="content-edit-section">
         <label>Enlaces</label>
         {links.map((link, index) => <div className="content-edit-link" key={link.id}>
           <label>Nombre<input value={link.label} maxLength={100} onChange={(event) => setLinks((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /></label>

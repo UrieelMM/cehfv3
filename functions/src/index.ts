@@ -1548,6 +1548,7 @@ export const updateManagedContent = onCall(async (request) => {
   let updates: DocumentData;
   let entityId: string;
   let title: string;
+  let removedStoragePaths: string[] = [];
 
   if (entityType === "task") {
     const firestorePath = String(input.firestorePath ?? "").trim();
@@ -1567,11 +1568,42 @@ export const updateManagedContent = onCall(async (request) => {
     }
     entityId = snapshot.id;
     title = materialText(input.title, "El título", 3, 140);
+    const attachments = editableTaskAttachments(input.attachments, firestorePath);
+    const previousAttachments = Array.isArray(data.attachments)
+      ? data.attachments as Array<Record<string, unknown>>
+      : [];
+    const previousById = new Map(previousAttachments.map((attachment) => [String(attachment.id ?? ""), attachment]));
+    for (const attachment of attachments) {
+      const previous = previousById.get(attachment.id);
+      if (previous && (
+        String(previous.storagePath ?? "") !== attachment.storagePath ||
+        String(previous.name ?? "") !== attachment.name ||
+        String(previous.contentType ?? "") !== attachment.contentType ||
+        Number(previous.size ?? 0) !== attachment.size
+      )) {
+        throw new HttpsError("invalid-argument", "Un archivo existente fue modificado de forma inválida.");
+      }
+    }
+    const previousIds = new Set(previousAttachments.map((attachment) => String(attachment.id ?? "")));
+    const newAttachments = attachments.filter((attachment) => !previousIds.has(attachment.id));
+    const bucket = getStorage().bucket();
+    const existence = await Promise.all(
+      newAttachments.map((attachment) => bucket.file(attachment.storagePath).exists()),
+    );
+    if (existence.some(([exists]) => !exists)) {
+      throw new HttpsError("failed-precondition", "Uno de los archivos nuevos no terminó de cargarse.");
+    }
+    const retainedIds = new Set(attachments.map((attachment) => attachment.id));
+    removedStoragePaths = previousAttachments
+      .filter((attachment) => !retainedIds.has(String(attachment.id ?? "")))
+      .map((attachment) => String(attachment.storagePath ?? ""))
+      .filter((path) => path.startsWith(`${firestorePath}/recursos/`));
     updates = {
       title,
       description: materialText(input.description, "La descripción", 3, 4_000),
       dueAt: editableDate(input.dueAt, "La fecha límite"),
       links: materialLinks(input.links),
+      attachments,
       updatedAt: Timestamp.now(),
     };
   } else if (entityType === "review") {
@@ -1676,6 +1708,11 @@ export const updateManagedContent = onCall(async (request) => {
   }
 
   await reference.update(updates);
+  await Promise.all(
+    removedStoragePaths.map((path) =>
+      getStorage().bucket().file(path).delete({ ignoreNotFound: true }),
+    ),
+  );
   if (entityType === "task") {
     await reference.collection("historial").add({
       type: "updated",
@@ -1689,6 +1726,32 @@ export const updateManagedContent = onCall(async (request) => {
   await writeContentEditAudit(actor, entityType, entityId, title);
   return { updated: true };
 });
+
+function editableTaskAttachments(value: unknown, firestorePath: string) {
+  if (!Array.isArray(value) || value.length > 10) {
+    throw new HttpsError("invalid-argument", "Puedes conservar hasta 10 archivos adjuntos.");
+  }
+  const attachments = value.map((item, index) => {
+    const input = (item ?? {}) as Record<string, unknown>;
+    const id = deletionId(input.id, `archivo ${index + 1}`);
+    const storagePath = String(input.storagePath ?? "");
+    const size = Number(input.size ?? 0);
+    if (storagePath !== `${firestorePath}/recursos/${id}` || !Number.isFinite(size) || size <= 0 || size >= 100 * 1024 * 1024) {
+      throw new HttpsError("invalid-argument", `El archivo ${index + 1} no coincide con la carga autorizada.`);
+    }
+    return {
+      id,
+      name: materialText(input.name, "El nombre del archivo", 1, 240),
+      storagePath,
+      contentType: materialText(input.contentType || "application/octet-stream", "El tipo de archivo", 1, 200),
+      size,
+    };
+  });
+  if (new Set(attachments.map((attachment) => attachment.id)).size !== attachments.length) {
+    throw new HttpsError("invalid-argument", "Los archivos adjuntos contienen identificadores repetidos.");
+  }
+  return attachments;
+}
 
 function materialText(
   value: unknown,

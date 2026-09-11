@@ -149,6 +149,16 @@
 .content-edit-fields .content-edit-check input { width: 18px; height: 18px; }
 .content-edit-link { display: grid; grid-template-columns: minmax(120px, .7fr) minmax(0, 1.5fr) auto; gap: 8px; align-items: end; }
 .content-edit-link button { min-height: 42px; }
+.content-edit-section { display: grid; gap: 12px; }
+.content-edit-section > .secondary-button { width: fit-content; margin-top: 2px; }
+.content-edit-files { display: grid; gap: 8px; }
+.content-edit-files > span { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 11px; border: 1px solid #dce7e2; border-radius: 12px; background: #f8fbfa; }
+.content-edit-files > span > svg { color: #397c73; }
+.content-edit-files > span > span { display: grid; min-width: 0; gap: 2px; }
+.content-edit-files strong { overflow: hidden; color: #294b48; font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
+.content-edit-files small { color: #71817b; font-size: .72rem; }
+.content-edit-file-picker { display: flex !important; width: fit-content; min-height: 42px; align-items: center; gap: 8px !important; padding: 0 13px; border: 1px dashed #8fb8b0; border-radius: 12px; color: #28685f !important; background: #f2f8f5; cursor: pointer; }
+.content-edit-file-picker input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .content-edit-note { display: flex; gap: 8px; align-items: flex-start; margin: 0 22px 18px; padding: 11px 12px; border-radius: 12px; background: #f2f8f5; }
 .content-edit-note svg { flex: 0 0 auto; margin-top: 2px; color: #2e7a70; }
 .content-edit-dialog > footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px 20px; border-top: 1px solid #e9efec; }
