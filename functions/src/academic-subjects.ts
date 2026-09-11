@@ -21,6 +21,10 @@ export const academicSubjectOptions = [
 type AcademicSubject = (typeof academicSubjectOptions)[number];
 
 const primaryLowerSubjects = [
+  "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
+  "Inglés", "Lectura y comprensión",
+] as const satisfies readonly AcademicSubject[];
+const secondarySecondThirdSubjects = [
   "Lenguaje", "Matemáticas", "Cívica", "Historia", "Física", "Inglés",
 ] as const satisfies readonly AcademicSubject[];
 const primaryUpperSubjects = [
@@ -48,8 +52,8 @@ const subjectsByGrade: Record<
   },
   secondary: {
     "1.º": secondaryFirstSubjects,
-    "2.º": primaryLowerSubjects,
-    "3.º": primaryLowerSubjects,
+    "2.º": secondarySecondThirdSubjects,
+    "3.º": secondarySecondThirdSubjects,
   },
 };
 

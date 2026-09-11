@@ -48,6 +48,10 @@ service cloud.firestore {
 
     function validManagedAccountSubjects(data) {
       let primaryLower = [
+        "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia",
+        "Física", "Inglés", "Lectura y comprensión"
+      ];
+      let secondarySecondThird = [
         "Lenguaje", "Matemáticas", "Cívica", "Historia", "Física", "Inglés"
       ];
       let primaryUpper = [
@@ -96,7 +100,7 @@ service cloud.firestore {
               || (
                 data.schoolLevel == "secondary"
                 && data.grade in ["2.º", "3.º"]
-                && data.subjects.hasOnly(primaryLower)
+                && data.subjects.hasOnly(secondarySecondThird)
               )
             )
           )

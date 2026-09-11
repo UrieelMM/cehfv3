@@ -26,7 +26,16 @@ const {
 
 test("each grade exposes only its canonical subjects", () => {
   assert.deepEqual(subjectsForGrade("primary", "1.º"), [
-    "Lenguaje", "Matemáticas", "Cívica", "Historia", "Física", "Inglés",
+    "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
+    "Inglés", "Lectura y comprensión",
+  ]);
+  assert.deepEqual(subjectsForGrade("primary", "2.º"), [
+    "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
+    "Inglés", "Lectura y comprensión",
+  ]);
+  assert.deepEqual(subjectsForGrade("primary", "3.º"), [
+    "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
+    "Inglés", "Lectura y comprensión",
   ]);
   assert.deepEqual(subjectsForGrade("primary", "4.º"), [
     "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés",
