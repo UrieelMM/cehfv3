@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getStorage } from "firebase-admin/storage";
 import {
   FieldValue,
   Timestamp,
@@ -1332,6 +1333,177 @@ function materialId(value: unknown) {
   }
   return normalized;
 }
+
+function deletionId(value: unknown, label: string) {
+  const normalized = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(normalized)) {
+    throw new HttpsError("invalid-argument", `El identificador de ${label} no es válido.`);
+  }
+  return normalized;
+}
+
+async function deleteRelatedNotifications(field: string, value: string) {
+  const snapshot = await db.collectionGroup("items").where(field, "==", value).get();
+  for (let offset = 0; offset < snapshot.docs.length; offset += 450) {
+    const batch = db.batch();
+    snapshot.docs.slice(offset, offset + 450).forEach((document) => batch.delete(document.ref));
+    await batch.commit();
+  }
+}
+
+async function deleteContentRecord({
+  actor,
+  reference,
+  entityType,
+  entityId,
+  title,
+  notificationField,
+  storagePrefix,
+}: {
+  actor: MaterialStaff;
+  reference: DocumentReference;
+  entityType: string;
+  entityId: string;
+  title: string;
+  notificationField?: string;
+  storagePrefix?: string;
+}) {
+  await db.recursiveDelete(reference);
+  await Promise.all([
+    notificationField
+      ? deleteRelatedNotifications(notificationField, entityId)
+      : Promise.resolve(),
+    storagePrefix
+      ? getStorage().bucket().deleteFiles({ prefix: storagePrefix, force: true })
+      : Promise.resolve(),
+  ]);
+  await db.collection("auditEvents").add({
+    entityType,
+    entityId,
+    institutionId: actor.institutionId,
+    action: `${entityType}.deleted`,
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    before: { title },
+    createdAt: Timestamp.now(),
+  });
+}
+
+function actorCanManageRecord(actor: MaterialStaff, data: DocumentData) {
+  return actor.role === "director" || data.createdBy === actor.uid ||
+    (Array.isArray(data.managerIds) && data.managerIds.includes(actor.uid));
+}
+
+export const deleteAcademicTask = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const firestorePath = String(input.firestorePath ?? "").trim();
+  const match = firestorePath.match(
+    /^institutions\/([^/]+)\/ciclosEscolares\/([^/]+)\/bimestres\/([^/]+)\/semanas\/([^/]+)\/materias\/([^/]+)\/tareas\/([^/]+)$/,
+  );
+  if (!match || match[1] !== actor.institutionId) {
+    throw new HttpsError("invalid-argument", "La ruta de la tarea no es válida.");
+  }
+  match.slice(1).forEach((segment) => deletionId(segment, "la tarea"));
+  const reference = db.doc(firestorePath);
+  const snapshot = await reference.get();
+  const task = snapshot.data();
+  if (!snapshot.exists || !task || task.institutionId !== actor.institutionId || !actorCanManageRecord(actor, task)) {
+    throw new HttpsError("permission-denied", "No puedes eliminar esta tarea.");
+  }
+  await deleteContentRecord({
+    actor,
+    reference,
+    entityType: "task",
+    entityId: snapshot.id,
+    title: String(task.title ?? "Tarea"),
+    notificationField: "taskId",
+    storagePrefix: `${firestorePath}/`,
+  });
+  return { deleted: true };
+});
+
+export const deleteLearningMaterial = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const materialIdValue = materialId((request.data as Record<string, unknown> | undefined)?.materialId);
+  const reference = db.doc(`institutions/${actor.institutionId}/materials/${materialIdValue}`);
+  const snapshot = await reference.get();
+  const material = snapshot.data();
+  if (!snapshot.exists || !material || material.institutionId !== actor.institutionId || !actorCanManageRecord(actor, material)) {
+    throw new HttpsError("permission-denied", "No puedes eliminar este recurso.");
+  }
+  await deleteContentRecord({ actor, reference, entityType: "material", entityId: materialIdValue, title: String(material.title ?? "Recurso"), notificationField: "materialId", storagePrefix: `institutions/${actor.institutionId}/materials/${materialIdValue}/` });
+  return { deleted: true };
+});
+
+export const deleteWeeklyReview = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const reviewId = materialId((request.data as Record<string, unknown> | undefined)?.reviewId);
+  const reference = db.doc(`weeklyReviews/${reviewId}`);
+  const snapshot = await reference.get();
+  const review = snapshot.data();
+  if (!snapshot.exists || !review || review.institutionId !== actor.institutionId || !actorCanManageRecord(actor, review)) {
+    throw new HttpsError("permission-denied", "No puedes eliminar este repaso.");
+  }
+  await deleteContentRecord({ actor, reference, entityType: "weekly_review", entityId: reviewId, title: String(review.title ?? "Repaso"), notificationField: "reviewId", storagePrefix: `institutions/${actor.institutionId}/weeklyReviews/${reviewId}/` });
+  return { deleted: true };
+});
+
+export const deleteStudentWeeklyReport = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const reportId = materialId((request.data as Record<string, unknown> | undefined)?.reportId);
+  const reference = db.doc(`institutions/${actor.institutionId}/studentWeeklyReports/${reportId}`);
+  const snapshot = await reference.get();
+  const report = snapshot.data();
+  if (!snapshot.exists || !report || report.institutionId !== actor.institutionId || (actor.role === "teacher" && report.teacherId !== actor.uid)) {
+    throw new HttpsError("permission-denied", "No puedes eliminar este reporte.");
+  }
+  await deleteContentRecord({ actor, reference, entityType: "student_weekly_report", entityId: reportId, title: `${String(report.studentName ?? "Alumno")} · ${String(report.subject ?? "Materia")}` });
+  return { deleted: true };
+});
+
+async function requireManagedWorkshopRecord(actor: MaterialStaff, workshopId: string) {
+  const reference = db.doc(`institutions/${actor.institutionId}/workshops/${workshopId}`);
+  const snapshot = await reference.get();
+  const workshop = snapshot.data();
+  if (!snapshot.exists || !workshop || workshop.institutionId !== actor.institutionId || (actor.role === "teacher" && (!Array.isArray(workshop.managerIds) || !workshop.managerIds.includes(actor.uid)))) {
+    throw new HttpsError("permission-denied", "No puedes administrar este taller.");
+  }
+  return workshop;
+}
+
+export const deleteWorkshopResource = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const workshopId = deletionId(input.workshopId, "taller");
+  const resourceId = deletionId(input.resourceId, "recurso");
+  await requireManagedWorkshopRecord(actor, workshopId);
+  const reference = db.doc(`institutions/${actor.institutionId}/workshops/${workshopId}/resources/${resourceId}`);
+  const snapshot = await reference.get();
+  const resource = snapshot.data();
+  if (!snapshot.exists || !resource || resource.institutionId !== actor.institutionId || resource.workshopId !== workshopId) {
+    throw new HttpsError("not-found", "El archivo del taller ya no existe.");
+  }
+  await deleteContentRecord({ actor, reference, entityType: "workshop_resource", entityId: resourceId, title: String(resource.title ?? "Archivo del taller"), notificationField: "resourceId", storagePrefix: `institutions/${actor.institutionId}/workshops/${workshopId}/resources/${resourceId}/` });
+  return { deleted: true };
+});
+
+export const deleteWorkshopTask = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const workshopId = deletionId(input.workshopId, "taller");
+  const taskId = deletionId(input.taskId, "actividad");
+  await requireManagedWorkshopRecord(actor, workshopId);
+  const reference = db.doc(`institutions/${actor.institutionId}/workshops/${workshopId}/tasks/${taskId}`);
+  const snapshot = await reference.get();
+  const task = snapshot.data();
+  if (!snapshot.exists || !task || task.institutionId !== actor.institutionId || task.workshopId !== workshopId || (actor.role === "teacher" && task.createdBy !== actor.uid)) {
+    throw new HttpsError("permission-denied", "No puedes eliminar esta actividad del taller.");
+  }
+  await deleteContentRecord({ actor, reference, entityType: "workshop_task", entityId: taskId, title: String(task.title ?? "Actividad del taller"), notificationField: "taskId", storagePrefix: `institutions/${actor.institutionId}/workshops/${workshopId}/tasks/${taskId}/` });
+  return { deleted: true };
+});
 
 function materialText(
   value: unknown,

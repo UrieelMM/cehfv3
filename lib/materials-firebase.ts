@@ -310,6 +310,17 @@ export async function getLearningMaterialAttachmentUrl(
   return getDownloadURL(ref(storage, attachment.storagePath));
 }
 
+export async function deleteLearningMaterial(material: LearningMaterial) {
+  if (!firebase.functions || !isFirebaseLearningMaterial(material)) {
+    throw new Error("Este recurso no se puede eliminar porque no está sincronizado con Firebase.");
+  }
+  const callable = httpsCallable<{ materialId: string }, { deleted: boolean }>(
+    firebase.functions,
+    "deleteLearningMaterial",
+  );
+  return (await callable({ materialId: material.id })).data;
+}
+
 export async function markLearningMaterialViewed(
   material: LearningMaterial,
   profile: UserProfile,

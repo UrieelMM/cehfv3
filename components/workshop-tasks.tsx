@@ -15,6 +15,7 @@ import {
   Plus,
   Send,
   ShieldCheck,
+  Trash2,
   UploadCloud,
   UserCheck,
   Users,
@@ -24,10 +25,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   createWorkshopTask,
+  deleteWorkshopTask,
   getWorkshopTaskAttachmentUrl,
   saveWorkshopFeedback,
   setWorkshopTaskStatus,
@@ -98,6 +101,8 @@ export function WorkshopTasks({
   const [loading, setLoading] = useState(firebaseReady);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<WorkshopTask | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<WorkshopTask | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const canCreate =
     role === "director" || workshop.managerIds.includes(profile.uid);
 
@@ -161,6 +166,21 @@ export function WorkshopTasks({
   async function changeStatus(task: WorkshopTask, status: WorkshopTask["status"]) {
     if (!firebaseReady) throw new Error("Inicia sesión para actualizar trabajos.");
     await setWorkshopTaskStatus(task, status);
+  }
+
+  async function removeTask() {
+    if (!taskToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteWorkshopTask(taskToDelete);
+      toast.success("Actividad eliminada");
+      setTaskToDelete(null);
+      closeTask();
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -242,12 +262,22 @@ export function WorkshopTasks({
               accounts={accounts}
               firebaseReady={firebaseReady}
               onStatusChange={changeStatus}
+              onDelete={() => setTaskToDelete(selectedTask)}
               onClose={closeTask}
             />
           )}
         </AnimatePresence>,
         document.body,
       )}
+      <ConfirmDeleteDialog
+        open={Boolean(taskToDelete)}
+        title={`¿Eliminar “${taskToDelete?.title ?? "esta actividad"}”?`}
+        description="Se eliminarán la actividad, todas las entregas, versiones, retroalimentación y archivos asociados. Esta acción no se puede deshacer."
+        confirmLabel="Eliminar actividad"
+        busy={deleting}
+        onCancel={() => setTaskToDelete(null)}
+        onConfirm={() => void removeTask()}
+      />
     </section>
   );
 }
@@ -367,6 +397,7 @@ function WorkshopTaskDetailDialog({
   accounts,
   firebaseReady,
   onStatusChange,
+  onDelete,
   onClose,
 }: {
   task: WorkshopTask;
@@ -375,6 +406,7 @@ function WorkshopTaskDetailDialog({
   accounts: ManagedAccount[];
   firebaseReady: boolean;
   onStatusChange: (task: WorkshopTask, status: WorkshopTask["status"]) => Promise<void>;
+  onDelete: () => void;
   onClose: () => void;
 }) {
   const [submissions, setSubmissions] = useState<WorkshopSubmission[]>([]);
@@ -414,7 +446,7 @@ function WorkshopTaskDetailDialog({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (
         event.key === "Escape" &&
-        !document.querySelector(".workshop-attachment-viewer-backdrop")
+        !document.querySelector(".workshop-attachment-viewer-backdrop, .delete-confirm-backdrop")
       ) {
         onClose();
       }
@@ -527,7 +559,7 @@ function WorkshopTaskDetailDialog({
           <aside>
             <div><span>Asignación</span><strong>{task.audienceStudentIds.length} alumnos</strong></div>
             <div><span>Archivos de apoyo</span><strong>{task.attachments.length}</strong></div>
-            {staff && <div className="workshop-task-control"><span>Estado del trabajo</span>{task.status === "draft" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar</button>}{task.status === "published" && <button disabled={busy} onClick={() => void changeStatus("closed")}><Clock3 size={15} /> Cerrar entregas</button>}{task.status === "closed" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Reabrir</button>}</div>}
+            {staff && <div className="workshop-task-control"><span>Estado del trabajo</span>{task.status === "draft" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar</button>}{task.status === "published" && <button disabled={busy} onClick={() => void changeStatus("closed")}><Clock3 size={15} /> Cerrar entregas</button>}{task.status === "closed" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Reabrir</button>}<button className="danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Eliminar actividad</button></div>}
           </aside>
         </div>
         {previewAttachment && (

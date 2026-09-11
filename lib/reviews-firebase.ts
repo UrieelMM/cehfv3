@@ -456,6 +456,17 @@ export async function updateWeeklyReviewStatus(
   return (await callable({ reviewId: review.id, status })).data;
 }
 
+export async function deleteWeeklyReview(review: WeeklyReview) {
+  if (!firebase.functions || !isFirebaseWeeklyReview(review)) {
+    throw new Error("Este repaso no se puede eliminar porque no está sincronizado con Firebase.");
+  }
+  const callable = httpsCallable<{ reviewId: string }, { deleted: boolean }>(
+    firebase.functions,
+    "deleteWeeklyReview",
+  );
+  return (await callable({ reviewId: review.id })).data;
+}
+
 export async function getWeeklyReviewAttachmentUrl(
   attachment: WeeklyReviewAttachment,
 ) {

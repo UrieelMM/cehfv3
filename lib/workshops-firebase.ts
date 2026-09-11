@@ -2,7 +2,6 @@
 
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -16,6 +15,7 @@ import {
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import {
   deleteObject,
   getDownloadURL,
@@ -357,21 +357,12 @@ export async function uploadWorkshopResource(
 }
 
 export async function deleteWorkshopResource(resource: WorkshopResource) {
-  const { db, storage } = requireFirebase();
-  await deleteDoc(
-    doc(
-      db,
-      "institutions",
-      resource.institutionId,
-      "workshops",
-      resource.workshopId,
-      "resources",
-      resource.id,
-    ),
-  );
-  if (resource.storagePath) {
-    await deleteObject(ref(storage, resource.storagePath)).catch(() => undefined);
-  }
+  if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
+  const callable = httpsCallable<
+    { workshopId: string; resourceId: string },
+    { deleted: boolean }
+  >(firebase.functions, "deleteWorkshopResource");
+  return (await callable({ workshopId: resource.workshopId, resourceId: resource.id })).data;
 }
 
 export async function getWorkshopResourceUrl(resource: WorkshopResource) {
@@ -614,6 +605,15 @@ export async function setWorkshopTaskStatus(
     ),
     { status, updatedAt: serverTimestamp() },
   );
+}
+
+export async function deleteWorkshopTask(task: WorkshopTask) {
+  if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
+  const callable = httpsCallable<
+    { workshopId: string; taskId: string },
+    { deleted: boolean }
+  >(firebase.functions, "deleteWorkshopTask");
+  return (await callable({ workshopId: task.workshopId, taskId: task.id })).data;
 }
 
 export function watchWorkshopSubmissions(

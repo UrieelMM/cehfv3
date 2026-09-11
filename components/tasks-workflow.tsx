@@ -34,10 +34,12 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { TaskResourceViewer } from "@/components/task-resource-viewer";
 import { academicSubjectOptions, subjectsMatch } from "@/lib/academic-subjects";
 import {
   closeTaskAssignment,
+  deleteTaskAssignment,
   extendTaskForGroup,
   grantIndividualTaskExtension,
   isFirebaseTaskAssignment,
@@ -796,6 +798,7 @@ export function TaskDetailModal({
     toLocalDateTime(new Date(Date.now() + 24 * 60 * 60 * 1000)),
   );
   const [busy, setBusy] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const eligibleStudents = useMemo(
     () =>
       accounts.filter(
@@ -819,7 +822,10 @@ export function TaskDetailModal({
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (selectedResource) setSelectedResource(null);
+      if (confirmDelete) {
+        if (busy !== "delete") setConfirmDelete(false);
+      }
+      else if (selectedResource) setSelectedResource(null);
       else onClose();
     };
     window.addEventListener("keydown", onKeyDown);
@@ -827,7 +833,7 @@ export function TaskDetailModal({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose, selectedResource]);
+  }, [busy, confirmDelete, onClose, selectedResource]);
 
   useEffect(() => {
     if (!liveFirebaseTask) return;
@@ -925,7 +931,22 @@ export function TaskDetailModal({
     );
   }
 
+  async function removeTask() {
+    setBusy("delete");
+    try {
+      await deleteTaskAssignment(task);
+      toast.success("Tarea eliminada");
+      setConfirmDelete(false);
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos eliminar la tarea.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   return (
+    <>
     <motion.div
       className="task-detail-backdrop"
       initial={{ opacity: 0 }}
@@ -1071,6 +1092,7 @@ export function TaskDetailModal({
               individualDueAt={individualDueAt}
               setIndividualDueAt={setIndividualDueAt}
               onOpenAttachment={openSubmissionAttachment}
+              onDelete={() => setConfirmDelete(true)}
             />
           ) : (
             <StudentTaskFlow
@@ -1105,6 +1127,16 @@ export function TaskDetailModal({
         </AnimatePresence>
       </motion.section>
     </motion.div>
+    <ConfirmDeleteDialog
+      open={confirmDelete}
+      title={`¿Eliminar “${task.title}”?`}
+      description="Se eliminarán la tarea, sus entregas, historial, prórrogas y archivos asociados. Esta acción no se puede deshacer."
+      confirmLabel="Eliminar tarea"
+      busy={busy === "delete"}
+      onCancel={() => setConfirmDelete(false)}
+      onConfirm={() => void removeTask()}
+    />
+    </>
   );
 }
 
@@ -1260,6 +1292,7 @@ function StaffTaskFlow({
   individualDueAt,
   setIndividualDueAt,
   onOpenAttachment,
+  onDelete,
 }: {
   task: TaskAssignment;
   profile: UserProfile;
@@ -1282,6 +1315,7 @@ function StaffTaskFlow({
   individualDueAt: string;
   setIndividualDueAt: (value: string) => void;
   onOpenAttachment: (attachment: TaskSubmission["attachments"][number]) => void;
+  onDelete: () => void;
 }) {
   const selectedExtensionStudentId = extensionStudentId || eligibleStudents[0]?.uid || "";
 
@@ -1335,6 +1369,13 @@ function StaffTaskFlow({
               <LockKeyhole size={16} /> Cerrar tarea
             </button>
           ) : null}
+          <button
+            className="secondary-button danger-button"
+            disabled={Boolean(busy)}
+            onClick={onDelete}
+          >
+            <Trash2 size={16} /> Eliminar tarea
+          </button>
           <span>
             {submissions.length} {submissions.length === 1 ? "entrega" : "entregas"}
           </span>

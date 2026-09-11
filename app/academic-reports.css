@@ -363,6 +363,16 @@
 .report-editor-card footer button svg { width: 14px; height: 14px; }
 
 .report-editor-card footer button:disabled { cursor: wait; opacity: .6; }
+.report-editor-card footer button.danger-button,
+.published-report-card footer button.danger-button {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 5px;
+  border-color: var(--danger);
+  background: var(--danger);
+  color: white;
+}
 
 .published-report-fields {
   display: grid;

@@ -9389,6 +9389,54 @@ code {
   opacity: 0.58;
 }
 
+.delete-confirm-backdrop {
+  position: fixed;
+  z-index: 520;
+  inset: 0;
+  display: grid;
+  padding: 20px;
+  place-items: center;
+  background: rgb(12 16 29 / 0.72);
+  backdrop-filter: blur(9px);
+}
+
+.delete-confirm-dialog {
+  position: relative;
+  width: min(100%, 470px);
+  padding: 28px;
+  border: 1px solid color-mix(in srgb, var(--coral) 28%, var(--border));
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 28px 80px rgb(9 14 28 / 0.28);
+  text-align: center;
+}
+
+.delete-confirm-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 13px;
+  place-items: center;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--coral) 12%, var(--surface));
+  color: var(--coral);
+}
+
+.delete-confirm-dialog > small { color: var(--coral); font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.delete-confirm-dialog h2 { margin: 7px 28px 8px; font-size: clamp(1.25rem, 3vw, 1.55rem); line-height: 1.2; }
+.delete-confirm-dialog p { margin: 0 auto; color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
+.delete-confirm-dialog footer { display: flex; margin-top: 23px; justify-content: flex-end; gap: 9px; }
+.delete-confirm-dialog footer button { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; gap: 7px; }
+.delete-confirm-close { position: absolute; top: 13px; right: 13px; display: grid; width: 35px; height: 35px; place-items: center; border: 0; border-radius: 10px; background: transparent; color: var(--muted); }
+.delete-confirm-close:hover { background: var(--surface-soft); color: var(--foreground); }
+
+@media (max-width: 560px) {
+  .delete-confirm-backdrop { padding: 12px; align-items: end; }
+  .delete-confirm-dialog { padding: 25px 18px 18px; border-radius: 20px 20px 14px 14px; }
+  .delete-confirm-dialog footer { flex-direction: column-reverse; }
+  .delete-confirm-dialog footer button { width: 100%; }
+}
+
 @media (max-width: 680px) {
   .account-editor-profile {
     grid-template-columns: auto minmax(0, 1fr);

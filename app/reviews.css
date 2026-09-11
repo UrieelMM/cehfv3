@@ -173,7 +173,7 @@
 .review-attempt-answers > p { margin: 0 0 9px; color: var(--muted); font-size: calc(.5rem + 0.125rem); }
 .review-attempt-answers div small { margin-top: 6px; padding: 7px 8px; border-radius: 7px; background: var(--violet-soft); color: var(--foreground); font-size: calc(.53rem + 0.125rem); line-height: 1.45; white-space: pre-wrap; }
 .review-attempt-answers div small.is-empty { background: var(--surface-soft); color: var(--muted); font-style: italic; }
-.review-status-actions { display: grid; margin-top: 11px; }
+.review-status-actions { display: grid; margin-top: 11px; gap: 7px; }
 .review-status-actions button { justify-content: center; }
 
 .review-create-modal { display: flex; width: min(1160px, 100%); max-height: calc(100dvh - 40px); overflow: hidden; border: 1px solid var(--border); border-radius: 23px; background: var(--surface); box-shadow: 0 32px 100px rgb(0 0 0 / .32); flex-direction: column; }

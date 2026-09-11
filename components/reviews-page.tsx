@@ -33,11 +33,13 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { toast } from "sonner";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   getWeeklyReviewAttachmentUrl,
+  deleteWeeklyReview,
   restartWeeklyReview,
   saveWeeklyReviewProgress,
   submitWeeklyReview,
@@ -819,6 +821,7 @@ function StaffReviewModal({
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     return watchWeeklyReviewAttempts(
@@ -874,7 +877,23 @@ function StaffReviewModal({
     }
   }
 
+  async function removeReview() {
+    setBusy(true);
+    setError("");
+    try {
+      await deleteWeeklyReview(review);
+      toast.success("Repaso eliminado");
+      setConfirmDelete(false);
+      onClose();
+    } catch (deleteError) {
+      setError(friendlyFirebaseError(deleteError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
+    <>
     <motion.div className="review-player-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <motion.section className="review-staff-modal" initial={{ opacity: 0, y: 18, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.985 }} role="dialog" aria-modal="true" aria-labelledby="review-staff-title">
         <header>
@@ -924,11 +943,22 @@ function StaffReviewModal({
               {review.status === "draft" && <button className="primary-button" disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar repaso</button>}
               {review.status === "published" && <button className="secondary-button" disabled={busy} onClick={() => void changeStatus("closed")}><LockKeyhole size={15} /> Cerrar repaso</button>}
               {review.status === "closed" && <button className="primary-button" disabled={busy} onClick={() => void changeStatus("published")}><RotateCcw size={15} /> Reabrir repaso</button>}
+              <button className="secondary-button danger-button" disabled={busy} onClick={() => setConfirmDelete(true)}><Trash2 size={15} /> Eliminar repaso</button>
             </div>
           </aside>
         </div>
       </motion.section>
     </motion.div>
+    <ConfirmDeleteDialog
+      open={confirmDelete}
+      title={`¿Eliminar “${review.title}”?`}
+      description="Se eliminarán el repaso, los intentos y respuestas de alumnos, las claves de respuesta y los archivos adjuntos. Esta acción no se puede deshacer."
+      confirmLabel="Eliminar repaso"
+      busy={busy}
+      onCancel={() => setConfirmDelete(false)}
+      onConfirm={() => void removeReview()}
+    />
+    </>
   );
 }
 

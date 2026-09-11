@@ -14,6 +14,7 @@ import {
   type QueryConstraint,
   type Unsubscribe,
 } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { firebase } from "./firebase";
 import { gradeSubjectId } from "./grades-firebase";
 import { clampGradeScore, normalizeStoredGradeScore } from "./grade-scale";
@@ -180,4 +181,13 @@ export async function saveStudentWeeklyReport(
     publishedAt: input.status === "published" ? serverTimestamp() : deleteField(),
   }, { merge: true });
   await batch.commit();
+}
+
+export async function deleteStudentWeeklyReport(report: StudentWeeklyReport) {
+  if (!firebase.functions) throw new Error("Firebase no está configurado para Reportes.");
+  const callable = httpsCallable<{ reportId: string }, { deleted: boolean }>(
+    firebase.functions,
+    "deleteStudentWeeklyReport",
+  );
+  return (await callable({ reportId: report.id })).data;
 }

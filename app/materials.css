@@ -58,6 +58,7 @@
 .material-viewer-layout > main, .material-viewer-layout > aside { min-height: 0; overflow-y: auto; }
 .material-viewer-layout > main { padding: 20px; }
 .material-viewer-layout > aside { padding: 17px; border-left: 1px solid var(--border); background: var(--surface); }
+.material-viewer-layout > aside > .danger-button { width: 100%; margin-top: 14px; }
 .material-pdf-frame, .material-video-player, .material-image-preview { width: 100%; min-height: 430px; border: 0; border-radius: 14px; background: #111; object-fit: contain; }
 .material-image-preview { display: block; max-height: 590px; background: var(--surface-soft); }
 .material-audio-player { display: grid; min-height: 220px; grid-template-columns: auto 1fr; align-items: center; gap: 20px; padding: 30px; border: 1px solid var(--border); border-radius: 16px; background: linear-gradient(135deg, var(--mint-soft), var(--surface)); }

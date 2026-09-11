@@ -36,6 +36,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { WorkshopTasks } from "@/components/workshop-tasks";
 import { friendlyFirebaseError } from "@/lib/firebase";
@@ -531,6 +532,7 @@ function WorkshopDetail({
 }) {
   const [query, setQuery] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resourceToDelete, setResourceToDelete] = useState<WorkshopResource | null>(null);
   const reading = workshop.kind === "reading";
   const filteredResources = workshop.resources.filter((resource) =>
     [resource.title, resource.description, resource.fileName]
@@ -546,7 +548,7 @@ function WorkshopDetail({
       if (
         event.key === "Escape" &&
         !document.querySelector(
-          ".workshop-modal-backdrop, .workshop-attachment-viewer-backdrop",
+          ".workshop-modal-backdrop, .workshop-attachment-viewer-backdrop, .delete-confirm-backdrop",
         )
       ) {
         onBack();
@@ -560,11 +562,11 @@ function WorkshopDetail({
   }, [onBack]);
 
   async function remove(resource: WorkshopResource) {
-    if (!window.confirm(`¿Eliminar “${resource.title}”?`)) return;
     setDeletingId(resource.id);
     try {
       await onDeleteResource(resource);
       toast.success("Recurso eliminado");
+      setResourceToDelete(null);
     } catch (error) {
       toast.error(errorMessage(error));
     } finally {
@@ -573,6 +575,7 @@ function WorkshopDetail({
   }
 
   return (
+    <>
     <motion.section
       className={`workshop-immersive-shell is-${workshop.kind}`}
       role="dialog"
@@ -742,7 +745,7 @@ function WorkshopDetail({
                         <button
                           className="is-danger"
                           disabled={deletingId === resource.id}
-                          onClick={() => void remove(resource)}
+                          onClick={() => setResourceToDelete(resource)}
                           aria-label="Eliminar recurso"
                         >
                           {deletingId === resource.id ? (
@@ -791,6 +794,16 @@ function WorkshopDetail({
         </div>
       </div>
     </motion.section>
+    <ConfirmDeleteDialog
+      open={Boolean(resourceToDelete)}
+      title={`¿Eliminar “${resourceToDelete?.title ?? "este archivo"}”?`}
+      description="Se eliminarán el archivo y su registro dentro del taller. Esta acción no se puede deshacer."
+      confirmLabel="Eliminar archivo"
+      busy={Boolean(deletingId)}
+      onCancel={() => setResourceToDelete(null)}
+      onConfirm={() => resourceToDelete && void remove(resourceToDelete)}
+    />
+    </>
   );
 }
 

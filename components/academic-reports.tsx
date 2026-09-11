@@ -10,9 +10,11 @@ import {
   FileText,
   Search,
   Send,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
   aggregateDailyGradesByWeek,
@@ -20,6 +22,7 @@ import {
   watchDailyGrades,
 } from "@/lib/grades-firebase";
 import {
+  deleteStudentWeeklyReport,
   saveStudentWeeklyReport,
   watchStudentWeeklyReports,
 } from "@/lib/reports-firebase";
@@ -91,11 +94,13 @@ function ReportEditor({
   grade,
   report,
   onSave,
+  onDelete,
 }: {
   student: ManagedAccount;
   grade?: WeeklyGradeRecord;
   report?: StudentWeeklyReport;
   onSave: (student: ManagedAccount, values: Pick<StudentWeeklyReport, "achievement" | "supportArea" | "nextStep" | "status">) => Promise<void>;
+  onDelete: (report: StudentWeeklyReport) => void;
 }) {
   const [achievement, setAchievement] = useState(report?.achievement ?? "");
   const [supportArea, setSupportArea] = useState(report?.supportArea ?? "");
@@ -123,11 +128,11 @@ function ReportEditor({
       <label className="is-support"><span><CircleHelp size={17} /> Área de acompañamiento</span><textarea rows={4} maxLength={600} placeholder="Explica dónde necesita apoyo y con qué evidencia…" value={supportArea} onChange={(event) => setSupportArea(event.target.value)} /><small>{supportArea.length}/600</small></label>
       <label className="is-next"><span><ArrowRight size={17} /> Próximo paso</span><textarea rows={4} maxLength={600} placeholder="Indica una acción breve, específica y alcanzable…" value={nextStep} onChange={(event) => setNextStep(event.target.value)} /><small>{nextStep.length}/600</small></label>
     </div>
-    <footer><span>Se guarda por alumno, materia y semana.</span><div><button type="button" disabled={Boolean(saving)} onClick={() => void submit("draft")}>{saving === "draft" ? "Guardando…" : "Guardar borrador"}</button><button type="button" className="is-primary" disabled={Boolean(saving)} onClick={() => void submit("published")}><Send size={15} /> {saving === "published" ? "Publicando…" : report?.status === "published" ? "Actualizar publicación" : "Publicar reporte"}</button></div></footer>
+    <footer><span>Se guarda por alumno, materia y semana.</span><div>{report && <button type="button" className="danger-button" disabled={Boolean(saving)} onClick={() => onDelete(report)}><Trash2 size={15} /> Eliminar</button>}<button type="button" disabled={Boolean(saving)} onClick={() => void submit("draft")}>{saving === "draft" ? "Guardando…" : "Guardar borrador"}</button><button type="button" className="is-primary" disabled={Boolean(saving)} onClick={() => void submit("published")}><Send size={15} /> {saving === "published" ? "Publicando…" : report?.status === "published" ? "Actualizar publicación" : "Publicar reporte"}</button></div></footer>
   </article>;
 }
 
-function PublishedReportCard({ report, grade }: { report: StudentWeeklyReport; grade?: WeeklyGradeRecord }) {
+function PublishedReportCard({ report, grade, onDelete }: { report: StudentWeeklyReport; grade?: WeeklyGradeRecord; onDelete?: (report: StudentWeeklyReport) => void }) {
   return <article className="published-report-card" id={`report-${report.id}`}>
     <header><div><span className={`report-status is-${report.status}`}>{report.status === "published" ? "Publicado" : "Borrador"}</span><h3>{report.studentName}</h3><p>{report.subject} · {report.weekLabel} · {report.termLabel}</p></div><FileText size={25} /></header>
     <WeeklyEvidence grade={grade} />
@@ -136,7 +141,7 @@ function PublishedReportCard({ report, grade }: { report: StudentWeeklyReport; g
       <section className="is-support"><CircleHelp size={19} /><div><strong>Área de acompañamiento</strong><p>{report.supportArea}</p></div></section>
       <section className="is-next"><ArrowRight size={19} /><div><strong>Próximo paso</strong><p>{report.nextStep}</p></div></section>
     </div>
-    <footer><span>{report.teacherName} · {groupLabel(report)}</span><span>Actualizado {new Intl.DateTimeFormat("es-MX", { dateStyle: "medium" }).format(new Date(report.updatedAt))}</span></footer>
+    <footer><span>{report.teacherName} · {groupLabel(report)}</span><span>Actualizado {new Intl.DateTimeFormat("es-MX", { dateStyle: "medium" }).format(new Date(report.updatedAt))}</span>{onDelete && <button type="button" className="danger-button" onClick={() => onDelete(report)}><Trash2 size={15} /> Eliminar reporte</button>}</footer>
   </article>;
 }
 
@@ -168,6 +173,8 @@ export function AcademicReportsPage({
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
+  const [reportToDelete, setReportToDelete] = useState<StudentWeeklyReport | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const openReportFromRoute = () => {
@@ -244,6 +251,20 @@ export function AcademicReportsPage({
     }
   }
 
+  async function removeReport() {
+    if (!reportToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteStudentWeeklyReport(reportToDelete);
+      toast.success(`Reporte de ${reportToDelete.studentName} eliminado`);
+      setReportToDelete(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos eliminar el reporte.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   const publishedCount = reports.filter((report) => report.weekId === week?.id && report.status === "published" && (activeSubject === "all" || subjectsMatch(report.subject, activeSubject))).length;
   return <section className="academic-reports-shell">
     <header className="academic-reports-hero"><div><span className="eyebrow">Seguimiento semanal</span><h2>Reportes con evidencia, alumno por alumno</h2><p>{profile.role === "teacher" ? "Consulta el desempeño de la semana y redacta los tres acuerdos de acompañamiento por materia." : "Consulta los reportes publicados y el contexto de calificaciones que los respalda."}</p></div><div className="academic-reports-cycle"><CalendarRange size={20} /><span><small>Ciclo en curso</small><strong>{academicConfig.schoolYearLabel}</strong></span></div></header>
@@ -259,9 +280,18 @@ export function AcademicReportsPage({
       <div className="report-editor-list">{!pagedStudents.length ? <div className="report-empty"><Search size={27} /><h3>No encontramos alumnos</h3><p>Revisa la materia seleccionada o ajusta la búsqueda.</p></div> : pagedStudents.map((student) => {
         const grade = weekSubjectGrades.find((item) => item.studentId === student.uid && item.teacherId === profile.uid);
         const report = reports.find((item) => item.weekId === week?.id && subjectsMatch(item.subject, activeSubject) && item.studentId === student.uid && item.teacherId === profile.uid);
-        return <div id={report ? `report-${report.id}` : undefined} key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`}><ReportEditor student={student} grade={grade} report={report} onSave={persist} /></div>;
+        return <div id={report ? `report-${report.id}` : undefined} key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`}><ReportEditor student={student} grade={grade} report={report} onSave={persist} onDelete={setReportToDelete} /></div>;
       })}</div>
-    ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} />)}</div>}
+    ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} onDelete={profile.role === "director" ? setReportToDelete : undefined} />)}</div>}
     <Pagination page={page} total={total} onChange={setPage} />
+    <ConfirmDeleteDialog
+      open={Boolean(reportToDelete)}
+      title={`¿Eliminar el reporte de ${reportToDelete?.studentName ?? "este alumno"}?`}
+      description={`Se eliminará el reporte de ${reportToDelete?.subject ?? "la materia"} para ${reportToDelete?.weekLabel ?? "esta semana"}. Las calificaciones originales no se borrarán. Esta acción no se puede deshacer.`}
+      confirmLabel="Eliminar reporte"
+      busy={deleting}
+      onCancel={() => setReportToDelete(null)}
+      onConfirm={() => void removeReport()}
+    />
   </section>;
 }

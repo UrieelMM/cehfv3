@@ -654,6 +654,17 @@ export async function createTaskAssignment(
   return reference.id;
 }
 
+export async function deleteTaskAssignment(task: TaskAssignment) {
+  if (!firebase.functions || !isFirebaseTaskAssignment(task)) {
+    throw new Error("Esta tarea no se puede eliminar porque no está sincronizada con Firebase.");
+  }
+  const callable = httpsCallable<{ firestorePath: string }, { deleted: boolean }>(
+    firebase.functions,
+    "deleteAcademicTask",
+  );
+  return (await callable({ firestorePath: task.firestorePath })).data;
+}
+
 export function watchTaskSubmissions(
   task: TaskAssignment,
   profile: UserProfile,

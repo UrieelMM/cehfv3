@@ -30,10 +30,12 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
   getLearningMaterialAttachmentUrl,
+  deleteLearningMaterial,
   isFirebaseLearningMaterial,
   markLearningMaterialViewed,
   watchLearningMaterialViews,
@@ -357,6 +359,8 @@ function MaterialViewerModal({
   const [loadingFiles, setLoadingFiles] = useState(material.attachments.length > 0);
   const [views, setViews] = useState<LearningMaterialView[]>([]);
   const [viewError, setViewError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const option = materialTypeMap[material.type] ?? materialTypeMap.other;
   const TypeIcon = option.icon;
 
@@ -413,7 +417,23 @@ function MaterialViewerModal({
     ? material.links.map((link) => videoEmbedUrl(link.url)).find(Boolean)
     : null;
 
+  async function removeMaterial() {
+    setDeleting(true);
+    setViewError("");
+    try {
+      await deleteLearningMaterial(material);
+      toast.success("Archivo eliminado");
+      setConfirmDelete(false);
+      onClose();
+    } catch (error) {
+      setViewError(friendlyFirebaseError(error));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
+    <>
     <motion.div className="material-viewer-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <motion.section className="material-viewer" initial={{ opacity: 0, y: 20, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.985 }} role="dialog" aria-modal="true" aria-labelledby="material-viewer-title">
         <header>
@@ -479,10 +499,25 @@ function MaterialViewerModal({
                 </div>
               </section>
             )}
+            {profile.role !== "student" && (
+              <button className="secondary-button danger-button" type="button" disabled={deleting} onClick={() => setConfirmDelete(true)}>
+                <Trash2 size={16} /> Eliminar archivo
+              </button>
+            )}
           </aside>
         </div>
       </motion.section>
     </motion.div>
+    <ConfirmDeleteDialog
+      open={confirmDelete}
+      title={`¿Eliminar “${material.title}”?`}
+      description="Se eliminarán el recurso, sus archivos adjuntos y el registro de lectura de los alumnos. Esta acción no se puede deshacer."
+      confirmLabel="Eliminar archivo"
+      busy={deleting}
+      onCancel={() => setConfirmDelete(false)}
+      onConfirm={() => void removeMaterial()}
+    />
+    </>
   );
 }
 
