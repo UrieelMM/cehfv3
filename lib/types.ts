@@ -490,6 +490,7 @@ export type TaskSubmission = {
 
 export type TaskHistoryEventType =
   | "created"
+  | "updated"
   | "published"
   | "scheduled"
   | "closed"

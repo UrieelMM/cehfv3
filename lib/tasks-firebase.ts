@@ -665,6 +665,27 @@ export async function deleteTaskAssignment(task: TaskAssignment) {
   return (await callable({ firestorePath: task.firestorePath })).data;
 }
 
+export async function updateTaskAssignment(
+  task: TaskAssignment,
+  input: Pick<TaskAssignment, "title" | "description" | "dueAt" | "links">,
+) {
+  if (!firebase.functions || !isFirebaseTaskAssignment(task)) {
+    throw new Error("Esta tarea no se puede editar porque no está sincronizada con Firebase.");
+  }
+  const callable = httpsCallable<
+    {
+      entityType: "task";
+      firestorePath: string;
+      title: string;
+      description: string;
+      dueAt: string;
+      links: TaskAssignment["links"];
+    },
+    { updated: boolean }
+  >(firebase.functions, "updateManagedContent");
+  return (await callable({ entityType: "task", firestorePath: task.firestorePath, ...input })).data;
+}
+
 export function watchTaskSubmissions(
   task: TaskAssignment,
   profile: UserProfile,

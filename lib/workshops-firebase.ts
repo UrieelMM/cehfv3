@@ -365,6 +365,18 @@ export async function deleteWorkshopResource(resource: WorkshopResource) {
   return (await callable({ workshopId: resource.workshopId, resourceId: resource.id })).data;
 }
 
+export async function updateWorkshopResource(
+  resource: WorkshopResource,
+  input: Pick<WorkshopResource, "title" | "description">,
+) {
+  if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
+  const callable = httpsCallable<
+    { entityType: "workshop_resource"; workshopId: string; resourceId: string } & typeof input,
+    { updated: boolean }
+  >(firebase.functions, "updateManagedContent");
+  return (await callable({ entityType: "workshop_resource", workshopId: resource.workshopId, resourceId: resource.id, ...input })).data;
+}
+
 export async function getWorkshopResourceUrl(resource: WorkshopResource) {
   if (!resource.storagePath) {
     throw new Error("Este recurso no tiene un archivo disponible.");
@@ -614,6 +626,18 @@ export async function deleteWorkshopTask(task: WorkshopTask) {
     { deleted: boolean }
   >(firebase.functions, "deleteWorkshopTask");
   return (await callable({ workshopId: task.workshopId, taskId: task.id })).data;
+}
+
+export async function updateWorkshopTask(
+  task: WorkshopTask,
+  input: Pick<WorkshopTask, "title" | "description" | "dueAt">,
+) {
+  if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
+  const callable = httpsCallable<
+    { entityType: "workshop_task"; workshopId: string; taskId: string } & typeof input,
+    { updated: boolean }
+  >(firebase.functions, "updateManagedContent");
+  return (await callable({ entityType: "workshop_task", workshopId: task.workshopId, taskId: task.id, ...input })).data;
 }
 
 export function watchWorkshopSubmissions(

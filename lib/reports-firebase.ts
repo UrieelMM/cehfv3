@@ -191,3 +191,15 @@ export async function deleteStudentWeeklyReport(report: StudentWeeklyReport) {
   );
   return (await callable({ reportId: report.id })).data;
 }
+
+export async function updateStudentWeeklyReport(
+  report: StudentWeeklyReport,
+  input: Pick<StudentWeeklyReport, "achievement" | "supportArea" | "nextStep" | "status">,
+) {
+  if (!firebase.functions) throw new Error("Firebase no está configurado para Reportes.");
+  const callable = httpsCallable<
+    { entityType: "report"; reportId: string } & typeof input,
+    { updated: boolean }
+  >(firebase.functions, "updateManagedContent");
+  return (await callable({ entityType: "report", reportId: report.id, ...input })).data;
+}

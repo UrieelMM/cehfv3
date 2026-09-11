@@ -20,6 +20,7 @@ import {
   LockKeyhole,
   MonitorSmartphone,
   Paperclip,
+  Pencil,
   Plus,
   Search,
   Settings2,
@@ -37,6 +38,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { WorkshopTasks } from "@/components/workshop-tasks";
 import { friendlyFirebaseError } from "@/lib/firebase";
@@ -45,6 +47,7 @@ import {
   ensureDefaultWorkshops,
   getWorkshopResourceUrl,
   updateWorkshopAccess,
+  updateWorkshopResource,
   uploadWorkshopResource,
   watchWorkshopResources,
   watchWorkshops,
@@ -533,6 +536,7 @@ function WorkshopDetail({
   const [query, setQuery] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resourceToDelete, setResourceToDelete] = useState<WorkshopResource | null>(null);
+  const [resourceToEdit, setResourceToEdit] = useState<WorkshopResource | null>(null);
   const reading = workshop.kind === "reading";
   const filteredResources = workshop.resources.filter((resource) =>
     [resource.title, resource.description, resource.fileName]
@@ -742,18 +746,12 @@ function WorkshopDetail({
                         <Download size={15} />
                       </button>
                       {canManage && (
-                        <button
-                          className="is-danger"
-                          disabled={deletingId === resource.id}
-                          onClick={() => setResourceToDelete(resource)}
-                          aria-label="Eliminar recurso"
-                        >
-                          {deletingId === resource.id ? (
-                            <LoaderCircle className="spin" size={15} />
-                          ) : (
-                            <Trash2 size={15} />
-                          )}
-                        </button>
+                        <>
+                          <button onClick={() => setResourceToEdit(resource)} aria-label="Editar recurso"><Pencil size={15} /></button>
+                          <button className="is-danger" disabled={deletingId === resource.id} onClick={() => setResourceToDelete(resource)} aria-label="Eliminar recurso">
+                            {deletingId === resource.id ? <LoaderCircle className="spin" size={15} /> : <Trash2 size={15} />}
+                          </button>
+                        </>
                       )}
                     </div>
                   </footer>
@@ -803,8 +801,34 @@ function WorkshopDetail({
       onCancel={() => setResourceToDelete(null)}
       onConfirm={() => resourceToDelete && void remove(resourceToDelete)}
     />
+    {resourceToEdit && <WorkshopResourceEditDialog resource={resourceToEdit} onCancel={() => setResourceToEdit(null)} />}
     </>
   );
+}
+
+function WorkshopResourceEditDialog({ resource, onCancel }: { resource: WorkshopResource; onCancel: () => void }) {
+  const [title, setTitle] = useState(resource.title);
+  const [description, setDescription] = useState(resource.description);
+  const [busy, setBusy] = useState(false);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await updateWorkshopResource(resource, { title: title.trim(), description: description.trim() });
+      toast.success("Recurso actualizado");
+      onCancel();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <ContentEditDialog open eyebrow="Recurso de taller" title="Editar recurso" description="Cambia el nombre o la descripción que ve el grupo." note="El archivo original y su historial permanecen intactos." busy={busy} onCancel={onCancel} onSubmit={save}>
+    <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
+    <label>Descripción<textarea value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} /></label>
+  </ContentEditDialog>;
 }
 
 function WorkshopAccessDialog({

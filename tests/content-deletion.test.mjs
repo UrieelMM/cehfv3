@@ -82,3 +82,26 @@ test("closed tasks remain visible but cannot receive new submissions", async () 
     /function canUploadTaskSubmission[\s\S]*?task\.status == "published"[\s\S]*?request\.time <= task\.dueAt[\s\S]*?hasActiveTaskExtension/,
   );
 });
+
+test("managed academic content exposes guarded edit flows", async () => {
+  const [functionsSource, tasks, reviews, reports, materials, workshops, workshopTasks] =
+    await Promise.all([
+      readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
+      readFile(new URL("components/tasks-workflow.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/reviews-page.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/academic-reports.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/materials-page.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
+    ]);
+
+  [tasks, reviews, reports, materials, workshops, workshopTasks].forEach((source) =>
+    assert.match(source, /ContentEditDialog/),
+  );
+  assert.match(functionsSource, /export const updateManagedContent = onCall/);
+  assert.match(functionsSource, /const actor = await requireMaterialStaff\(request\.auth\)/);
+  assert.match(functionsSource, /actor\.role === "teacher" && data\.createdBy !== actor\.uid/);
+  assert.match(functionsSource, /actor\.role === "teacher" && data\.teacherId !== actor\.uid/);
+  assert.match(functionsSource, /await requireManagedWorkshopRecord\(actor, workshopId\)/);
+  assert.match(functionsSource, /action: `\$\{entityType\}\.updated`/);
+});

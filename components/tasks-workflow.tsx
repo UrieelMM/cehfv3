@@ -20,6 +20,7 @@ import {
   LockKeyhole,
   MessageSquareText,
   Paperclip,
+  Pencil,
   Plus,
   Search,
   Send,
@@ -35,6 +36,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { TaskResourceViewer } from "@/components/task-resource-viewer";
 import { academicSubjectOptions, subjectsMatch } from "@/lib/academic-subjects";
 import {
@@ -49,6 +51,7 @@ import {
   publishTaskNow,
   sendTaskFeedback,
   submitTaskResponse,
+  updateTaskAssignment,
   watchSubmissionHistory,
   watchTaskExtension,
   watchTaskHistory,
@@ -799,6 +802,7 @@ export function TaskDetailModal({
   );
   const [busy, setBusy] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
   const eligibleStudents = useMemo(
     () =>
       accounts.filter(
@@ -1092,6 +1096,7 @@ export function TaskDetailModal({
               individualDueAt={individualDueAt}
               setIndividualDueAt={setIndividualDueAt}
               onOpenAttachment={openSubmissionAttachment}
+              onEdit={() => setEditing(true)}
               onDelete={() => setConfirmDelete(true)}
             />
           ) : (
@@ -1136,7 +1141,59 @@ export function TaskDetailModal({
       onCancel={() => setConfirmDelete(false)}
       onConfirm={() => void removeTask()}
     />
+    {editing && <TaskEditDialog
+      open={editing}
+      task={task}
+      onCancel={() => setEditing(false)}
+    />}
     </>
+  );
+}
+
+function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAssignment; onCancel: () => void }) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [dueAt, setDueAt] = useState(() => toLocalDateTime(new Date(task.dueAt)));
+  const [links, setLinks] = useState(task.links);
+  const [busy, setBusy] = useState(false);
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!title.trim() || !description.trim()) return;
+    setBusy(true);
+    try {
+      await updateTaskAssignment(task, {
+        title: title.trim(),
+        description: description.trim(),
+        dueAt: new Date(dueAt).toISOString(),
+        links: links.filter((link) => link.url.trim()).map((link) => ({ ...link, label: link.label.trim() || "Enlace", url: link.url.trim() })),
+      });
+      toast.success("Tarea actualizada");
+      onCancel();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos actualizar la tarea.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ContentEditDialog open={open} eyebrow="Tarea académica" title="Editar tarea" description="Corrige la información sin perder entregas ni historial." note="La materia, semana, grupo y archivos se conservan para proteger las entregas existentes." busy={busy} onCancel={onCancel} onSubmit={save}>
+      <label>Título<input value={title} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
+      <label>Descripción<textarea value={description} maxLength={4000} required onChange={(event) => setDescription(event.target.value)} /></label>
+      <label>Fecha límite<input type="datetime-local" value={dueAt} required onChange={(event) => setDueAt(event.target.value)} /></label>
+      <div>
+        <label>Enlaces de apoyo</label>
+        {links.map((link, index) => (
+          <div className="content-edit-link" key={link.id}>
+            <label>Nombre<input value={link.label} maxLength={100} onChange={(event) => setLinks((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /></label>
+            <label>URL<input type="url" value={link.url} onChange={(event) => setLinks((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} /></label>
+            <button type="button" className="plain-icon" onClick={() => setLinks((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Quitar enlace"><X size={17} /></button>
+          </div>
+        ))}
+        {links.length < 10 && <button type="button" className="secondary-button" onClick={() => setLinks((current) => [...current, { id: crypto.randomUUID(), label: "", url: "" }])}><Plus size={15} /> Agregar enlace</button>}
+      </div>
+    </ContentEditDialog>
   );
 }
 
@@ -1292,6 +1349,7 @@ function StaffTaskFlow({
   individualDueAt,
   setIndividualDueAt,
   onOpenAttachment,
+  onEdit,
   onDelete,
 }: {
   task: TaskAssignment;
@@ -1315,6 +1373,7 @@ function StaffTaskFlow({
   individualDueAt: string;
   setIndividualDueAt: (value: string) => void;
   onOpenAttachment: (attachment: TaskSubmission["attachments"][number]) => void;
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   const selectedExtensionStudentId = extensionStudentId || eligibleStudents[0]?.uid || "";
@@ -1340,6 +1399,9 @@ function StaffTaskFlow({
           </div>
         </div>
         <div className="task-control-actions">
+          <button className="secondary-button" disabled={Boolean(busy)} onClick={onEdit}>
+            <Pencil size={16} /> Editar tarea
+          </button>
           {task.status === "draft" || task.status === "scheduled" ? (
             <button
               className="primary-button"

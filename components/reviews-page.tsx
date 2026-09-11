@@ -20,6 +20,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   Paperclip,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
@@ -34,6 +35,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { toast } from "sonner";
 import { friendlyFirebaseError } from "@/lib/firebase";
@@ -44,6 +46,7 @@ import {
   saveWeeklyReviewProgress,
   submitWeeklyReview,
   updateWeeklyReviewStatus,
+  updateWeeklyReview,
   watchWeeklyReviewAttempts,
 } from "@/lib/reviews-firebase";
 import type {
@@ -822,6 +825,7 @@ function StaffReviewModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     return watchWeeklyReviewAttempts(
@@ -940,6 +944,7 @@ function StaffReviewModal({
             )}
             {error && <p className="review-inline-error">{error}</p>}
             <div className="review-status-actions">
+              <button className="secondary-button" disabled={busy} onClick={() => setEditing(true)}><Pencil size={15} /> Editar repaso</button>
               {review.status === "draft" && <button className="primary-button" disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar repaso</button>}
               {review.status === "published" && <button className="secondary-button" disabled={busy} onClick={() => void changeStatus("closed")}><LockKeyhole size={15} /> Cerrar repaso</button>}
               {review.status === "closed" && <button className="primary-button" disabled={busy} onClick={() => void changeStatus("published")}><RotateCcw size={15} /> Reabrir repaso</button>}
@@ -958,7 +963,41 @@ function StaffReviewModal({
       onCancel={() => setConfirmDelete(false)}
       onConfirm={() => void removeReview()}
     />
+    {editing && <ReviewEditDialog review={review} open onCancel={() => setEditing(false)} />}
     </>
+  );
+}
+
+function ReviewEditDialog({ review, open, onCancel }: { review: WeeklyReview; open: boolean; onCancel: () => void }) {
+  const [title, setTitle] = useState(review.title);
+  const [description, setDescription] = useState(review.description);
+  const [duration, setDuration] = useState(review.duration);
+  const [maxAttempts, setMaxAttempts] = useState(review.maxAttempts);
+  const [busy, setBusy] = useState(false);
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await updateWeeklyReview(review, { title: title.trim(), description: description.trim(), duration, maxAttempts });
+      toast.success("Repaso actualizado");
+      onCancel();
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ContentEditDialog open={open} eyebrow="Repaso semanal" title="Editar repaso" description="Ajusta la presentación y condiciones del repaso." note="Los reactivos, respuestas correctas, audiencia y archivos se conservan para no invalidar intentos existentes." busy={busy} onCancel={onCancel} onSubmit={save}>
+      <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
+      <label>Descripción<textarea value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} /></label>
+      <div className="content-edit-grid">
+        <label>Duración (minutos)<input type="number" min={3} max={180} value={duration} required onChange={(event) => setDuration(Number(event.target.value))} /></label>
+        <label>Intentos permitidos<input type="number" min={0} max={20} value={maxAttempts} required onChange={(event) => setMaxAttempts(Number(event.target.value))} /><small>0 significa intentos ilimitados.</small></label>
+      </div>
+    </ContentEditDialog>
   );
 }
 

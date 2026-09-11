@@ -321,6 +321,20 @@ export async function deleteLearningMaterial(material: LearningMaterial) {
   return (await callable({ materialId: material.id })).data;
 }
 
+export async function updateLearningMaterial(
+  material: LearningMaterial,
+  input: Pick<LearningMaterial, "title" | "description" | "links" | "required">,
+) {
+  if (!firebase.functions || !isFirebaseLearningMaterial(material)) {
+    throw new Error("Este recurso no se puede editar porque no está sincronizado con Firebase.");
+  }
+  const callable = httpsCallable<
+    { entityType: "material"; materialId: string } & typeof input,
+    { updated: boolean }
+  >(firebase.functions, "updateManagedContent");
+  return (await callable({ entityType: "material", materialId: material.id, ...input })).data;
+}
+
 export async function markLearningMaterialViewed(
   material: LearningMaterial,
   profile: UserProfile,

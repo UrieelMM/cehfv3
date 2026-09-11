@@ -467,6 +467,20 @@ export async function deleteWeeklyReview(review: WeeklyReview) {
   return (await callable({ reviewId: review.id })).data;
 }
 
+export async function updateWeeklyReview(
+  review: WeeklyReview,
+  input: Pick<WeeklyReview, "title" | "description" | "duration" | "maxAttempts">,
+) {
+  if (!firebase.functions || !isFirebaseWeeklyReview(review)) {
+    throw new Error("Este repaso no se puede editar porque no está sincronizado con Firebase.");
+  }
+  const callable = httpsCallable<
+    { entityType: "review"; reviewId: string } & typeof input,
+    { updated: boolean }
+  >(firebase.functions, "updateManagedContent");
+  return (await callable({ entityType: "review", reviewId: review.id, ...input })).data;
+}
+
 export async function getWeeklyReviewAttachmentUrl(
   attachment: WeeklyReviewAttachment,
 ) {

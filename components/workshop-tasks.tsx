@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   MessageSquareText,
   Paperclip,
+  Pencil,
   Plus,
   Send,
   ShieldCheck,
@@ -26,6 +27,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
@@ -35,6 +37,7 @@ import {
   saveWorkshopFeedback,
   setWorkshopTaskStatus,
   submitWorkshopTask,
+  updateWorkshopTask,
   watchWorkshopSubmissions,
   watchWorkshopTasks,
   type WorkshopTaskCreateInput,
@@ -102,6 +105,7 @@ export function WorkshopTasks({
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<WorkshopTask | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<WorkshopTask | null>(null);
+  const [taskToEdit, setTaskToEdit] = useState<WorkshopTask | null>(null);
   const [deleting, setDeleting] = useState(false);
   const canCreate =
     role === "director" || workshop.managerIds.includes(profile.uid);
@@ -261,7 +265,9 @@ export function WorkshopTasks({
               role={role}
               accounts={accounts}
               firebaseReady={firebaseReady}
+              canManage={role === "director" || (workshop.managerIds.includes(profile.uid) && selectedTask.createdBy === profile.uid)}
               onStatusChange={changeStatus}
+              onEdit={() => setTaskToEdit(selectedTask)}
               onDelete={() => setTaskToDelete(selectedTask)}
               onClose={closeTask}
             />
@@ -278,8 +284,39 @@ export function WorkshopTasks({
         onCancel={() => setTaskToDelete(null)}
         onConfirm={() => void removeTask()}
       />
+      {taskToEdit && <WorkshopTaskEditDialog task={taskToEdit} onCancel={() => setTaskToEdit(null)} />}
     </section>
   );
+}
+
+function WorkshopTaskEditDialog({ task, onCancel }: { task: WorkshopTask; onCancel: () => void }) {
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description);
+  const [dueAt, setDueAt] = useState(() => {
+    const date = new Date(task.dueAt);
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+  });
+  const [busy, setBusy] = useState(false);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await updateWorkshopTask(task, { title: title.trim(), description: description.trim(), dueAt: new Date(dueAt).toISOString() });
+      toast.success("Actividad actualizada");
+      onCancel();
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <ContentEditDialog open eyebrow="Actividad de taller" title="Editar actividad" description="Corrige las indicaciones o la fecha de entrega." note="El taller, alumnos asignados, archivos y entregas existentes permanecen vinculados." busy={busy} onCancel={onCancel} onSubmit={save}>
+    <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
+    <label>Indicaciones<textarea value={description} minLength={3} maxLength={2000} required onChange={(event) => setDescription(event.target.value)} /></label>
+    <label>Fecha límite<input type="datetime-local" value={dueAt} required onChange={(event) => setDueAt(event.target.value)} /></label>
+  </ContentEditDialog>;
 }
 
 function WorkshopTaskCreateDialog({
@@ -396,7 +433,9 @@ function WorkshopTaskDetailDialog({
   role,
   accounts,
   firebaseReady,
+  canManage,
   onStatusChange,
+  onEdit,
   onDelete,
   onClose,
 }: {
@@ -405,7 +444,9 @@ function WorkshopTaskDetailDialog({
   role: Role;
   accounts: ManagedAccount[];
   firebaseReady: boolean;
+  canManage: boolean;
   onStatusChange: (task: WorkshopTask, status: WorkshopTask["status"]) => Promise<void>;
+  onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
@@ -419,7 +460,7 @@ function WorkshopTaskDetailDialog({
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const previewRequest = useRef(0);
-  const staff = role !== "student";
+  const staff = canManage;
   const selectedSubmission =
     submissions.find((item) => item.id === selectedSubmissionId) ?? submissions[0];
   const mySubmission = role === "student" ? submissions[0] : undefined;
@@ -559,7 +600,7 @@ function WorkshopTaskDetailDialog({
           <aside>
             <div><span>Asignación</span><strong>{task.audienceStudentIds.length} alumnos</strong></div>
             <div><span>Archivos de apoyo</span><strong>{task.attachments.length}</strong></div>
-            {staff && <div className="workshop-task-control"><span>Estado del trabajo</span>{task.status === "draft" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar</button>}{task.status === "published" && <button disabled={busy} onClick={() => void changeStatus("closed")}><Clock3 size={15} /> Cerrar entregas</button>}{task.status === "closed" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Reabrir</button>}<button className="danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Eliminar actividad</button></div>}
+            {staff && <div className="workshop-task-control"><span>Estado del trabajo</span><button disabled={busy} onClick={onEdit}><Pencil size={15} /> Editar actividad</button>{task.status === "draft" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar</button>}{task.status === "published" && <button disabled={busy} onClick={() => void changeStatus("closed")}><Clock3 size={15} /> Cerrar entregas</button>}{task.status === "closed" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Reabrir</button>}<button className="danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Eliminar actividad</button></div>}
           </aside>
         </div>
         {previewAttachment && (

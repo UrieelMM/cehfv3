@@ -1506,6 +1506,190 @@ export const deleteWorkshopTask = onCall(async (request) => {
   return { deleted: true };
 });
 
+async function writeContentEditAudit(
+  actor: MaterialStaff,
+  entityType: string,
+  entityId: string,
+  title: string,
+) {
+  await db.collection("auditEvents").add({
+    entityType,
+    entityId,
+    institutionId: actor.institutionId,
+    action: `${entityType}.updated`,
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    after: { title },
+    createdAt: Timestamp.now(),
+  });
+}
+
+function editableDate(value: unknown, field: string) {
+  const date = new Date(String(value ?? ""));
+  if (!Number.isFinite(date.getTime())) {
+    throw new HttpsError("invalid-argument", `${field} no es válida.`);
+  }
+  return Timestamp.fromDate(date);
+}
+
+/**
+ * Updates the safe, non-structural fields of managed academic content.
+ * Structural fields (subject, week, audience and attachments) intentionally remain
+ * immutable so existing submissions, attempts and Storage objects keep their links.
+ */
+export const updateManagedContent = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const entityType = String(input.entityType ?? "");
+  let reference: DocumentReference;
+  let snapshot;
+  let data: DocumentData | undefined;
+  let updates: DocumentData;
+  let entityId: string;
+  let title: string;
+
+  if (entityType === "task") {
+    const firestorePath = String(input.firestorePath ?? "").trim();
+    const match = firestorePath.match(
+      /^institutions\/([^/]+)\/ciclosEscolares\/([^/]+)\/bimestres\/([^/]+)\/semanas\/([^/]+)\/materias\/([^/]+)\/tareas\/([^/]+)$/,
+    );
+    if (!match || match[1] !== actor.institutionId) {
+      throw new HttpsError("invalid-argument", "La ruta de la tarea no es válida.");
+    }
+    match.slice(1).forEach((segment) => deletionId(segment, "la tarea"));
+    reference = db.doc(firestorePath);
+    snapshot = await reference.get();
+    data = snapshot.data();
+    if (!snapshot.exists || !data || data.institutionId !== actor.institutionId ||
+      (actor.role === "teacher" && data.createdBy !== actor.uid)) {
+      throw new HttpsError("permission-denied", "No puedes editar esta tarea.");
+    }
+    entityId = snapshot.id;
+    title = materialText(input.title, "El título", 3, 140);
+    updates = {
+      title,
+      description: materialText(input.description, "La descripción", 3, 4_000),
+      dueAt: editableDate(input.dueAt, "La fecha límite"),
+      links: materialLinks(input.links),
+      updatedAt: Timestamp.now(),
+    };
+  } else if (entityType === "review") {
+    entityId = materialId(input.reviewId);
+    reference = db.doc(`weeklyReviews/${entityId}`);
+    snapshot = await reference.get();
+    data = snapshot.data();
+    if (!snapshot.exists || !data || data.institutionId !== actor.institutionId || !actorCanManageRecord(actor, data)) {
+      throw new HttpsError("permission-denied", "No puedes editar este repaso.");
+    }
+    const duration = Math.round(Number(input.duration));
+    const maxAttempts = Math.round(Number(input.maxAttempts));
+    if (!Number.isFinite(duration) || duration < 3 || duration > 180 ||
+      !Number.isFinite(maxAttempts) || maxAttempts < 0 || maxAttempts > 20) {
+      throw new HttpsError("invalid-argument", "La duración o el número de intentos no es válido.");
+    }
+    title = materialText(input.title, "El título", 3, 140);
+    updates = {
+      title,
+      description: optionalMaterialText(input.description, "La descripción", 2_000),
+      duration,
+      maxAttempts,
+      updatedAt: Timestamp.now(),
+    };
+  } else if (entityType === "material") {
+    entityId = materialId(input.materialId);
+    reference = db.doc(`institutions/${actor.institutionId}/materials/${entityId}`);
+    snapshot = await reference.get();
+    data = snapshot.data();
+    if (!snapshot.exists || !data || data.institutionId !== actor.institutionId || !actorCanManageRecord(actor, data)) {
+      throw new HttpsError("permission-denied", "No puedes editar este recurso.");
+    }
+    const links = materialLinks(input.links);
+    if (!links.length && (!Array.isArray(data.attachments) || !data.attachments.length)) {
+      throw new HttpsError("invalid-argument", "El recurso debe conservar al menos un archivo o enlace.");
+    }
+    title = materialText(input.title, "El título", 3, 140);
+    updates = {
+      title,
+      description: optionalMaterialText(input.description, "La descripción", 2_000),
+      links,
+      required: Boolean(input.required),
+      updatedAt: Timestamp.now(),
+    };
+  } else if (entityType === "report") {
+    entityId = materialId(input.reportId);
+    reference = db.doc(`institutions/${actor.institutionId}/studentWeeklyReports/${entityId}`);
+    snapshot = await reference.get();
+    data = snapshot.data();
+    if (!snapshot.exists || !data || data.institutionId !== actor.institutionId ||
+      (actor.role === "teacher" && data.teacherId !== actor.uid)) {
+      throw new HttpsError("permission-denied", "No puedes editar este reporte.");
+    }
+    const status = input.status === "published" ? "published" : "draft";
+    title = `${String(data.studentName ?? "Alumno")} · ${String(data.subject ?? "Materia")}`;
+    updates = {
+      achievement: materialText(input.achievement, "El logro", 3, 600),
+      supportArea: materialText(input.supportArea, "El área de acompañamiento", 3, 600),
+      nextStep: materialText(input.nextStep, "El próximo paso", 3, 600),
+      status,
+      updatedAt: Timestamp.now(),
+      ...(status === "published"
+        ? { publishedAt: Timestamp.now() }
+        : { publishedAt: FieldValue.delete() }),
+    };
+  } else if (entityType === "workshop_resource") {
+    const workshopId = deletionId(input.workshopId, "taller");
+    entityId = deletionId(input.resourceId, "recurso");
+    await requireManagedWorkshopRecord(actor, workshopId);
+    reference = db.doc(`institutions/${actor.institutionId}/workshops/${workshopId}/resources/${entityId}`);
+    snapshot = await reference.get();
+    data = snapshot.data();
+    if (!snapshot.exists || !data || data.institutionId !== actor.institutionId || data.workshopId !== workshopId) {
+      throw new HttpsError("not-found", "El archivo del taller ya no existe.");
+    }
+    title = materialText(input.title, "El título", 3, 140);
+    updates = {
+      title,
+      description: optionalMaterialText(input.description, "La descripción", 1_000),
+      updatedAt: Timestamp.now(),
+    };
+  } else if (entityType === "workshop_task") {
+    const workshopId = deletionId(input.workshopId, "taller");
+    entityId = deletionId(input.taskId, "actividad");
+    await requireManagedWorkshopRecord(actor, workshopId);
+    reference = db.doc(`institutions/${actor.institutionId}/workshops/${workshopId}/tasks/${entityId}`);
+    snapshot = await reference.get();
+    data = snapshot.data();
+    if (!snapshot.exists || !data || data.institutionId !== actor.institutionId || data.workshopId !== workshopId ||
+      (actor.role === "teacher" && data.createdBy !== actor.uid)) {
+      throw new HttpsError("permission-denied", "No puedes editar esta actividad del taller.");
+    }
+    title = materialText(input.title, "El título", 3, 140);
+    updates = {
+      title,
+      description: materialText(input.description, "La descripción", 3, 2_000),
+      dueAt: editableDate(input.dueAt, "La fecha límite"),
+      updatedAt: Timestamp.now(),
+    };
+  } else {
+    throw new HttpsError("invalid-argument", "El tipo de contenido no es válido.");
+  }
+
+  await reference.update(updates);
+  if (entityType === "task") {
+    await reference.collection("historial").add({
+      type: "updated",
+      authorId: actor.uid,
+      authorName: actor.name,
+      authorRole: actor.role,
+      message: "Actualizó la información de la actividad.",
+      createdAt: Timestamp.now(),
+    });
+  }
+  await writeContentEditAudit(actor, entityType, entityId, title);
+  return { updated: true };
+});
+
 function materialText(
   value: unknown,
   field: string,

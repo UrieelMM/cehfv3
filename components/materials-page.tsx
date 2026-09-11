@@ -16,6 +16,7 @@ import {
   Link2,
   LoaderCircle,
   Paperclip,
+  Pencil,
   Play,
   Plus,
   Search,
@@ -31,6 +32,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
@@ -38,6 +40,7 @@ import {
   deleteLearningMaterial,
   isFirebaseLearningMaterial,
   markLearningMaterialViewed,
+  updateLearningMaterial,
   watchLearningMaterialViews,
 } from "@/lib/materials-firebase";
 import type {
@@ -361,6 +364,7 @@ function MaterialViewerModal({
   const [viewError, setViewError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
   const option = materialTypeMap[material.type] ?? materialTypeMap.other;
   const TypeIcon = option.icon;
 
@@ -500,9 +504,10 @@ function MaterialViewerModal({
               </section>
             )}
             {profile.role !== "student" && (
-              <button className="secondary-button danger-button" type="button" disabled={deleting} onClick={() => setConfirmDelete(true)}>
-                <Trash2 size={16} /> Eliminar archivo
-              </button>
+              <div className="material-staff-actions">
+                <button className="secondary-button" type="button" disabled={deleting} onClick={() => setEditing(true)}><Pencil size={16} /> Editar recurso</button>
+                <button className="secondary-button danger-button" type="button" disabled={deleting} onClick={() => setConfirmDelete(true)}><Trash2 size={16} /> Eliminar archivo</button>
+              </div>
             )}
           </aside>
         </div>
@@ -517,7 +522,52 @@ function MaterialViewerModal({
       onCancel={() => setConfirmDelete(false)}
       onConfirm={() => void removeMaterial()}
     />
+    {editing && <MaterialEditDialog material={material} open onCancel={() => setEditing(false)} />}
     </>
+  );
+}
+
+function MaterialEditDialog({ material, open, onCancel }: { material: LearningMaterial; open: boolean; onCancel: () => void }) {
+  const [title, setTitle] = useState(material.title);
+  const [description, setDescription] = useState(material.description);
+  const [required, setRequired] = useState(material.required);
+  const [links, setLinks] = useState(material.links);
+  const [busy, setBusy] = useState(false);
+
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      await updateLearningMaterial(material, {
+        title: title.trim(),
+        description: description.trim(),
+        required,
+        links: links.filter((link) => link.url.trim()).map((link) => ({ ...link, label: link.label.trim() || "Enlace", url: link.url.trim() })),
+      });
+      toast.success("Recurso actualizado");
+      onCancel();
+    } catch (error) {
+      toast.error(friendlyFirebaseError(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ContentEditDialog open={open} eyebrow="Biblioteca semanal" title="Editar recurso" description="Actualiza el nombre, descripción y enlaces visibles para los alumnos." note="El tipo, materia, semana, grupos y archivos cargados permanecen vinculados al mismo recurso." busy={busy} onCancel={onCancel} onSubmit={save}>
+      <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
+      <label>Descripción<textarea value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} /></label>
+      <label className="content-edit-check"><input type="checkbox" checked={required} onChange={(event) => setRequired(event.target.checked)} /> Marcar como lectura obligatoria</label>
+      <div>
+        <label>Enlaces</label>
+        {links.map((link, index) => <div className="content-edit-link" key={link.id}>
+          <label>Nombre<input value={link.label} maxLength={100} onChange={(event) => setLinks((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /></label>
+          <label>URL<input type="url" value={link.url} onChange={(event) => setLinks((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} /></label>
+          <button type="button" className="plain-icon" onClick={() => setLinks((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label="Quitar enlace"><X size={17} /></button>
+        </div>)}
+        {links.length < 10 && <button type="button" className="secondary-button" onClick={() => setLinks((current) => [...current, { id: crypto.randomUUID(), label: "", url: "" }])}><Plus size={15} /> Agregar enlace</button>}
+      </div>
+    </ContentEditDialog>
   );
 }
 
