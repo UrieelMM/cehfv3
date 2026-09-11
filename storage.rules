@@ -287,13 +287,12 @@ service firebase.storage {
         && request.auth.uid == studentId
         && profile().role == "student"
         && task.targetGroup == profile().grade + " " + profile().group
+        && task.status == "published"
         && (
-          (task.status == "published" && request.time <= task.dueAt) || (
-            task.status in ["published", "closed"]
-            && hasActiveTaskExtension(
-              institutionId, schoolYearId, termId, weekId, subjectId,
-              taskId, studentId
-            )
+          request.time <= task.dueAt
+          || hasActiveTaskExtension(
+            institutionId, schoolYearId, termId, weekId, subjectId,
+            taskId, studentId
           )
         );
     }

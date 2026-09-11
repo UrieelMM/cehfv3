@@ -755,11 +755,8 @@ export function isTaskSubmissionOpen(
 ) {
   const now = Date.now();
   const extensionActive = extension && new Date(extension.dueAt).getTime() >= now;
-  if (task.status === "published" && new Date(task.dueAt).getTime() >= now) {
-    return true;
-  }
-  return Boolean(
-    extensionActive && ["published", "closed"].includes(task.status),
+  return task.status === "published" && (
+    new Date(task.dueAt).getTime() >= now || Boolean(extensionActive)
   );
 }
 

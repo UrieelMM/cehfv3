@@ -1409,7 +1409,8 @@ export const deleteAcademicTask = onCall(async (request) => {
   const reference = db.doc(firestorePath);
   const snapshot = await reference.get();
   const task = snapshot.data();
-  if (!snapshot.exists || !task || task.institutionId !== actor.institutionId || !actorCanManageRecord(actor, task)) {
+  const canDeleteTask = actor.role === "director" || task?.createdBy === actor.uid;
+  if (!snapshot.exists || !task || task.institutionId !== actor.institutionId || !canDeleteTask) {
     throw new HttpsError("permission-denied", "No puedes eliminar esta tarea.");
   }
   await deleteContentRecord({

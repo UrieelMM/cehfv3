@@ -1151,14 +1151,10 @@ service cloud.firestore {
           return request.auth.uid == studentId
             && taskBelongsToInstitution(task)
             && isAssignedStudent(task)
+            && task.status == "published"
             && (
-              (
-                task.status == "published"
-                && request.time <= task.dueAt
-              ) || (
-                task.status in ["published", "closed"]
-                && hasActiveExtension(studentId)
-              )
+              request.time <= task.dueAt
+              || hasActiveExtension(studentId)
             );
         }
 

@@ -49,10 +49,36 @@ test("server deletion validates permissions and removes dependent data", async (
   assert.match(functionsSource, /db\.recursiveDelete\(reference\)/);
   assert.match(functionsSource, /deleteFiles\(\{ prefix: storagePrefix, force: true \}\)/);
   assert.match(functionsSource, /deleteRelatedNotifications/);
+  assert.match(
+    functionsSource,
+    /canDeleteTask = actor\.role === "director" \|\| task\?\.createdBy === actor\.uid/,
+  );
   assert.match(tasks, /"deleteAcademicTask"/);
   assert.match(reviews, /"deleteWeeklyReview"/);
   assert.match(reports, /"deleteStudentWeeklyReport"/);
   assert.match(materials, /"deleteLearningMaterial"/);
   assert.match(workshops, /"deleteWorkshopResource"/);
   assert.match(workshops, /"deleteWorkshopTask"/);
+});
+
+test("closed tasks remain visible but cannot receive new submissions", async () => {
+  const [tasks, firestoreRules, storageRules] = await Promise.all([
+    readFile(new URL("lib/tasks-firebase.ts", projectRoot), "utf8"),
+    readFile(new URL("firestore.rules", projectRoot), "utf8"),
+    readFile(new URL("storage.rules", projectRoot), "utf8"),
+  ]);
+
+  assert.match(tasks, /where\("status", "in", \["published", "closed"\]\)/);
+  assert.match(
+    tasks,
+    /return task\.status === "published" && \([\s\S]*?Boolean\(extensionActive\)[\s\S]*?\);/,
+  );
+  assert.match(
+    firestoreRules,
+    /function canStudentSubmit\(studentId\)[\s\S]*?task\.status == "published"[\s\S]*?request\.time <= task\.dueAt[\s\S]*?hasActiveExtension\(studentId\)/,
+  );
+  assert.match(
+    storageRules,
+    /function canUploadTaskSubmission[\s\S]*?task\.status == "published"[\s\S]*?request\.time <= task\.dueAt[\s\S]*?hasActiveTaskExtension/,
+  );
 });
