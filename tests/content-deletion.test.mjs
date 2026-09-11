@@ -84,7 +84,7 @@ test("closed tasks remain visible but cannot receive new submissions", async () 
 });
 
 test("managed academic content exposes guarded edit flows", async () => {
-  const [functionsSource, tasks, reviews, reports, materials, workshops, workshopTasks] =
+  const [functionsSource, tasks, reviews, reports, materials, workshops, workshopTasks, editDialog, styles] =
     await Promise.all([
       readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
       readFile(new URL("components/tasks-workflow.tsx", projectRoot), "utf8"),
@@ -93,6 +93,8 @@ test("managed academic content exposes guarded edit flows", async () => {
       readFile(new URL("components/materials-page.tsx", projectRoot), "utf8"),
       readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
       readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
+      readFile(new URL("components/content-edit-dialog.tsx", projectRoot), "utf8"),
+      readFile(new URL("app/globals.css", projectRoot), "utf8"),
     ]);
 
   [tasks, reviews, reports, materials, workshops, workshopTasks].forEach((source) =>
@@ -104,4 +106,7 @@ test("managed academic content exposes guarded edit flows", async () => {
   assert.match(functionsSource, /actor\.role === "teacher" && data\.teacherId !== actor\.uid/);
   assert.match(functionsSource, /await requireManagedWorkshopRecord\(actor, workshopId\)/);
   assert.match(functionsSource, /action: `\$\{entityType\}\.updated`/);
+  assert.match(editDialog, /createPortal\(/);
+  assert.match(editDialog, /document\.body/);
+  assert.match(styles, /\.content-edit-backdrop\s*\{[\s\S]*?z-index:\s*540/);
 });

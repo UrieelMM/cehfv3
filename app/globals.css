@@ -54,7 +54,7 @@
 .content-edit-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 540;
   display: grid;
   place-items: center;
   padding: 24px;

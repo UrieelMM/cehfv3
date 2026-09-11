@@ -3,6 +3,7 @@
 import { Pencil, Save, ShieldCheck, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export function ContentEditDialog({
   open,
@@ -34,7 +35,9 @@ export function ContentEditDialog({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [busy, onCancel, open]);
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -79,6 +82,7 @@ export function ContentEditDialog({
           </motion.form>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
