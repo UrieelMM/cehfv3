@@ -78,6 +78,12 @@ service cloud.firestore {
             data.role == "student"
             && (
               (
+                data.schoolLevel == "preschool"
+                && data.grade in ["1.º", "2.º", "3.º"]
+                && data.subjects.hasOnly(primaryLower)
+              )
+              ||
+              (
                 data.schoolLevel == "primary"
                 && data.grade in ["1.º", "2.º", "3.º"]
                 && data.subjects.hasOnly(primaryLower)
@@ -507,7 +513,20 @@ service cloud.firestore {
 
       match /workshops/{workshopId} {
         function validWorkshopAccess(data) {
-          return data.studentIds is list
+          return (
+              !data.keys().hasAny(["zoomUrl"])
+              || (
+                data.zoomUrl is string
+                && data.zoomUrl.size() <= 2048
+                && (
+                  data.zoomUrl == ""
+                  || data.zoomUrl.matches(
+                    "^https://([a-z0-9-]+\\.)*zoom\\.us(/.*)?$"
+                  )
+                )
+              )
+            )
+            && data.studentIds is list
             && data.teacherIds is list
             && data.managerIds is list
             && data.teacherStudentIds is map

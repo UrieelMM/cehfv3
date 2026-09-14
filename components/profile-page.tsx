@@ -268,7 +268,12 @@ export function ProfilePage(props: ProfilePageProps) {
     profile.role === "student" && profile.schoolLevel
       ? {
           label: "Nivel",
-          value: profile.schoolLevel === "secondary" ? "Secundaria" : "Primaria",
+          value:
+            profile.schoolLevel === "preschool"
+              ? "Preescolar"
+              : profile.schoolLevel === "secondary"
+                ? "Secundaria"
+                : "Primaria",
         }
       : null,
     profile.role === "student" && (profile.grade || profile.group)

@@ -680,6 +680,16 @@ function WorkshopDetail({
           </div>
         </div>
         <div className="workshop-detail-actions">
+          {workshop.zoomUrl && (
+            <a
+              className="workshop-zoom-button"
+              href={workshop.zoomUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Video size={18} /> Entrar a Zoom
+            </a>
+          )}
           {canManage && (
             <button className="workshop-upload-button" onClick={onUpload}>
               <UploadCloud size={18} /> Subir recurso
@@ -848,6 +858,7 @@ function WorkshopAccessDialog({
   const [teacherStudentIds, setTeacherStudentIds] = useState(
     workshop.teacherStudentIds ?? {},
   );
+  const [zoomUrl, setZoomUrl] = useState(workshop.zoomUrl);
   const [rosterTeacherId, setRosterTeacherId] = useState<string | null>(null);
   const [tab, setTab] = useState<"students" | "teachers">("students");
   const [query, setQuery] = useState("");
@@ -938,6 +949,7 @@ function WorkshopAccessDialog({
     setSaving(true);
     try {
       await onSave(workshop, {
+        zoomUrl,
         studentIds,
         teacherIds,
         managerIds,
@@ -989,6 +1001,17 @@ function WorkshopAccessDialog({
           <span><strong>{teacherIds.length}</strong> maestros</span>
           <span><strong>{managerIds.length}</strong> administradores</span>
         </div>
+
+        <label className="workshop-zoom-field">
+          <span><Video size={16} /> Enlace de Zoom</span>
+          <input
+            type="url"
+            value={zoomUrl}
+            onChange={(event) => setZoomUrl(event.target.value)}
+            placeholder="https://zoom.us/j/…"
+          />
+          <small>Opcional. Será visible para las personas con acceso al taller.</small>
+        </label>
 
         <div className="workshop-access-toolbar">
           <div className="workshop-access-tabs" role="tablist">

@@ -38,6 +38,7 @@ import {
 import type { ManagedAccount, Role, SchoolLevel } from "@/lib/types";
 
 const schoolLevelLabels: Record<SchoolLevel, string> = {
+  preschool: "Preescolar",
   primary: "Primaria",
   secondary: "Secundaria",
 };
@@ -513,7 +514,7 @@ function AccountEditor({
             <div className="registration-section-heading"><span>02</span><div><strong>Asignación académica</strong><small>Materias{account.role === "student" ? ", grupo y acompañamiento" : " del maestro"}</small></div></div>
             {account.role === "student" && (
               <div className="registration-grade-grid account-editor-assignment">
-                <label>Nivel<select value={schoolLevel} onChange={(event) => { const level = event.target.value as SchoolLevel; selectStudentGrade(level, gradesBySchoolLevel[level][0]); }}><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
+                <label>Nivel<select value={schoolLevel} onChange={(event) => { const level = event.target.value as SchoolLevel; selectStudentGrade(level, gradesBySchoolLevel[level][0]); }}><option value="preschool">Preescolar</option><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
                 <label>Grado<select value={grade} onChange={(event) => selectStudentGrade(schoolLevel, event.target.value)}>{gradesBySchoolLevel[schoolLevel].map((item) => <option key={item}>{item}</option>)}</select></label>
                 <label>Grupo<select value={group} onChange={(event) => setGroup(event.target.value)}>{["A", "B", "C"].map((item) => <option key={item}>{item}</option>)}</select></label>
               </div>

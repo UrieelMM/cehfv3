@@ -629,7 +629,8 @@
   gap: 10px;
 }
 
-.workshop-detail-actions button {
+.workshop-detail-actions button,
+.workshop-detail-actions a {
   display: flex;
   min-height: 48px;
   align-items: center;
@@ -637,6 +638,13 @@
   gap: 8px;
   border-radius: 13px;
   font-weight: 820;
+  text-decoration: none;
+}
+
+.workshop-zoom-button {
+  border: 0;
+  background: #2d8cff;
+  color: #fff;
 }
 
 .workshop-upload-button {
@@ -976,6 +984,35 @@
 }
 .workshop-access-summary span:first-child { border-left: 0; }
 .workshop-access-summary strong { margin-right: 3px; color: var(--foreground); font-size: calc(0.78rem + 0.125rem); }
+
+.workshop-zoom-field {
+  display: grid;
+  gap: 6px;
+  margin: 0 24px 14px;
+}
+
+.workshop-zoom-field > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--foreground);
+  font-size: calc(0.68rem + 0.125rem);
+  font-weight: 760;
+}
+
+.workshop-zoom-field input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-soft);
+  font-size: calc(0.72rem + 0.125rem);
+}
+
+.workshop-zoom-field small {
+  color: var(--muted);
+  font-size: calc(0.6rem + 0.125rem);
+}
 
 .workshop-access-toolbar {
   display: flex;

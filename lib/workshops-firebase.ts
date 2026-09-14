@@ -93,6 +93,24 @@ function studentMap(value: unknown) {
   );
 }
 
+function normalizeZoomUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const url = new URL(trimmed);
+    const hostname = url.hostname.toLowerCase();
+    if (
+      url.protocol !== "https:" ||
+      (hostname !== "zoom.us" && !hostname.endsWith(".zoom.us"))
+    ) {
+      throw new Error();
+    }
+    return url.toString();
+  } catch {
+    throw new Error("Escribe un enlace válido de Zoom que comience con https://.");
+  }
+}
+
 function resourceFromSnapshot(
   snapshot: QueryDocumentSnapshot<DocumentData>,
 ): WorkshopResource {
@@ -127,6 +145,7 @@ function workshopFromSnapshot(
     title: String(data.title ?? definition.title),
     shortTitle: String(data.shortTitle ?? definition.shortTitle),
     description: String(data.description ?? definition.description),
+    zoomUrl: String(data.zoomUrl ?? ""),
     studentIds: stringList(data.studentIds),
     teacherIds: stringList(data.teacherIds),
     managerIds: stringList(data.managerIds),
@@ -170,6 +189,7 @@ export async function ensureDefaultWorkshops(profile: UserProfile) {
       managerIds: [],
       teacherStudentIds: {},
       memberIds: [],
+      zoomUrl: "",
       createdBy: profile.uid,
       createdByName: profile.name,
       createdAt: serverTimestamp(),
@@ -265,6 +285,7 @@ export async function updateWorkshopAccess(
     throw new Error("Sólo Dirección puede administrar el acceso a Talleres.");
   }
   const { db } = requireFirebase();
+  const zoomUrl = normalizeZoomUrl(access.zoomUrl);
   const studentIds = [...new Set(access.studentIds.filter(Boolean))];
   const teacherIds = [...new Set(access.teacherIds.filter(Boolean))];
   const managerIds = [
@@ -290,6 +311,7 @@ export async function updateWorkshopAccess(
       managerIds,
       teacherStudentIds,
       memberIds: [...new Set([...studentIds, ...teacherIds])],
+      zoomUrl,
       updatedAt: serverTimestamp(),
       updatedBy: profile.uid,
       updatedByName: profile.name,

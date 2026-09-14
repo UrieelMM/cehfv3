@@ -155,6 +155,7 @@ export function generateTemporaryPassword() {
 }
 
 function readSchoolLevel(value: unknown): SchoolLevel {
+  if (value === "preschool") return "preschool";
   return value === "secondary" ? "secondary" : "primary";
 }
 
@@ -326,7 +327,9 @@ export async function createManagedAccount(
   const email = input.email.trim().toLowerCase();
   const schoolLevel =
     input.role === "student" &&
-    (input.schoolLevel === "primary" || input.schoolLevel === "secondary")
+    (input.schoolLevel === "preschool" ||
+      input.schoolLevel === "primary" ||
+      input.schoolLevel === "secondary")
       ? input.schoolLevel
       : undefined;
   const grade = input.grade?.trim();

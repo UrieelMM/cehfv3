@@ -1,5 +1,5 @@
 export type Role = "director" | "teacher" | "student";
-export type SchoolLevel = "primary" | "secondary";
+export type SchoolLevel = "preschool" | "primary" | "secondary";
 
 export type UserProfile = {
   uid: string;
@@ -930,6 +930,7 @@ export type Workshop = {
   title: string;
   shortTitle: string;
   description: string;
+  zoomUrl: string;
   studentIds: string[];
   teacherIds: string[];
   managerIds: string[];
@@ -940,6 +941,7 @@ export type Workshop = {
 };
 
 export type WorkshopAccessInput = {
+  zoomUrl: string;
   studentIds: string[];
   teacherIds: string[];
   managerIds: string[];

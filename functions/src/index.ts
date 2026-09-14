@@ -378,7 +378,11 @@ function serializeManagedAccount(uid: string, data: DocumentData) {
     active: data.active !== false,
     ...(data.role === "student"
       ? {
-          schoolLevel: data.schoolLevel === "secondary" ? "secondary" : "primary",
+          schoolLevel: data.schoolLevel === "preschool"
+            ? "preschool"
+            : data.schoolLevel === "secondary"
+              ? "secondary"
+              : "primary",
           grade: String(data.grade ?? ""),
           group: String(data.group ?? ""),
           ...(data.guardianName
@@ -421,7 +425,8 @@ export const updateManagedAccount = onCall(async (request) => {
     const grade = String(input.grade ?? "").trim();
     const group = String(input.group ?? "").trim();
     const validSchoolLevel =
-      schoolLevel === "primary" || schoolLevel === "secondary"
+      schoolLevel === "preschool" || schoolLevel === "primary" ||
+        schoolLevel === "secondary"
         ? schoolLevel
         : null;
     if (
@@ -1572,19 +1577,27 @@ export const updateManagedContent = onCall(async (request) => {
     const previousAttachments = Array.isArray(data.attachments)
       ? data.attachments as Array<Record<string, unknown>>
       : [];
-    const previousById = new Map(previousAttachments.map((attachment) => [String(attachment.id ?? ""), attachment]));
+    const attachmentId = (attachment: Record<string, unknown>) => {
+      const explicitId = String(attachment.id ?? "").trim();
+      if (explicitId) return explicitId;
+      const storagePath = String(attachment.storagePath ?? "");
+      return storagePath.startsWith(`${firestorePath}/recursos/`)
+        ? storagePath.slice(`${firestorePath}/recursos/`.length)
+        : "";
+    };
+    const previousById = new Map(previousAttachments.map((attachment) => [attachmentId(attachment), attachment]));
     for (const attachment of attachments) {
       const previous = previousById.get(attachment.id);
       if (previous && (
         String(previous.storagePath ?? "") !== attachment.storagePath ||
         String(previous.name ?? "") !== attachment.name ||
-        String(previous.contentType ?? "") !== attachment.contentType ||
-        Number(previous.size ?? 0) !== attachment.size
+        (previous.contentType != null && String(previous.contentType) !== attachment.contentType) ||
+        (Number(previous.size ?? 0) > 0 && Number(previous.size) !== attachment.size)
       )) {
         throw new HttpsError("invalid-argument", "Un archivo existente fue modificado de forma inválida.");
       }
     }
-    const previousIds = new Set(previousAttachments.map((attachment) => String(attachment.id ?? "")));
+    const previousIds = new Set(previousAttachments.map(attachmentId));
     const newAttachments = attachments.filter((attachment) => !previousIds.has(attachment.id));
     const bucket = getStorage().bucket();
     const existence = await Promise.all(
@@ -1593,9 +1606,9 @@ export const updateManagedContent = onCall(async (request) => {
     if (existence.some(([exists]) => !exists)) {
       throw new HttpsError("failed-precondition", "Uno de los archivos nuevos no terminó de cargarse.");
     }
-    const retainedIds = new Set(attachments.map((attachment) => attachment.id));
+    const retainedStoragePaths = new Set(attachments.map((attachment) => attachment.storagePath));
     removedStoragePaths = previousAttachments
-      .filter((attachment) => !retainedIds.has(String(attachment.id ?? "")))
+      .filter((attachment) => !retainedStoragePaths.has(String(attachment.storagePath ?? "")))
       .map((attachment) => String(attachment.storagePath ?? ""))
       .filter((path) => path.startsWith(`${firestorePath}/recursos/`));
     updates = {

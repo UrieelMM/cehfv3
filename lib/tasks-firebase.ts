@@ -169,10 +169,13 @@ function attachmentFromData(value: unknown): TaskAttachment | null {
   if (!value || typeof value !== "object") return null;
   const data = value as Record<string, unknown>;
   if (!data.storagePath || !data.name) return null;
+  const storagePath = String(data.storagePath);
+  const storageAssetId = storagePath.split("/").filter(Boolean).at(-1);
+  const explicitId = String(data.id ?? "").trim();
   return {
-    id: String(data.id ?? crypto.randomUUID()),
+    id: explicitId || storageAssetId || crypto.randomUUID(),
     name: String(data.name),
-    storagePath: String(data.storagePath),
+    storagePath,
     contentType: String(data.contentType ?? "application/octet-stream"),
     size: Number(data.size ?? 0),
     downloadUrl: data.downloadUrl ? String(data.downloadUrl) : undefined,
@@ -673,21 +676,31 @@ export async function updateTaskAssignment(
     throw new Error("Esta tarea no se puede editar porque no está sincronizada con Firebase.");
   }
   const { storage } = requireFirebase();
-  const uploaded = await Promise.all(input.files.map(async (file) => {
-    const id = crypto.randomUUID();
-    const storagePath = `${task.firestorePath}/recursos/${id}`;
-    await uploadBytes(ref(storage, storagePath), file, {
-      contentType: file.type || "application/octet-stream",
-      customMetadata: { originalName: file.name },
-    });
-    return {
-      id,
-      name: file.name,
-      storagePath,
-      contentType: file.type || "application/octet-stream",
-      size: file.size,
-    } satisfies TaskAttachment;
-  }));
+  const uploaded: TaskAttachment[] = [];
+  try {
+    for (const file of input.files) {
+      const id = crypto.randomUUID();
+      const storagePath = `${task.firestorePath}/recursos/${id}`;
+      await uploadBytes(ref(storage, storagePath), file, {
+        contentType: file.type || "application/octet-stream",
+        customMetadata: { originalName: file.name },
+      });
+      uploaded.push({
+        id,
+        name: file.name,
+        storagePath,
+        contentType: file.type || "application/octet-stream",
+        size: file.size,
+      });
+    }
+  } catch (error) {
+    await Promise.all(
+      uploaded.map((attachment) =>
+        deleteObject(ref(storage, attachment.storagePath)).catch(() => undefined),
+      ),
+    );
+    throw error;
+  }
   const attachments = [...input.attachments, ...uploaded];
   const callable = httpsCallable<
     {

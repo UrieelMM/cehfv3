@@ -206,6 +206,7 @@ type ForumDraftDetails = {
 };
 
 const schoolLevelLabels: Record<SchoolLevel, string> = {
+  preschool: "Preescolar",
   primary: "Primaria",
   secondary: "Secundaria",
 };
@@ -3503,7 +3504,7 @@ function AccountRegistrationModal({
                     </div>
                     {accountRole === "student" && (
                       <div className="registration-grade-grid">
-                        <label>Nivel escolar<select value={schoolLevel} onChange={(event) => selectSchoolLevel(event.target.value as SchoolLevel)}><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
+                        <label>Nivel escolar<select value={schoolLevel} onChange={(event) => selectSchoolLevel(event.target.value as SchoolLevel)}><option value="preschool">Preescolar</option><option value="primary">Primaria</option><option value="secondary">Secundaria</option></select></label>
                         <label>Grado<select value={grade} onChange={(event) => selectStudentGrade(schoolLevel, event.target.value)}>{gradesBySchoolLevel[schoolLevel].map((item) => <option key={item}>{item}</option>)}</select></label>
                         <label>Grupo<select value={group} onChange={(event) => setGroup(event.target.value)}>{["A", "B", "C"].map((item) => <option key={item}>{item}</option>)}</select></label>
                       </div>

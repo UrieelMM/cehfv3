@@ -1,6 +1,7 @@
 import type { SchoolLevel } from "./types";
 
 export const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
+  preschool: ["1.º", "2.º", "3.º"],
   primary: ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"],
   secondary: ["1.º", "2.º", "3.º"],
 };
@@ -73,6 +74,11 @@ export const subjectsByGrade: Record<
   SchoolLevel,
   Record<string, readonly AcademicSubject[]>
 > = {
+  preschool: {
+    "1.º": primaryLowerSubjects,
+    "2.º": primaryLowerSubjects,
+    "3.º": primaryLowerSubjects,
+  },
   primary: {
     "1.º": primaryLowerSubjects,
     "2.º": primaryLowerSubjects,

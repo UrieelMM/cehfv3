@@ -181,7 +181,7 @@ service firebase.storage {
       return sameInstitution(institutionId)
         && data.institutionId == institutionId
         && (
-          isDirector()
+          profile().role == "director"
           || (
             data.memberIds is list
             && request.auth.uid in data.memberIds
@@ -213,7 +213,7 @@ service firebase.storage {
       let task = workshopTask(institutionId, workshopId, taskId);
       return canReadWorkshop(institutionId, workshopId)
         && (
-          isDirector()
+          profile().role == "director"
           || (
             profile().role == "teacher"
             && task.createdBy == request.auth.uid
@@ -416,6 +416,13 @@ service firebase.storage {
       allow delete: if canManageWorkshop(institutionId, workshopId);
     }
 
+    // Compatibilidad con recursos históricos guardados antes de incluir el
+    // nombre del archivo como último segmento de la ruta.
+    match /institutions/{institutionId}/workshops/{workshopId}/resources/{resourceId} {
+      allow read: if canReadWorkshop(institutionId, workshopId);
+      allow delete: if canManageWorkshop(institutionId, workshopId);
+    }
+
     match /institutions/{institutionId}/workshops/{workshopId}/tasks/{taskId}/resources/{assetId}/{fileName} {
       allow read: if canReadWorkshopTask(institutionId, workshopId, taskId);
       allow create: if canManageWorkshop(institutionId, workshopId)
@@ -424,10 +431,17 @@ service firebase.storage {
       allow delete: if canManageWorkshop(institutionId, workshopId);
     }
 
+
+    match /institutions/{institutionId}/workshops/{workshopId}/tasks/{taskId}/resources/{assetId} {
+      allow read: if canReadWorkshopTask(institutionId, workshopId, taskId);
+      allow delete: if canManageWorkshopTask(institutionId, workshopId, taskId);
+    }
+
     match /institutions/{institutionId}/workshops/{workshopId}/tasks/{taskId}/submissions/{studentId}/{versionId}/{assetId}/{fileName} {
       allow read: if canReadWorkshopTask(institutionId, workshopId, taskId)
         && (
-          request.auth.uid == studentId
+          profile().role == "director"
+          || request.auth.uid == studentId
           || canManageWorkshopTask(institutionId, workshopId, taskId)
         );
       allow create: if canUploadWorkshopSubmission(

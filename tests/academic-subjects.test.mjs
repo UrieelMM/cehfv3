@@ -25,6 +25,14 @@ const {
 );
 
 test("each grade exposes only its canonical subjects", () => {
+  assert.deepEqual(subjectsForGrade("preschool", "1.º"), [
+    "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
+    "Inglés", "Lectura y comprensión",
+  ]);
+  assert.deepEqual(subjectsForGrade("preschool", "3.º"), [
+    "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
+    "Inglés", "Lectura y comprensión",
+  ]);
   assert.deepEqual(subjectsForGrade("primary", "1.º"), [
     "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
     "Inglés", "Lectura y comprensión",
@@ -84,10 +92,13 @@ test("sanitization removes subjects that do not belong to the selected grade", (
 });
 
 test("registration, editing and backend saves use the grade catalog", () => {
+  assert.match(appSource, /<option value="preschool">Preescolar<\/option>/);
+  assert.match(usersSource, /<option value="preschool">Preescolar<\/option>/);
   assert.match(appSource, /availableSubjects\.map\(\(subject\)/);
   assert.match(appSource, /selectStudentGrade\(schoolLevel, event\.target\.value\)/);
   assert.match(usersSource, /availableSubjects\.map\(\(subject\)/);
   assert.match(firebaseSource, /subjectsBelongToCatalog\(input\.subjects, allowedSubjects\)/);
   assert.match(functionsSource, /subjectsBelongToCatalog\(rawSubjects, allowedSubjects\)/);
   assert.match(rulesSource, /validManagedAccountSubjects\(request\.resource\.data\)/);
+  assert.match(rulesSource, /data\.schoolLevel == "preschool"/);
 });
