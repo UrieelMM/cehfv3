@@ -944,7 +944,14 @@ service cloud.firestore {
           );
       }
 
-      function validWeeklyGrade(data) {
+      function teacherOwnsGrade(data) {
+        return roleIs("teacher")
+          && profile().institutionId == institutionId
+          && data.institutionId == institutionId
+          && data.teacherId == request.auth.uid;
+      }
+
+      function validGradeCalculation(data) {
         let calculatedScore = (
           data.scores.classWork * data.weights.classWork
           + data.scores.homework * data.weights.homework
@@ -952,6 +959,16 @@ service cloud.firestore {
           + data.scores.attendance * data.weights.attendance
           + data.scores.exam * data.weights.exam
         ) / 100;
+        return validGradingWeights(data.weights)
+          && validGradeScores(data.scores)
+          && data.weightedScore is number
+          && data.weightedScore >= 0
+          && data.weightedScore <= 10
+          && data.weightedScore >= calculatedScore - 0.051
+          && data.weightedScore <= calculatedScore + 0.051;
+      }
+
+      function validWeeklyGrade(data) {
         return data.keys().hasOnly([
             "institutionId", "schoolYearId", "schoolYearLabel",
             "termId", "termLabel", "weekId", "weekLabel",
@@ -964,13 +981,7 @@ service cloud.firestore {
           && data.studentName is string
           && data.weekLabel is string
           && data.termLabel is string
-          && validGradingWeights(data.weights)
-          && validGradeScores(data.scores)
-          && data.weightedScore is number
-          && data.weightedScore >= 0
-          && data.weightedScore <= 10
-          && data.weightedScore >= calculatedScore - 0.051
-          && data.weightedScore <= calculatedScore + 0.051
+          && validGradeCalculation(data)
           && data.createdAt is timestamp
           && data.updatedAt is timestamp
           && validCalendarScope(data);
@@ -993,13 +1004,6 @@ service cloud.firestore {
         let nonWorkingDayPath = calendarNonWorkingDayPath(
           data.institutionId, data.schoolYearId, data.gradeDate
         );
-        let calculatedScore = (
-          data.scores.classWork * data.weights.classWork
-          + data.scores.homework * data.weights.homework
-          + data.scores.participation * data.weights.participation
-          + data.scores.attendance * data.weights.attendance
-          + data.scores.exam * data.weights.exam
-        ) / 100;
         return data.keys().hasOnly([
             "institutionId", "schoolYearId", "schoolYearLabel",
             "termId", "termLabel", "weekId", "weekLabel", "gradeDate",
@@ -1017,13 +1021,7 @@ service cloud.firestore {
           && data.subjectId is string
           && data.subject is string
           && data.studentName is string
-          && validGradingWeights(data.weights)
-          && validGradeScores(data.scores)
-          && data.weightedScore is number
-          && data.weightedScore >= 0
-          && data.weightedScore <= 10
-          && data.weightedScore >= calculatedScore - 0.051
-          && data.weightedScore <= calculatedScore + 0.051
+          && validGradeCalculation(data)
           && data.createdAt is timestamp
           && data.updatedAt is timestamp
           && validCalendarScope(data);
@@ -1032,6 +1030,21 @@ service cloud.firestore {
       function sameDailyGradeScope(before, after) {
         return sameWeeklyGradeScope(before, after)
           && after.gradeDate == before.gradeDate;
+      }
+
+      function validDailyGradeCorrection(before, after) {
+        return teacherOwnsGrade(before)
+          && teacherOwnsGrade(after)
+          && sameDailyGradeScope(before, after)
+          && after.diff(before).affectedKeys().hasOnly([
+            "teacherName", "studentName", "studentGrade", "studentGroup",
+            "scores", "weights", "weightedScore", "createdAt", "updatedAt"
+          ])
+          && after.teacherName is string
+          && after.studentName is string
+          && validGradeCalculation(after)
+          && after.createdAt is timestamp
+          && after.updatedAt is timestamp;
       }
 
       function validStudentWeeklyReport(data) {
@@ -1125,10 +1138,9 @@ service cloud.firestore {
           );
         allow create: if teacherCanGrade(request.resource.data)
           && validDailyGrade(request.resource.data);
-        allow update: if teacherCanGrade(resource.data)
-          && teacherCanGrade(request.resource.data)
-          && validDailyGrade(request.resource.data)
-          && sameDailyGradeScope(resource.data, request.resource.data);
+        allow update: if validDailyGradeCorrection(
+          resource.data, request.resource.data
+        );
         allow delete: if false;
       }
 

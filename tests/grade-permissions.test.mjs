@@ -29,3 +29,15 @@ test("Firestore accepts every grade from 0 to 10 for assigned teachers", async (
   assert.match(rules, /student\.teacherIds\.hasAny\(\[request\.auth\.uid\]\)/);
   assert.match(rules, /hasAssignedGradeSubject\(\s*profile\(\)\.subjects/);
 });
+
+test("teachers can correct their own daily grade without changing its academic scope", async () => {
+  const rules = await readFile(new URL("firestore.rules", projectRoot), "utf8");
+  const dailyGradesMatch = rules.slice(rules.indexOf("match /dailyGrades/{gradeId}"));
+
+  assert.match(rules, /function teacherOwnsGrade/);
+  assert.match(rules, /function validDailyGradeCorrection/);
+  assert.match(rules, /after\.diff\(before\)\.affectedKeys\(\)\.hasOnly/);
+  assert.match(rules, /sameDailyGradeScope\(before, after\)/);
+  assert.match(dailyGradesMatch, /allow update: if validDailyGradeCorrection/);
+  assert.doesNotMatch(dailyGradesMatch.slice(0, 850), /teacherCanGrade\(resource\.data\)/);
+});
