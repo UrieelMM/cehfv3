@@ -1,10 +1,11 @@
 "use client";
 
-import { Download, FileText, Headphones, LoaderCircle, X } from "lucide-react";
+import { Download, FileText, Headphones, X } from "lucide-react";
 import { motion } from "motion/react";
 import Image from "next/image";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { AnimatedOrb } from "@/components/animated-orb";
 
 export type WorkshopViewableFile = {
   name: string;
@@ -92,7 +93,7 @@ export function WorkshopFileViewer({
         <div className={`workshop-attachment-viewer-stage is-${kind}`}>
           {loading ? (
             <div className="workshop-attachment-viewer-loading">
-              <LoaderCircle className="spin" size={28} />
+              <AnimatedOrb busy tone="mint" />
               <strong>Preparando el recurso…</strong>
             </div>
           ) : kind === "image" ? (

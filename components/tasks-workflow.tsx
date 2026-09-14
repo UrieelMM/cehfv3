@@ -35,6 +35,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { TaskResourceViewer } from "@/components/task-resource-viewer";
@@ -266,11 +267,10 @@ export function TaskListPage({
       </div>
 
       {loading ? (
-        <section className="task-loading-grid" aria-label="Cargando tareas">
-          {Array.from({ length: 3 }, (_, index) => (
-            <span key={index} />
-          ))}
-        </section>
+        <SectionOrbLoader
+          label="Organizando tus tareas…"
+          detail="Estamos sincronizando actividades, fechas y entregas."
+        />
       ) : visibleTasks.length ? (
         <section className="task-modern-grid">
           {visibleTasks.map((task) => {

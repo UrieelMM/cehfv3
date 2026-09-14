@@ -6,7 +6,6 @@ import {
   FileBarChart,
   FileText,
   FolderOpen,
-  LoaderCircle,
   MessageCircle,
   Newspaper,
   Search,
@@ -16,6 +15,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatedOrb } from "@/components/animated-orb";
 import { searchLocalPortal, searchPortal } from "@/lib/portal-search";
 import type {
   PortalSearchEntityType,
@@ -154,7 +154,9 @@ export function PortalSearch({
 
   return (
     <div className={`search portal-search ${open ? "is-open" : ""}`} ref={rootRef}>
-      <Search size={18} aria-hidden="true" />
+      <span className="portal-search-leading-icon">
+        {open ? <AnimatedOrb size="compact" busy={loading} /> : <Search size={18} aria-hidden="true" />}
+      </span>
       <button
         className="portal-search-mobile-trigger"
         type="button"
@@ -222,9 +224,10 @@ export function PortalSearch({
           <motion.section
             aria-label="Resultados de búsqueda"
             className="portal-search-panel"
-            initial={{ opacity: 0, y: -6, scale: 0.985 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.99 }}
+            initial={{ y: -8, scale: 0.975 }}
+            animate={{ y: 0, scale: 1 }}
+            exit={{ y: -5, scale: 0.985 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="portal-search-filters" role="tablist" aria-label="Tipo de resultado">
               {searchGroups.map((item) => (
@@ -245,19 +248,19 @@ export function PortalSearch({
             <div className="portal-search-results" aria-live="polite">
               {!query.trim() ? (
                 <div className="portal-search-message">
-                  <Search size={24} />
+                  <AnimatedOrb />
                   <strong>Busca en todo el portal</strong>
                   <span>Escribe lo que quieres encontrar y pulsa Buscar o Enter.</span>
                 </div>
               ) : !submitted ? (
                 <div className="portal-search-message">
-                  <Search size={24} />
+                  <AnimatedOrb />
                   <strong>Listo para buscar</strong>
                   <span>Escribir no genera consultas. Pulsa Buscar o Enter cuando termines.</span>
                 </div>
               ) : loading ? (
                 <div className="portal-search-message">
-                  <LoaderCircle className="spin" size={24} />
+                  <AnimatedOrb busy />
                   <strong>Buscando…</strong>
                 </div>
               ) : error ? (
@@ -267,15 +270,24 @@ export function PortalSearch({
                   <span>{error}</span>
                 </div>
               ) : filteredHits.length ? (
-                filteredHits.map((hit) => {
+                filteredHits.map((hit, index) => {
                   const details = entityDetails[hit.entityType];
                   const ResultIcon = details.icon;
                   return (
-                    <button
+                    <motion.button
                       className="portal-search-result"
                       key={hit.objectID}
                       onClick={() => openHit(hit)}
                       type="button"
+                      initial={{ x: -9, scale: 0.99 }}
+                      animate={{ x: 0, scale: 1 }}
+                      transition={{
+                        delay: Math.min(index, 7) * 0.025,
+                        duration: 0.22,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      whileHover={{ x: 2 }}
+                      whileTap={{ scale: 0.995 }}
                     >
                       <span className={`portal-search-result-icon is-${hit.entityType}`}>
                         <ResultIcon size={18} />
@@ -286,12 +298,12 @@ export function PortalSearch({
                         <p>{hit.excerpt || hit.context || "Abrir en el portal"}</p>
                       </span>
                       <span className="portal-search-open">Abrir <span>↵</span></span>
-                    </button>
+                    </motion.button>
                   );
                 })
               ) : (
                 <div className="portal-search-message">
-                  <Search size={24} />
+                  <AnimatedOrb />
                   <strong>Sin resultados</strong>
                   <span>Prueba con otro título, materia, autor o palabra clave.</span>
                 </div>

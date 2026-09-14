@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
@@ -280,7 +281,7 @@ export function AcademicReportsPage({
     </div>
     <div className="academic-report-metrics"><article><span>Alumnos / reportes</span><strong>{total}</strong><small>según filtros actuales</small></article><article><span>Publicados en la semana</span><strong>{publishedCount}</strong><small>visibles para las familias</small></article><article><span>Evidencia disponible</span><strong>{weekSubjectGrades.length}</strong><small>promedios semanales calculados</small></article></div>
     <section className="academic-report-toolbar"><div><strong>{profile.role === "teacher" ? "Lista de alumnos" : profile.role === "director" ? "Reportes institucionales" : "Reportes publicados"}</strong><span>{week?.label} · {week ? weekRange(week) : "Sin fechas"}</span></div><label><Search size={16} /><input type="search" placeholder="Buscar alumno o grupo…" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} /></label>{profile.role !== "teacher" && <select aria-label="Filtrar reportes por estado" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="all">Todos los estados</option><option value="published">Publicados</option>{profile.role === "director" && <option value="draft">Borradores</option>}</select>}</section>
-    {loading ? <div className="report-loading"><span /><span /><span /></div> : profile.role === "teacher" ? (
+    {loading ? <SectionOrbLoader label="Construyendo los reportes…" detail="Estamos reuniendo calificaciones y evidencias de la semana." tone="mint" /> : profile.role === "teacher" ? (
       <div className="report-editor-list">{!pagedStudents.length ? <div className="report-empty"><Search size={27} /><h3>No encontramos alumnos</h3><p>Revisa la materia seleccionada o ajusta la búsqueda.</p></div> : pagedStudents.map((student) => {
         const grade = weekSubjectGrades.find((item) => item.studentId === student.uid && item.teacherId === profile.uid);
         const report = reports.find((item) => item.weekId === week?.id && subjectsMatch(item.subject, activeSubject) && item.studentId === student.uid && item.teacherId === profile.uid);

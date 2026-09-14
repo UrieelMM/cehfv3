@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { SectionOrbLoader } from "@/components/animated-orb";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { clampGradeScore, GRADE_MAX } from "@/lib/grade-scale";
 import {
@@ -387,7 +388,7 @@ export function AcademicGradesPanel({
         <article><span>Regla de cálculo</span><strong>{level === "daily" ? "Captura" : "Promedio"}</strong><small>{level === "weekly" ? `${workingDates.length} días hábiles esperados` : level === "bimonthly" ? "semanas del bimestre" : level === "cycle" ? "bimestres del ciclo" : "cinco criterios"}</small></article>
       </div>
 
-      {loading ? <div className="academic-loading"><span /><span /><span /></div> : profile.role === "teacher" && level === "daily" ? (
+      {loading ? <SectionOrbLoader label="Calculando calificaciones…" detail="Estamos sincronizando alumnos, materias y periodos." /> : profile.role === "teacher" && level === "daily" ? (
         <div className="academic-capture-list">
           <div className="academic-capture-header"><span>Alumno</span><span>Criterios del día · valores de 0 a 10</span><span>Resultado</span></div>
           {!activeSubject ? <div className="academic-empty"><GraduationCap size={28} /><h3>No tienes materias asignadas</h3><p>Dirección debe actualizar tu perfil antes de capturar.</p></div>

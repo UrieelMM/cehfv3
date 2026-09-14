@@ -26,6 +26,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
@@ -207,7 +208,12 @@ export function WorkshopTasks({
       </div>
 
       {loading ? (
-        <div className="workshop-task-loading"><LoaderCircle className="spin" size={22} /> Cargando trabajos…</div>
+        <SectionOrbLoader
+          className="workshop-task-loading"
+          label="Cargando trabajos…"
+          detail="Estamos sincronizando indicaciones y entregas."
+          tone="mint"
+        />
       ) : tasks.length ? (
         <div className="workshop-task-grid">
           {tasks.map((task) => (

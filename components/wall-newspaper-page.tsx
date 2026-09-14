@@ -46,6 +46,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { toast } from "sonner";
+import { AnimatedOrb, SectionOrbLoader } from "@/components/animated-orb";
 import {
   muralCategories,
   muralCoverFonts,
@@ -1372,7 +1373,7 @@ function MuralArchiveViewer({
           <div className="mural-archive-cover-preview"><MuralEditionCover edition={edition} preview /></div>
           <section className="mural-archive-stories" aria-label={`Historias de ${edition.periodLabel}`}>
             <div className="mural-archive-stories-heading"><div><span className="eyebrow">CONTENIDO PUBLICADO</span><h3>{stories.length} {stories.length === 1 ? "historia" : "historias"}</h3></div><button className="primary-button" type="button" onClick={onOpenImmersive}><Presentation size={16} />Ver exposición</button></div>
-            {loading ? <div className="mural-archive-empty"><LoaderCircle className="spin" size={20} />Cargando historias…</div> : stories.length ? (
+            {loading ? <div className="mural-archive-empty"><AnimatedOrb busy size="compact" tone="coral" />Cargando historias…</div> : stories.length ? (
               <div className="mural-archive-story-list">{stories.map((story) => (
                 <button type="button" key={story.id} onClick={() => onOpenStory(story)}>
                   <span className={`mural-archive-story-mark ${story.accent}`}><Newspaper size={18} /></span>
@@ -1931,7 +1932,7 @@ export function WallNewspaperPage({
             <div><span className="eyebrow">MESA EDITORIAL · {profile.role === "director" ? "DIRECCIÓN" : edition.group}</span><h2>Historias por revisar</h2><p>{profile.role === "director" ? `Edición a cargo de ${edition.teacherName}.` : "Tú administras las revisiones y publicaciones de esta edición."} Lee cada propuesta completa antes de decidir.</p></div>
             <span className="mural-pending-count">{reviewQueue.length}<small>pendientes</small></span>
           </div>
-          {loading && !reviewQueue.length ? <div className="mural-review-empty"><LoaderCircle className="spin" size={22} />Actualizando bandeja…</div> : !reviewQueue.length ? <div className="mural-review-empty"><CheckCircle2 size={24} /><strong>La bandeja está al día</strong><span>Las nuevas historias aparecerán aquí.</span></div> : (
+          {loading && !reviewQueue.length ? <SectionOrbLoader className="mural-review-empty" label="Actualizando la bandeja…" detail="Estamos recuperando las historias pendientes de revisión." tone="coral" /> : !reviewQueue.length ? <div className="mural-review-empty"><CheckCircle2 size={24} /><strong>La bandeja está al día</strong><span>Las nuevas historias aparecerán aquí.</span></div> : (
             <div className="mural-review-list">{reviewQueue.map((story) => (
               <article className="mural-review-card" key={story.id}>
                 <div className={`wall-card-art ${story.accent}`}><span>{story.category}</span><Newspaper size={30} /></div>
@@ -2025,7 +2026,7 @@ export function WallNewspaperPage({
           <label className="mural-search"><Search size={18} /><input type="search" value={archiveQuery} onChange={(event) => { setArchiveQuery(event.target.value); setArchivePage(1); }} placeholder="Buscar periodo, grupo o tema…" aria-label="Buscar ediciones anteriores" />{archiveQuery && <button type="button" onClick={() => { setArchiveQuery(""); setArchivePage(1); }} aria-label="Borrar búsqueda del archivo"><X size={14} /></button>}</label>
           <label className="mural-filter"><span>Grupo</span><select value={archiveGroup} onChange={(event) => { setArchiveGroup(event.target.value); setArchivePage(1); }}><option value="all">Todos</option>{archiveGroups.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></label>
         </div>
-        {archiveLoading ? <div className="mural-archive-empty"><LoaderCircle className="spin" size={22} />Cargando archivo…</div> : pageArchivedEditions.length ? (
+        {archiveLoading ? <SectionOrbLoader className="mural-archive-empty" label="Abriendo la hemeroteca…" detail="Estamos ordenando las ediciones anteriores." tone="coral" /> : pageArchivedEditions.length ? (
           <div className="mural-archive-grid">{pageArchivedEditions.map((item) => (
             <button type="button" className="mural-archive-card" key={item.id} onClick={() => { setArchiveStories([]); setArchiveStoriesLoading(true); setArchiveEdition(item); }}>
               <span className="mural-archive-card-art" style={{ "--archive-bg": item.cover.backgroundColor, "--archive-accent": item.cover.accentColor } as CSSProperties}><i /><Newspaper size={29} /><small>CEHF</small></span>

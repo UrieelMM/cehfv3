@@ -31,6 +31,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { friendlyFirebaseError } from "@/lib/firebase";
@@ -271,9 +272,11 @@ export function MaterialsPage({
       </div>
 
       {loading ? (
-        <section className="materials-grid" aria-label="Cargando materiales">
-          {Array.from({ length: 4 }, (_, index) => <div className="material-modern-card material-skeleton" key={index} />)}
-        </section>
+        <SectionOrbLoader
+          label="Preparando tus materiales…"
+          detail="Estamos reuniendo recursos, archivos y enlaces de tus materias."
+          tone="mint"
+        />
       ) : visible.length ? (
         <section className="materials-grid">
           {visible.map((material) => {

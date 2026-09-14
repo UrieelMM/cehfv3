@@ -26,6 +26,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { SectionOrbLoader } from "@/components/animated-orb";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { clampGradeScore, gradeScorePercent, GRADE_MAX } from "@/lib/grade-scale";
 import {
@@ -1503,7 +1504,10 @@ export function WeeklyGradesPanel({
       )}
 
       {loading ? (
-        <div className="grade-loading"><span /><span /><span /></div>
+        <SectionOrbLoader
+          label="Actualizando el resumen…"
+          detail="Estamos calculando promedios y estadísticas del periodo."
+        />
       ) : profile.role !== "teacher" || activeView === "summary" ? (
         <AnimatePresence mode="wait">
           <motion.div

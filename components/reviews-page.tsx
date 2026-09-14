@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
+import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
@@ -365,11 +366,11 @@ export function ReviewsPage({
       </div>
 
       {loading ? (
-        <section className="reviews-grid" aria-label="Cargando repasos">
-          {Array.from({ length: 6 }, (_, index) => (
-            <article className="review-modern-card review-skeleton" key={index} />
-          ))}
-        </section>
+        <SectionOrbLoader
+          label="Preparando los repasos…"
+          detail="Estamos recuperando actividades y avances de la semana."
+          tone="coral"
+        />
       ) : visible.length ? (
         <section className="reviews-grid">
           {visible.map((review, index) => {

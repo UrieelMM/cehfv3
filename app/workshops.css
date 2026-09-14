@@ -22,13 +22,7 @@
   text-align: center;
 }
 
-.workshops-loading svg {
-  margin-bottom: 8px;
-  color: var(--violet);
-  animation: workshop-spin 0.9s linear infinite;
-}
-
-.workshops-loading span,
+.workshops-loading > span:last-child,
 .workshops-empty p {
   max-width: 480px;
   color: var(--muted);
@@ -1289,7 +1283,7 @@
 .workshop-task-empty > svg { color: var(--workshop-accent); }
 .workshop-task-empty h3 { margin: 5px 0 0; color: var(--foreground); }
 .workshop-task-empty p { max-width: 450px; margin: 0; font-size: calc(0.69rem + 0.125rem); }
-.workshop-task-loading { grid-auto-flow: column; min-height: 130px; font-size: calc(0.69rem + 0.125rem); }
+.workshop-task-loading { min-height: 180px; font-size: calc(0.69rem + 0.125rem); }
 
 .workshop-task-create-modal,
 .workshop-task-detail-modal {
