@@ -65,7 +65,6 @@ import Image from "next/image";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
-import { AnimatedOrb } from "@/components/animated-orb";
 import { ForumPage } from "@/components/forum-page";
 import { AcademicCalendarModal } from "@/components/academic-calendar-modal";
 import { UsersPage as CommunityUsersPage } from "@/components/users-page";
@@ -496,16 +495,14 @@ function TimeAwareGreeting({
             {Array.from({ length: 10 }, (_, index) => <i key={index} />)}
           </span>
         </span>
-        <span
+        <motion.span
           className="time-greeting-icon"
           aria-hidden="true"
+          animate={reduceMotion ? undefined : { y: [0, -4, 0], rotate: [-3, 3, -3] }}
+          transition={{ duration: 5.5, ease: "easeInOut", repeat: Infinity }}
         >
-          <AnimatedOrb
-            icon={<GreetingIcon size={23} strokeWidth={1.9} />}
-            size="large"
-            tone={phase.key}
-          />
-        </span>
+          <GreetingIcon size={27} strokeWidth={1.8} />
+        </motion.span>
         <span className="eyebrow">{detail}</span>
         <h1>{phase.greeting}, {name}</h1>
       </motion.div>

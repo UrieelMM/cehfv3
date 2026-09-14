@@ -43,7 +43,7 @@ test("search results stay fully opaque and use the animated Siri-style orb", asy
   assert.match(styles, /@media \(prefers-reduced-motion: no-preference\)/);
 });
 
-test("dashboard and primary loading states share the optimized animated orb", async () => {
+test("primary loading states share the optimized animated orb without changing the weather greeting", async () => {
   const component = await readFile(
     new URL("components/animated-orb.tsx", projectRoot),
     "utf8",
@@ -65,7 +65,7 @@ test("dashboard and primary loading states share the optimized animated orb", as
   assert.match(component, /export function AnimatedOrb/);
   assert.match(component, /export function SectionOrbLoader/);
   assert.match(component, /role="status"/);
-  assert.match(greeting, /icon=\{<GreetingIcon/);
-  assert.match(greeting, /tone=\{phase\.key\}/);
+  assert.match(greeting, /<GreetingIcon size=\{27\}/);
+  assert.doesNotMatch(greeting, /<AnimatedOrb[\s\S]{0,160}tone=\{phase\.key\}/);
   loadingSurfaces.forEach((source) => assert.match(source, /SectionOrbLoader/));
 });

@@ -1014,7 +1014,7 @@ code {
   width: min(620px, 100%);
   min-width: 0;
   overflow: hidden;
-  padding: 14px 90px 14px 18px;
+  padding: 14px 72px 14px 18px;
   border: 1px solid color-mix(in srgb, var(--greeting-accent) 28%, var(--border));
   border-radius: 18px;
   background: linear-gradient(
@@ -1071,23 +1071,17 @@ code {
 .time-greeting-icon {
   position: absolute;
   z-index: 2;
-  top: calc(50% - 31px);
-  right: 14px;
+  top: calc(50% - 22px);
+  right: 19px;
   display: grid;
-  width: 62px;
-  height: 62px;
+  width: 44px;
+  height: 44px;
   place-items: center;
+  border: 1px solid color-mix(in srgb, var(--greeting-accent) 28%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--greeting-soft) 22%, var(--surface));
   color: var(--greeting-accent);
-}
-
-.time-greeting-icon .animated-orb {
-  --orb-cyan: var(--greeting-soft);
-  --orb-violet: var(--greeting-accent);
-  --orb-coral: color-mix(in srgb, var(--greeting-soft) 52%, #ff5b8f);
-  box-shadow:
-    0 0 0 5px color-mix(in srgb, var(--greeting-accent) 8%, transparent),
-    0 10px 24px color-mix(in srgb, var(--greeting-accent) 24%, transparent),
-    inset 0 0 13px rgb(255 255 255 / 0.72);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--greeting-accent) 14%, transparent);
 }
 
 .time-greeting-glow {
