@@ -15,7 +15,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { firebase } from "./firebase";
-import { includesSubject } from "./academic-subjects";
+import { includesSubject, studentCanTakeSubject } from "./academic-subjects";
 import { clampGradeScore, normalizeStoredGradeScore } from "./grade-scale";
 import type {
   AcademicCalendar,
@@ -422,7 +422,7 @@ export async function saveDailyGrade(
 ) {
   if (profile.role !== "teacher") throw new Error("Sólo los docentes pueden capturar calificaciones.");
   if (!includesSubject(profile.subjects ?? [], subject)) throw new Error("Esta materia no está asignada a tu perfil.");
-  if (student.role !== "student" || !student.teacherIds.includes(profile.uid) || !includesSubject(student.subjects, subject)) {
+  if (student.role !== "student" || !student.teacherIds.includes(profile.uid) || !studentCanTakeSubject(student, subject)) {
     throw new Error("El alumno no está asignado a esta materia contigo.");
   }
   if (gradeDate < week.startDate || gradeDate > week.endDate) {

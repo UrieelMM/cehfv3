@@ -919,6 +919,64 @@ service cloud.firestore {
           );
       }
 
+      function gradeCatalogHasSubject(student, subjectId) {
+        let primaryLower = [
+          "lenguaje", "matematicas", "ciencias", "civica", "historia",
+          "fisica", "ingles", "lectura-y-comprension"
+        ];
+        let primaryUpper = [
+          "lenguaje", "matematicas", "ciencias", "historia", "geografia",
+          "ingles", "civica", "lectura-y-comprension"
+        ];
+        let primarySixth = [
+          "lenguaje", "matematicas", "ciencias", "historia", "geografia", "ingles"
+        ];
+        let secondaryFirst = [
+          "lenguaje", "matematicas", "civica", "geografia", "biologia", "ingles"
+        ];
+        let secondaryUpper = [
+          "lenguaje", "matematicas", "civica", "historia", "fisica", "ingles"
+        ];
+        return (
+            student.schoolLevel == "preschool"
+            && student.grade in ["1.º", "2.º", "3.º"]
+            && subjectId in primaryLower
+          )
+          || (
+            (
+              student.schoolLevel == "primary"
+              || !("schoolLevel" in student)
+            )
+            && (
+              (
+                student.grade in ["1.º", "2.º", "3.º"]
+                && subjectId in primaryLower
+              )
+              || (
+                student.grade in ["4.º", "5.º"]
+                && subjectId in primaryUpper
+              )
+              || (
+                student.grade == "6.º"
+                && subjectId in primarySixth
+              )
+            )
+          )
+          || (
+            student.schoolLevel == "secondary"
+            && (
+              (
+                student.grade == "1.º"
+                && subjectId in secondaryFirst
+              )
+              || (
+                student.grade in ["2.º", "3.º"]
+                && subjectId in secondaryUpper
+              )
+            )
+          );
+      }
+
       function teacherCanGrade(data) {
         let student = gradingStudent(data.studentId);
         return roleIs("teacher")
@@ -937,10 +995,13 @@ service cloud.firestore {
           && student.teacherIds is list
           && student.teacherIds.hasAny([request.auth.uid])
           && hasAssignedGradeSubject(
-            student.subjects, data.subject, data.subjectId
-          )
-          && hasAssignedGradeSubject(
             profile().subjects, data.subject, data.subjectId
+          )
+          && (
+            hasAssignedGradeSubject(
+              student.subjects, data.subject, data.subjectId
+            )
+            || gradeCatalogHasSubject(student, data.subjectId)
           );
       }
 

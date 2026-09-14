@@ -17,7 +17,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
-import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
+import { studentCanTakeSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { clampGradeScore, GRADE_MAX } from "@/lib/grade-scale";
 import {
   aggregateDailyGradesByWeek,
@@ -292,7 +292,7 @@ export function AcademicGradesPanel({
   const pagedSummary = summaryVisible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const eligibleStudents = accounts.filter((account) => (
-    account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && includesSubject(account.subjects, activeSubject)
+    account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && studentCanTakeSubject(account, activeSubject)
   )).filter((student) => !normalizedSearch || `${student.name} ${student.grade ?? ""} ${student.group ?? ""}`.toLocaleLowerCase("es").includes(normalizedSearch));
   const capturePageStudents = eligibleStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const daySubjectRecords = cycleRecords.filter((record) => record.weekId === selectedWeek?.id && record.gradeDate === activeDate && subjectsMatch(record.subject, activeSubject) && record.teacherId === profile.uid);

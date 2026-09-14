@@ -27,7 +27,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
-import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
+import { includesSubject, studentCanTakeSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { clampGradeScore, gradeScorePercent, GRADE_MAX } from "@/lib/grade-scale";
 import {
   calculateWeightedGrade,
@@ -802,7 +802,7 @@ function GradeSummaryDashboard({
         account.role === "student" &&
         account.active &&
         account.teacherIds.includes(profile.uid) &&
-        includesSubject(account.subjects, subject)
+        studentCanTakeSubject(account, subject)
       )).length, 0)
     : records.length;
   const completion = assignedExpected
@@ -1375,7 +1375,7 @@ export function WeeklyGradesPanel({
     account.role === "student" &&
     account.active &&
     account.teacherIds.includes(profile.uid) &&
-    includesSubject(account.subjects, activeSubject)
+    studentCanTakeSubject(account, activeSubject)
   ));
   const normalizedStudentSearch = studentSearch.trim().toLocaleLowerCase("es");
   const filteredStudents = eligibleStudents.filter((student) => (

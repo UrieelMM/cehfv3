@@ -18,6 +18,7 @@ const {
   academicSubjectOptions,
   canonicalizeSubject,
   sanitizeSubjects,
+  studentCanTakeSubject,
   subjectsForGrade,
   subjectsMatch,
 } = await import(
@@ -89,6 +90,19 @@ test("sanitization removes subjects that do not belong to the selected grade", (
     ),
     ["Ciencias", "Inglés"],
   );
+});
+
+test("legacy students inherit missing subjects from their official grade catalog", () => {
+  const legacyPrimaryStudent = {
+    schoolLevel: "primary",
+    grade: "4.º",
+    subjects: ["Lenguaje"],
+  };
+
+  assert.equal(studentCanTakeSubject(legacyPrimaryStudent, "Lenguaje"), true);
+  assert.equal(studentCanTakeSubject(legacyPrimaryStudent, "Ciencias"), true);
+  assert.equal(studentCanTakeSubject(legacyPrimaryStudent, "Biología"), false);
+  assert.equal(studentCanTakeSubject({ grade: "1.º", subjects: [] }, "Ciencias"), true);
 });
 
 test("registration, editing and backend saves use the grade catalog", () => {

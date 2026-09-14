@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
-import { includesSubject, subjectsMatch } from "@/lib/academic-subjects";
+import { includesSubject, studentCanTakeSubject, subjectsMatch } from "@/lib/academic-subjects";
 import {
   aggregateDailyGradesByWeek,
   GRADING_CRITERIA,
@@ -219,7 +219,7 @@ export function AcademicReportsPage({
   );
   const normalizedSearch = search.trim().toLocaleLowerCase("es");
   const matchesSearch = (value: { studentName: string; studentGrade?: string; studentGroup?: string }) => !normalizedSearch || `${value.studentName} ${value.studentGrade ?? ""} ${value.studentGroup ?? ""}`.toLocaleLowerCase("es").includes(normalizedSearch);
-  const eligibleStudents = accounts.filter((account) => account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && includesSubject(account.subjects, activeSubject) && matchesSearch({ studentName: account.name, studentGrade: account.grade, studentGroup: account.group }));
+  const eligibleStudents = accounts.filter((account) => account.role === "student" && account.active && account.teacherIds.includes(profile.uid) && studentCanTakeSubject(account, activeSubject) && matchesSearch({ studentName: account.name, studentGrade: account.grade, studentGroup: account.group }));
   const visibleReports = reports.filter((report) => (
     report.schoolYearId === academicConfig.schoolYearId &&
     report.weekId === week?.id &&

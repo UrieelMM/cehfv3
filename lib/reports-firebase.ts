@@ -18,7 +18,7 @@ import { httpsCallable } from "firebase/functions";
 import { firebase } from "./firebase";
 import { gradeSubjectId } from "./grades-firebase";
 import { clampGradeScore, normalizeStoredGradeScore } from "./grade-scale";
-import { includesSubject } from "./academic-subjects";
+import { includesSubject, studentCanTakeSubject } from "./academic-subjects";
 import type {
   AcademicConfig,
   AcademicTerm,
@@ -119,7 +119,7 @@ export async function saveStudentWeeklyReport(
   if (
     input.student.role !== "student" ||
     !input.student.teacherIds.includes(profile.uid) ||
-    !includesSubject(input.student.subjects, input.subject)
+    !studentCanTakeSubject(input.student, input.subject)
   ) {
     throw new Error("El alumno no está asignado a esta materia contigo.");
   }

@@ -26,8 +26,22 @@ test("Firestore accepts every grade from 0 to 10 for assigned teachers", async (
     assert.match(rules, new RegExp(`scores\\.${criterion} >= 0 && scores\\.${criterion} <= 10`));
   }
   assert.match(rules, /function hasAssignedGradeSubject/);
+  assert.match(rules, /function gradeCatalogHasSubject/);
   assert.match(rules, /student\.teacherIds\.hasAny\(\[request\.auth\.uid\]\)/);
   assert.match(rules, /hasAssignedGradeSubject\(\s*profile\(\)\.subjects/);
+  assert.match(rules, /gradeCatalogHasSubject\(student, data\.subjectId\)/);
+});
+
+test("daily grading lists use the grade catalog for legacy student assignments", async () => {
+  const sources = await Promise.all([
+    "components/academic-grades.tsx",
+    "components/weekly-grades.tsx",
+    "components/academic-reports.tsx",
+    "lib/grades-firebase.ts",
+    "lib/reports-firebase.ts",
+  ].map((path) => readFile(new URL(path, projectRoot), "utf8")));
+
+  sources.forEach((source) => assert.match(source, /studentCanTakeSubject/));
 });
 
 test("teachers can correct their own daily grade without changing its academic scope", async () => {

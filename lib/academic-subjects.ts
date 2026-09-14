@@ -143,6 +143,22 @@ export function subjectsForGrade(
   return subjectsByGrade[schoolLevel][grade] ?? [];
 }
 
+export function studentCanTakeSubject(
+  student: {
+    schoolLevel?: SchoolLevel;
+    grade?: string;
+    subjects: readonly string[];
+  },
+  subject: string,
+) {
+  if (includesSubject(student.subjects, subject)) return true;
+  if (!student.grade) return false;
+  return includesSubject(
+    subjectsForGrade(student.schoolLevel ?? "primary", student.grade),
+    subject,
+  );
+}
+
 export function sanitizeSubjects(
   values: readonly string[],
   allowed: readonly AcademicSubject[] = academicSubjectOptions,
