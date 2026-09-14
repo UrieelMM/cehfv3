@@ -683,10 +683,28 @@ export function CEHFApp() {
       setDetailOpen(taskIdFromPath(window.location.pathname));
     };
     window.addEventListener("popstate", onPopState);
+    let stopServiceWorkerUpdate = () => undefined;
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
-      void navigator.serviceWorker.register("/sw.js");
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      let refreshing = false;
+      const applyUpdatedClient = () => {
+        if (!hadController || refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      };
+      navigator.serviceWorker.addEventListener("controllerchange", applyUpdatedClient);
+      stopServiceWorkerUpdate = () => {
+        navigator.serviceWorker.removeEventListener("controllerchange", applyUpdatedClient);
+      };
+      void navigator.serviceWorker
+        .register("/sw.js", { updateViaCache: "none" })
+        .then((registration) => registration.update())
+        .catch(() => undefined);
     }
-    return () => window.removeEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      stopServiceWorkerUpdate();
+    };
   }, []);
 
   useEffect(() => {
@@ -1282,7 +1300,20 @@ export function CEHFApp() {
               </AnimatePresence>
             </div>
             <button className="profile-chip" onClick={() => navigate("profile")}>
-              <span className="avatar">{currentProfile.initials}</span>
+              <span
+                className={`avatar${currentProfile.photoURL ? " has-photo" : ""}`}
+                aria-label={currentProfile.photoURL ? `Fotografía de ${currentProfile.name}` : `Iniciales de ${currentProfile.name}`}
+              >
+                {currentProfile.photoURL ? (
+                  <Image
+                    src={currentProfile.photoURL}
+                    alt=""
+                    fill
+                    sizes="35px"
+                    unoptimized
+                  />
+                ) : currentProfile.initials}
+              </span>
               <span className="profile-copy">
                 <strong>{currentProfile.name.split(" ")[0]}</strong>
                 <small>{roleLabel[role]}</small>
@@ -1592,18 +1623,20 @@ function LoginScreen({ configured }: { configured: boolean }) {
       );
       return;
     }
-    if (!email.trim() || !password) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+    if (!normalizedEmail || !normalizedPassword) {
       setError("Completa los datos solicitados para continuar.");
       return;
     }
-    if (password.length < 8) {
+    if (normalizedPassword.length < 8) {
       setError("La contraseña debe tener al menos 8 caracteres.");
       return;
     }
 
     setBusy(true);
     try {
-      await loginWithEmail(email, password, remember);
+      await loginWithEmail(normalizedEmail, normalizedPassword, remember);
     } catch (submitError) {
       setError(friendlyFirebaseError(submitError));
     } finally {

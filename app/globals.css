@@ -956,6 +956,7 @@ code {
 }
 
 .avatar {
+  position: relative;
   display: grid;
   width: 35px;
   height: 35px;
@@ -966,6 +967,17 @@ code {
   color: var(--violet-dark);
   font-size: calc(0.75rem + 0.125rem);
   font-weight: 800;
+}
+
+.avatar.has-photo {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--violet) 22%, var(--border));
+  background: var(--surface-soft);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--violet) 12%, transparent);
+}
+
+.avatar.has-photo img {
+  object-fit: cover;
 }
 
 .avatar.small {

@@ -1,4 +1,4 @@
-const CACHE = "cehf-primaria-v1";
+const CACHE = "cehf-primaria-v2026-09-14";
 const SHELL = ["/", "/dashboard", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

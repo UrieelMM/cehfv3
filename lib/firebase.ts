@@ -593,7 +593,11 @@ export async function loginWithEmail(
     auth,
     remember ? browserLocalPersistence : browserSessionPersistence,
   );
-  return signInWithEmailAndPassword(auth, email, password);
+  return signInWithEmailAndPassword(
+    auth,
+    email.trim().toLowerCase(),
+    password.trim(),
+  );
 }
 
 export async function resetPassword(email: string) {
