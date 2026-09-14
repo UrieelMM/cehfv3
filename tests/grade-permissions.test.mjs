@@ -32,6 +32,31 @@ test("Firestore accepts every grade from 0 to 10 for assigned teachers", async (
   assert.match(rules, /gradeCatalogHasSubject\(student, data\.subjectId\)/);
 });
 
+test("Firestore validates integer, decimal, zero and mixed scores without integer division", async () => {
+  const rules = await readFile(new URL("firestore.rules", projectRoot), "utf8");
+  const weights = [45, 10, 15, 10, 20];
+  const cases = [
+    [9, 10, 10, 10, 10],
+    [9, 9, 9, 9, 9],
+    [0, 0, 0, 0, 0],
+    [0, 5, 7, 9, 10],
+    [9.9, 8.5, 7.2, 10, 6.1],
+    [10, 10, 10, 10, 10],
+  ];
+
+  assert.match(rules, /let weightedTotal =/);
+  assert.match(rules, /data\.weightedScore \* 100 >= weightedTotal - 5\.1/);
+  assert.match(rules, /data\.weightedScore \* 100 <= weightedTotal \+ 5\.1/);
+  assert.doesNotMatch(rules, /\) \/ 100;\s*return validGradingWeights/);
+
+  for (const scores of cases) {
+    const weightedTotal = scores.reduce((total, score, index) => total + score * weights[index], 0);
+    const savedScore = Math.round((weightedTotal / 100) * 10) / 10;
+    assert.ok(savedScore >= 0 && savedScore <= 10);
+    assert.ok(Math.abs(savedScore * 100 - weightedTotal) <= 5.1);
+  }
+});
+
 test("daily grading lists use the grade catalog for legacy student assignments", async () => {
   const sources = await Promise.all([
     "components/academic-grades.tsx",

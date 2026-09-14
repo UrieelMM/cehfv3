@@ -1013,20 +1013,22 @@ service cloud.firestore {
       }
 
       function validGradeCalculation(data) {
-        let calculatedScore = (
+        // Keep the comparison scaled to avoid integer division when every
+        // score and weight is an integer (for example 9, 10, 10, 10, 10).
+        let weightedTotal = (
           data.scores.classWork * data.weights.classWork
           + data.scores.homework * data.weights.homework
           + data.scores.participation * data.weights.participation
           + data.scores.attendance * data.weights.attendance
           + data.scores.exam * data.weights.exam
-        ) / 100;
+        );
         return validGradingWeights(data.weights)
           && validGradeScores(data.scores)
           && data.weightedScore is number
           && data.weightedScore >= 0
           && data.weightedScore <= 10
-          && data.weightedScore >= calculatedScore - 0.051
-          && data.weightedScore <= calculatedScore + 0.051;
+          && data.weightedScore * 100 >= weightedTotal - 5.1
+          && data.weightedScore * 100 <= weightedTotal + 5.1;
       }
 
       function validWeeklyGrade(data) {
