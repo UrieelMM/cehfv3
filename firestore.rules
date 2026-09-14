@@ -863,13 +863,69 @@ service cloud.firestore {
         ).data;
       }
 
+      function hasAssignedGradeSubject(subjects, subject, subjectId) {
+        return subjects is list
+          && (
+            (
+              subjectId == "lenguaje"
+              && subject in ["Lenguaje", "Español", "Espanol"]
+              && subjects.hasAny(["Lenguaje", "Español", "Espanol"])
+            )
+            || (
+              subjectId == "matematicas"
+              && subject in ["Matemáticas", "Matematicas"]
+              && subjects.hasAny(["Matemáticas", "Matematicas"])
+            )
+            || (
+              subjectId == "civica"
+              && subject in ["Cívica", "Civica", "Formación Cívica", "Formacion Civica"]
+              && subjects.hasAny(["Cívica", "Civica", "Formación Cívica", "Formacion Civica"])
+            )
+            || (
+              subjectId == "fisica"
+              && subject in ["Física", "Fisica", "Educación Física", "Educacion Fisica"]
+              && subjects.hasAny(["Física", "Fisica", "Educación Física", "Educacion Fisica"])
+            )
+            || (
+              subjectId == "lectura-y-comprension"
+              && subject in ["Lectura y comprensión", "Lectura y comprension", "Lectura y compresion"]
+              && subjects.hasAny(["Lectura y comprensión", "Lectura y comprension", "Lectura y compresion"])
+            )
+            || (
+              subjectId == "ciencias"
+              && subject == "Ciencias"
+              && subjects.hasAny(["Ciencias"])
+            )
+            || (
+              subjectId == "historia"
+              && subject == "Historia"
+              && subjects.hasAny(["Historia"])
+            )
+            || (
+              subjectId == "ingles"
+              && subject in ["Inglés", "Ingles"]
+              && subjects.hasAny(["Inglés", "Ingles"])
+            )
+            || (
+              subjectId == "geografia"
+              && subject in ["Geografía", "Geografia"]
+              && subjects.hasAny(["Geografía", "Geografia"])
+            )
+            || (
+              subjectId == "biologia"
+              && subject in ["Biología", "Biologia"]
+              && subjects.hasAny(["Biología", "Biologia"])
+            )
+          );
+      }
+
       function teacherCanGrade(data) {
         let student = gradingStudent(data.studentId);
         return roleIs("teacher")
           && profile().institutionId == institutionId
           && data.institutionId == institutionId
           && data.teacherId == request.auth.uid
-          && data.teacherName == profile().name
+          && data.teacherName is string
           && data.studentId is string
           && exists(
             /databases/$(database)/documents/users/$(data.studentId)
@@ -877,13 +933,15 @@ service cloud.firestore {
           && student.active == true
           && student.role == "student"
           && student.institutionId == institutionId
-          && data.studentName == student.name
+          && data.studentName is string
           && student.teacherIds is list
           && student.teacherIds.hasAny([request.auth.uid])
-          && student.subjects is list
-          && student.subjects.hasAny([data.subject])
-          && profile().subjects is list
-          && profile().subjects.hasAny([data.subject]);
+          && hasAssignedGradeSubject(
+            student.subjects, data.subject, data.subjectId
+          )
+          && hasAssignedGradeSubject(
+            profile().subjects, data.subject, data.subjectId
+          );
       }
 
       function validWeeklyGrade(data) {

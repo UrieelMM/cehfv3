@@ -6,6 +6,7 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   where,
   writeBatch,
@@ -440,16 +441,7 @@ export async function saveDailyGrade(
   const subjectId = gradeSubjectId(subject);
   const recordId = [academicConfig.schoolYearId, week.id, gradeDate, subjectId, profile.uid, student.uid].join("__");
   const recordReference = doc(db, "institutions", profile.institutionId, "dailyGrades", recordId);
-  const batch = writeBatch(db);
-  batch.set(doc(db, "institutions", profile.institutionId, "gradingConfigs", profile.uid), {
-    institutionId: profile.institutionId,
-    teacherId: profile.uid,
-    teacherName: profile.name,
-    subjects: profile.subjects ?? [],
-    weights,
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
-  batch.set(recordReference, {
+  await setDoc(recordReference, {
     institutionId: profile.institutionId,
     schoolYearId: academicConfig.schoolYearId,
     schoolYearLabel: academicConfig.schoolYearLabel,
@@ -472,7 +464,6 @@ export async function saveDailyGrade(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
-  await batch.commit();
 }
 
 // Compatibilidad temporal: cualquier consumidor semanal recibe el promedio

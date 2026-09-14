@@ -10,7 +10,11 @@ const { GRADE_MAX, clampGradeScore, gradeScorePercent, normalizeStoredGradeScore
 
 test("weekly grades use the 0–10 scale", () => {
   assert.equal(GRADE_MAX, 10);
+  assert.equal(clampGradeScore(0), 0);
+  assert.equal(clampGradeScore(0.1), 0.1);
   assert.equal(clampGradeScore(8.74), 8.7);
+  assert.equal(clampGradeScore(9.9), 9.9);
+  assert.equal(clampGradeScore(10), 10);
   assert.equal(clampGradeScore(12), 10);
   assert.equal(clampGradeScore(-1), 0);
   assert.equal(gradeScorePercent(8.5), 85);
