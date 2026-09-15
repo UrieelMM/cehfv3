@@ -32,6 +32,7 @@ import {
   buildDailyReportTemplateParameters,
   dailyGradeIndicators,
   dailyOutboxId,
+  hasCompleteDailyGradeCoverage,
   isOptOutMessage,
   isTransientWhatsAppError,
   isValidSendTime,
@@ -4391,7 +4392,7 @@ const DEFAULT_WHATSAPP_CONFIGURATION: WhatsAppConfiguration = {
   scheduleVersion: 2,
   enabled: false,
   dailySummaryEnabled: true,
-  sendTime: "23:00",
+  sendTime: "19:00",
   sendOnNoTaskDays: true,
   timeZone: WHATSAPP_TIMEZONE,
   templateName: WHATSAPP_DAILY_TEMPLATE,
@@ -4458,7 +4459,7 @@ function whatsappConfigFromData(
     sendTime:
       Number(data?.scheduleVersion) === 2 && isValidSendTime(data?.sendTime)
         ? String(data?.sendTime)
-        : "23:00",
+        : "19:00",
     sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
     templateName:
       storedTemplateName === "cehf_resumen_tareas_diario_v1"
@@ -4793,10 +4794,40 @@ function whatsappDailyScore(value: unknown) {
   return score > 10 ? score / 10 : score;
 }
 
+function expectedDailyGradeSubjects(student: DocumentData) {
+  const schoolLevel = student.schoolLevel === "preschool" ||
+      student.schoolLevel === "secondary"
+    ? student.schoolLevel
+    : "primary";
+  const gradeSubjects = subjectsForGrade(
+    schoolLevel,
+    String(student.grade ?? ""),
+  );
+  const configuredSubjects = Array.isArray(student.subjects)
+    ? sanitizeSubjects(student.subjects.map(String), gradeSubjects)
+    : [];
+  return configuredSubjects.length ? configuredSubjects : gradeSubjects;
+}
+
+function dailyGradeCohort(student: DocumentData) {
+  const schoolLevel = student.schoolLevel === "preschool" ||
+      student.schoolLevel === "secondary"
+    ? student.schoolLevel
+    : "primary";
+  return [schoolLevel, String(student.grade ?? ""), String(student.group ?? "")]
+    .join("__");
+}
+
+type DailyGradeStudentContext = {
+  cohort: string;
+  assignedSubjects: readonly string[];
+};
+
 async function loadDailyStudentGradeReports(
   institutionId: string,
   businessDate: string,
   studentIds: string[],
+  studentContexts: ReadonlyMap<string, DailyGradeStudentContext>,
 ) {
   if (!studentIds.length) return new Map<string, DailyStudentReport>();
   const requestedStudents = new Set(studentIds);
@@ -4815,9 +4846,22 @@ async function loadDailyStudentGradeReports(
       subjects: Set<string>;
     }
   >();
+  const recordedSubjectsByCohort = new Map<string, Set<string>>();
   snapshot.docs.forEach((gradeSnapshot) => {
     const grade = gradeSnapshot.data();
     const studentId = String(grade.studentId ?? "");
+    const studentContext = studentContexts.get(studentId);
+    const subject = String(grade.subject ?? "").trim();
+    if (!studentContext || !subject) return;
+    if (hasCompleteDailyGradeCoverage(
+      [subject],
+      studentContext.assignedSubjects,
+    )) {
+      const cohortSubjects = recordedSubjectsByCohort.get(studentContext.cohort) ??
+        new Set<string>();
+      cohortSubjects.add(subject);
+      recordedSubjectsByCohort.set(studentContext.cohort, cohortSubjects);
+    }
     if (!requestedStudents.has(studentId)) return;
     const scores = grade.scores && typeof grade.scores === "object"
       ? (grade.scores as Record<string, unknown>)
@@ -4838,12 +4882,28 @@ async function loadDailyStudentGradeReports(
     current.participation += participation;
     current.homework += homework;
     current.recordCount += 1;
-    const subject = String(grade.subject ?? "").trim();
-    if (subject) current.subjects.add(subject);
+    current.subjects.add(subject);
     aggregates.set(studentId, current);
   });
   return new Map(
-    [...aggregates.entries()].map(([studentId, aggregate]) => {
+    [...aggregates.entries()].flatMap(([studentId, aggregate]) => {
+      const subjects = [...aggregate.subjects].sort((first, second) =>
+        first.localeCompare(second, "es"),
+      );
+      const studentContext = studentContexts.get(studentId);
+      const expectedSubjects = studentContext
+        ? [...(recordedSubjectsByCohort.get(studentContext.cohort) ?? [])]
+          .filter((subject) => hasCompleteDailyGradeCoverage(
+            [subject],
+            studentContext.assignedSubjects,
+          ))
+        : [];
+      if (!hasCompleteDailyGradeCoverage(
+        expectedSubjects,
+        subjects,
+      )) {
+        return [];
+      }
       const scores = {
         attendance: Math.round(aggregate.attendance / aggregate.recordCount * 10) / 10,
         participation: Math.round(
@@ -4851,7 +4911,7 @@ async function loadDailyStudentGradeReports(
         ) / 10,
         homework: Math.round(aggregate.homework / aggregate.recordCount * 10) / 10,
       };
-      return [
+      return [[
         studentId,
         {
           studentId,
@@ -4859,11 +4919,9 @@ async function loadDailyStudentGradeReports(
           ...dailyGradeIndicators(scores),
           scores,
           recordCount: aggregate.recordCount,
-          subjects: [...aggregate.subjects].sort((first, second) =>
-            first.localeCompare(second, "es"),
-          ),
+          subjects,
         } satisfies DailyStudentReport,
-      ];
+      ] as const];
     }),
   );
 }
@@ -4891,6 +4949,18 @@ async function createDailySummaryOutbox(
       student?.active === true
     );
   });
+  const studentContexts = new Map(
+    activeStudents.map((snapshot) => {
+      const student = snapshot.data() as DocumentData;
+      return [
+        snapshot.id,
+        {
+          cohort: dailyGradeCohort(student),
+          assignedSubjects: expectedDailyGradeSubjects(student),
+        },
+      ] as const;
+    }),
+  );
   const recipients = activeStudents.flatMap((snapshot) => {
     const student = snapshot.data() as DocumentData;
     if (student.guardianWhatsAppAuthorized === false) return [];
@@ -4909,6 +4979,7 @@ async function createDailySummaryOutbox(
     institutionId,
     businessDate,
     recipients.map((recipient) => recipient.id),
+    studentContexts,
   );
   let queued = 0;
   let skipped = activeStudents.length - recipients.length;
@@ -4964,6 +5035,7 @@ async function createDailySummaryOutbox(
           dailyScores: report.scores,
           dailyGradeRecordCount: report.recordCount,
           dailyGradeSubjects: report.subjects,
+          dailyGradeCoverageComplete: true,
           templateName: configuration.templateName,
           templateLanguage: configuration.templateLanguage,
           templateParameters: parameters,
@@ -5279,6 +5351,19 @@ async function sendWhatsAppOutboxDocument(reference: DocumentReference) {
         nextAttemptAt: FieldValue.delete(),
         lastErrorCode: "recipient_not_authorized",
         lastErrorMessage: "El contacto ya no está autorizado para recibir WhatsApp.",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { id: reference.id, status: "cancelled" };
+    }
+    if (
+      message.messageKind === "daily_task_summary" &&
+      message.dailyGradeCoverageComplete !== true
+    ) {
+      await reference.update({
+        status: "cancelled",
+        nextAttemptAt: FieldValue.delete(),
+        lastErrorCode: "daily_grades_incomplete",
+        lastErrorMessage: "El mensaje no acredita una captura diaria completa.",
         updatedAt: FieldValue.serverTimestamp(),
       });
       return { id: reference.id, status: "cancelled" };

@@ -113,7 +113,16 @@ export function shouldRunDailySummary(
   date = new Date(),
   timeZone = WHATSAPP_TIMEZONE,
 ) {
-  return isWeekday(date, timeZone) && localTimeKey(date, timeZone) === sendTime;
+  if (!isWeekday(date, timeZone) || !isValidSendTime(sendTime)) return false;
+  const [sendHour, sendMinute] = sendTime.split(":").map(Number);
+  const [localHour, localMinute] = localTimeKey(date, timeZone)
+    .split(":")
+    .map(Number);
+  const elapsedMinutes = localHour * 60 + localMinute -
+    (sendHour * 60 + sendMinute);
+  // Cloud Scheduler may invoke an `every 15 minutes` job a few minutes after
+  // the quarter-hour. The deterministic outbox id keeps this window idempotent.
+  return elapsedMinutes >= 0 && elapsedMinutes < 15;
 }
 
 export function formatBusinessDateSpanish(dateKey: string) {
@@ -192,6 +201,37 @@ export function dailyGradeIndicators(
       ? "complete"
       : "pending") satisfies DailyHomeworkStatus,
   };
+}
+
+const DAILY_GRADE_SUBJECT_ALIASES = new Map([
+  ["espanol", "lenguaje"],
+  ["formacion civica", "civica"],
+  ["educacion fisica", "fisica"],
+  ["lectura y compresion", "lectura y comprension"],
+]);
+
+function dailyGradeSubjectKey(value: unknown) {
+  const key = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("es-MX");
+  return DAILY_GRADE_SUBJECT_ALIASES.get(key) ?? key;
+}
+
+export function hasCompleteDailyGradeCoverage(
+  expectedSubjects: readonly string[],
+  recordedSubjects: readonly string[],
+) {
+  const expected = new Set(
+    expectedSubjects.map(dailyGradeSubjectKey).filter(Boolean),
+  );
+  if (!expected.size) return false;
+  const recorded = new Set(
+    recordedSubjects.map(dailyGradeSubjectKey).filter(Boolean),
+  );
+  return [...expected].every((subject) => recorded.has(subject));
 }
 
 export function buildDailyReportTemplateParameters(

@@ -93,10 +93,13 @@ destinatarios se toman exclusivamente del campo obligatorio **WhatsApp del
 padre o tutor** del alumno en **Gestión de accesos**; los teléfonos mexicanos
 se guardan en formato internacional `+52` y nacen autorizados.
 
-El reporte se ejecuta de lunes a viernes y sólo se prepara cuando existen
-calificaciones diarias capturadas por el docente. Antes de encolar y justo antes
-de enviar, el backend vuelve a validar que el alumno siga activo, que el número
-sea válido y que `guardianWhatsAppAuthorized` no sea `false`. La cola
+El reporte se ejecuta de lunes a viernes y la hora inicial es 19:00 de
+`America/Mexico_City` (Dirección puede cambiarla). Sólo se prepara para un
+alumno cuando tiene capturas válidas en todas las materias que fueron calificadas
+ese día para su grado y grupo; no exige materias que no tuvieron clase.
+Antes de encolar y justo antes de enviar, el backend vuelve a validar la cobertura
+de materias, que el alumno siga activo, que el número sea válido y que
+`guardianWhatsAppAuthorized` no sea `false`. La cola
 `messageOutbox` usa una clave determinista por fecha y alumno para evitar
 duplicados; el webhook registra envío, entrega, lectura, fallos y la palabra
 `BAJA`, que desactiva futuros mensajes.

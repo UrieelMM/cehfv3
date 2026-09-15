@@ -399,7 +399,7 @@ export function WhatsAppAdminPanel({
                   }))
                 }
               />
-              <small>Hora de Ciudad de México, de lunes a viernes. Inicialmente 23:00.</small>
+              <small>Hora de Ciudad de México, de lunes a viernes. Inicialmente 19:00.</small>
             </label>
               </div>
               <div className="whatsapp-actions-row">
@@ -456,7 +456,7 @@ export function WhatsAppAdminPanel({
                 <CheckCircle2 size={17} />
                 <div>
                   <strong>Reportes basados en calificaciones diarias</strong>
-                  <span>Se prepara un reporte sólo cuando el docente registró calificaciones ese día.</span>
+                  <span>Se prepara sólo cuando el alumno tiene completas las materias calificadas hoy para su grado y grupo.</span>
                 </div>
               </div>
 
@@ -507,7 +507,7 @@ export function WhatsAppAdminPanel({
                 <strong>Envío programado: {configuration.sendTime}</strong>
                 <p>
                   Hora de Ciudad de México, de lunes a viernes. Los reportes se
-                  generan con las calificaciones diarias capturadas por el docente;
+                  generan al completar todas las calificaciones diarias del alumno;
                   sólo Dirección administra destinatarios y envíos manuales.
                 </p>
               </div>

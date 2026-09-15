@@ -6,6 +6,7 @@ import {
   buildTemplateParameters,
   dailyGradeIndicators,
   dailyOutboxId,
+  hasCompleteDailyGradeCoverage,
   isOptOutMessage,
   isTransientWhatsAppError,
   isValidSendTime,
@@ -27,6 +28,14 @@ test("calcula fecha y hora escolar en America/Mexico_City", () => {
   const instant = new Date("2026-08-20T00:00:00.000Z");
   assert.equal(localDateKey(instant), "2026-08-19");
   assert.equal(shouldRunDailySummary("18:00", instant), true);
+  assert.equal(
+    shouldRunDailySummary("18:00", new Date("2026-08-20T00:14:00.000Z")),
+    true,
+  );
+  assert.equal(
+    shouldRunDailySummary("18:00", new Date("2026-08-20T00:15:00.000Z")),
+    false,
+  );
   assert.equal(shouldRunDailySummary("18:15", instant), false);
   assert.equal(isValidSendTime("18:15"), true);
   assert.equal(isValidSendTime("18:10"), false);
@@ -91,6 +100,32 @@ test("convierte las calificaciones diarias en indicadores familiares", () => {
     dailyGradeIndicators({ attendance: 0, participation: 4, homework: 0 }),
     { attendance: "absent", participation: "needs_support", homework: "pending" },
   );
+});
+
+test("considera completo el día según las materias que tuvieron clase", () => {
+  assert.equal(
+    hasCompleteDailyGradeCoverage(
+      ["Lenguaje", "Matemáticas", "Inglés"],
+      ["Inglés", "Matemáticas", "Lenguaje"],
+    ),
+    true,
+  );
+  assert.equal(
+    hasCompleteDailyGradeCoverage(
+      ["Lenguaje", "Matemáticas", "Inglés"],
+      ["Lenguaje", "Matemáticas"],
+    ),
+    false,
+  );
+  assert.equal(
+    hasCompleteDailyGradeCoverage(["Matemáticas"], ["Matematicas"]),
+    true,
+  );
+  assert.equal(
+    hasCompleteDailyGradeCoverage(["Lenguaje"], ["Español"]),
+    true,
+  );
+  assert.equal(hasCompleteDailyGradeCoverage([], ["Lenguaje"]), false);
 });
 
 test("la clave diaria evita duplicados por contacto y fecha", () => {
