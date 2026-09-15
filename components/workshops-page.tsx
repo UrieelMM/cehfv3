@@ -13,6 +13,7 @@ import {
   FileArchive,
   FileImage,
   FileText,
+  ExternalLink,
   FolderOpen,
   Headphones,
   LibraryBig,
@@ -42,6 +43,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { WorkshopTasks } from "@/components/workshop-tasks";
+import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   deleteWorkshopResource,
@@ -59,6 +61,7 @@ import type {
   UserProfile,
   Workshop,
   WorkshopAccessInput,
+  WorkshopLink,
   WorkshopResource,
 } from "@/lib/types";
 
@@ -244,7 +247,7 @@ export function WorkshopsPage({
 
   async function uploadResource(
     workshop: Workshop,
-    input: { title: string; description: string; file: File },
+    input: { title: string; description: string; file: File; links: WorkshopLink[] },
   ) {
     if (!firebaseReady) throw new Error("Inicia sesión para subir recursos.");
     await uploadWorkshopResource(workshop, profile, input);
@@ -541,7 +544,7 @@ function WorkshopDetail({
   const [resourceToEdit, setResourceToEdit] = useState<WorkshopResource | null>(null);
   const reading = workshop.kind === "reading";
   const filteredResources = workshop.resources.filter((resource) =>
-    [resource.title, resource.description, resource.fileName]
+    [resource.title, resource.description, resource.fileName, ...resource.links.map((link) => link.label)]
       .join(" ")
       .toLocaleLowerCase("es-MX")
       .includes(query.trim().toLocaleLowerCase("es-MX")),
@@ -750,6 +753,7 @@ function WorkshopDetail({
                     </span>
                     <ChevronRight size={18} />
                   </button>
+                  {resource.links.length > 0 && <div className="workshop-resource-links">{resource.links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> {link.label}</a>)}</div>}
                   <footer>
                     <span>{fileSize(resource.size)} · {resourceDate(resource.createdAt)}</span>
                     <span>Por {resource.uploadedByName}</span>
@@ -821,13 +825,14 @@ function WorkshopDetail({
 function WorkshopResourceEditDialog({ resource, onCancel }: { resource: WorkshopResource; onCancel: () => void }) {
   const [title, setTitle] = useState(resource.title);
   const [description, setDescription] = useState(resource.description);
+  const [links, setLinks] = useState<WorkshopLink[]>(resource.links);
   const [busy, setBusy] = useState(false);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     try {
-      await updateWorkshopResource(resource, { title: title.trim(), description: description.trim() });
+      await updateWorkshopResource(resource, { title: title.trim(), description: description.trim(), links });
       toast.success("Recurso actualizado");
       onCancel();
     } catch (error) {
@@ -840,6 +845,7 @@ function WorkshopResourceEditDialog({ resource, onCancel }: { resource: Workshop
   return <ContentEditDialog open eyebrow="Recurso de taller" title="Editar recurso" description="Cambia el nombre o la descripción que ve el grupo." note="El archivo original y su historial permanecen intactos." busy={busy} onCancel={onCancel} onSubmit={save}>
     <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
     <label>Descripción<textarea value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} /></label>
+    <WorkshopLinksEditor links={links} onChange={setLinks} />
   </ContentEditDialog>;
 }
 
@@ -1128,12 +1134,13 @@ function WorkshopUploadDialog({
   onClose: () => void;
   onUpload: (
     workshop: Workshop,
-    input: { title: string; description: string; file: File },
+    input: { title: string; description: string; file: File; links: WorkshopLink[] },
   ) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [links, setLinks] = useState<WorkshopLink[]>([]);
   const [uploading, setUploading] = useState(false);
 
   async function submit(event: FormEvent) {
@@ -1148,7 +1155,7 @@ function WorkshopUploadDialog({
     }
     setUploading(true);
     try {
-      await onUpload(workshop, { title: title.trim(), description: description.trim(), file });
+      await onUpload(workshop, { title: title.trim(), description: description.trim(), file, links });
       toast.success("Recurso publicado", {
         description: "Los participantes recibirán una notificación.",
       });
@@ -1194,6 +1201,7 @@ function WorkshopUploadDialog({
             <span>Descripción <small>Opcional</small></span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={280} rows={3} placeholder="Cuenta brevemente para qué sirve este material…" />
           </label>
+          <WorkshopLinksEditor links={links} onChange={setLinks} />
           <label className={`workshop-file-drop ${file ? "has-file" : ""}`}>
             <input
               type="file"

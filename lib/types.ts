@@ -908,12 +908,18 @@ export type AppNotification = {
 
 export type WorkshopKind = "tics" | "reading";
 
+export type WorkshopLink = {
+  label: string;
+  url: string;
+};
+
 export type WorkshopResource = {
   id: string;
   workshopId: string;
   institutionId: string;
   title: string;
   description: string;
+  links: WorkshopLink[];
   fileName: string;
   storagePath: string;
   contentType: string;
@@ -968,6 +974,7 @@ export type WorkshopTask = {
   status: WorkshopTaskStatus;
   audienceStudentIds: string[];
   attachments: WorkshopTaskAttachment[];
+  links: WorkshopLink[];
   createdBy: string;
   teacherName: string;
   createdAt: string;

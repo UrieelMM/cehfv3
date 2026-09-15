@@ -593,6 +593,8 @@ service cloud.firestore {
             && request.resource.data.uploadedBy == request.auth.uid
             && request.resource.data.title is string
             && request.resource.data.storagePath is string
+            && request.resource.data.links is list
+            && request.resource.data.links.size() <= 10
             && request.resource.data.size is number
             && request.resource.data.size > 0
             && request.resource.data.size < 20 * 1024 * 1024;
@@ -663,6 +665,8 @@ service cloud.firestore {
             && request.resource.data.dueAt is timestamp
             && request.resource.data.status in ["draft", "published"]
             && request.resource.data.attachments is list
+            && request.resource.data.links is list
+            && request.resource.data.links.size() <= 10
             && validWorkshopTaskAudience(request.resource.data);
           allow update: if canManageWorkshopTask(resource.data)
             && request.resource.data.institutionId == resource.data.institutionId

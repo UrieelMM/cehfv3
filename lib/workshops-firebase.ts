@@ -28,6 +28,7 @@ import type {
   Workshop,
   WorkshopAccessInput,
   WorkshopKind,
+  WorkshopLink,
   WorkshopResource,
   WorkshopSubmission,
   WorkshopTask,
@@ -111,6 +112,35 @@ function normalizeZoomUrl(value: string) {
   }
 }
 
+function workshopLinksFromData(value: unknown): WorkshopLink[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const link = item as Record<string, unknown>;
+    const label = String(link.label ?? "").trim();
+    const url = String(link.url ?? "").trim();
+    return label && /^https?:\/\//i.test(url) ? [{ label, url }] : [];
+  });
+}
+
+function normalizeWorkshopLinks(links: WorkshopLink[]): WorkshopLink[] {
+  if (links.length > 10) throw new Error("Puedes agregar hasta 10 enlaces.");
+  return links.map((link, index) => {
+    const label = link.label.trim();
+    const url = link.url.trim();
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`El enlace ${index + 1} no es válido.`);
+    }
+    if (!label || label.length > 100 || url.length > 2000 || !["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error(`Revisa el nombre y la URL del enlace ${index + 1}.`);
+    }
+    return { label, url: parsed.toString() };
+  });
+}
+
 function resourceFromSnapshot(
   snapshot: QueryDocumentSnapshot<DocumentData>,
 ): WorkshopResource {
@@ -121,6 +151,7 @@ function resourceFromSnapshot(
     institutionId: String(data.institutionId ?? ""),
     title: String(data.title ?? "Recurso del taller"),
     description: String(data.description ?? ""),
+    links: workshopLinksFromData(data.links),
     fileName: String(data.fileName ?? "archivo"),
     storagePath: String(data.storagePath ?? ""),
     contentType: String(data.contentType ?? "application/octet-stream"),
@@ -331,9 +362,10 @@ function safeFileName(value: string) {
 export async function uploadWorkshopResource(
   workshop: Workshop,
   profile: UserProfile,
-  input: { title: string; description: string; file: File },
+  input: { title: string; description: string; file: File; links: WorkshopLink[] },
 ) {
   const { db, storage } = requireFirebase();
+  const links = normalizeWorkshopLinks(input.links);
   if (input.file.size <= 0 || input.file.size >= 20 * 1024 * 1024) {
     throw new Error("El archivo debe pesar menos de 20 MB.");
   }
@@ -362,6 +394,7 @@ export async function uploadWorkshopResource(
       workshopId: workshop.id,
       title: input.title.trim(),
       description: input.description.trim(),
+      links,
       fileName: input.file.name,
       storagePath,
       contentType: input.file.type || "application/octet-stream",
@@ -389,14 +422,15 @@ export async function deleteWorkshopResource(resource: WorkshopResource) {
 
 export async function updateWorkshopResource(
   resource: WorkshopResource,
-  input: Pick<WorkshopResource, "title" | "description">,
+  input: Pick<WorkshopResource, "title" | "description" | "links">,
 ) {
   if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
+  const links = normalizeWorkshopLinks(input.links);
   const callable = httpsCallable<
     { entityType: "workshop_resource"; workshopId: string; resourceId: string } & typeof input,
     { updated: boolean }
   >(firebase.functions, "updateManagedContent");
-  return (await callable({ entityType: "workshop_resource", workshopId: resource.workshopId, resourceId: resource.id, ...input })).data;
+  return (await callable({ entityType: "workshop_resource", workshopId: resource.workshopId, resourceId: resource.id, ...input, links })).data;
 }
 
 export async function getWorkshopResourceUrl(resource: WorkshopResource) {
@@ -414,6 +448,7 @@ export type WorkshopTaskCreateInput = {
   status: "draft" | "published";
   audienceStudentIds: string[];
   files: File[];
+  links: WorkshopLink[];
 };
 
 function attachmentFromData(value: unknown): WorkshopTaskAttachment | null {
@@ -455,6 +490,7 @@ function taskFromSnapshot(
       : "published",
     audienceStudentIds: stringList(data.audienceStudentIds),
     attachments: attachmentsFromData(data.attachments),
+    links: workshopLinksFromData(data.links),
     createdBy: String(data.createdBy ?? ""),
     teacherName: String(data.teacherName ?? "Equipo docente"),
     createdAt: asIso(data.createdAt),
@@ -594,6 +630,7 @@ export async function createWorkshopTask(
     throw new Error("Selecciona al menos un alumno de tu grupo.");
   }
   const reference = doc(taskCollection(profile.institutionId, workshop.id));
+  const links = normalizeWorkshopLinks(input.links);
   const prefix = `institutions/${profile.institutionId}/workshops/${workshop.id}/tasks/${reference.id}/resources`;
   const attachments = await uploadWorkshopFiles(prefix, input.files);
   try {
@@ -606,6 +643,7 @@ export async function createWorkshopTask(
       status: input.status,
       audienceStudentIds,
       attachments,
+      links,
       createdBy: profile.uid,
       teacherName: profile.name,
       createdAt: serverTimestamp(),
@@ -652,14 +690,15 @@ export async function deleteWorkshopTask(task: WorkshopTask) {
 
 export async function updateWorkshopTask(
   task: WorkshopTask,
-  input: Pick<WorkshopTask, "title" | "description" | "dueAt">,
+  input: Pick<WorkshopTask, "title" | "description" | "dueAt" | "links">,
 ) {
   if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
+  const links = normalizeWorkshopLinks(input.links);
   const callable = httpsCallable<
     { entityType: "workshop_task"; workshopId: string; taskId: string } & typeof input,
     { updated: boolean }
   >(firebase.functions, "updateManagedContent");
-  return (await callable({ entityType: "workshop_task", workshopId: task.workshopId, taskId: task.id, ...input })).data;
+  return (await callable({ entityType: "workshop_task", workshopId: task.workshopId, taskId: task.id, ...input, links })).data;
 }
 
 export function watchWorkshopSubmissions(

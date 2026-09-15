@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Clock3,
   Download,
+  ExternalLink,
   FileText,
   LoaderCircle,
   MessageSquareText,
@@ -30,6 +31,7 @@ import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
+import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import {
   createWorkshopTask,
@@ -48,6 +50,7 @@ import type {
   Role,
   UserProfile,
   Workshop,
+  WorkshopLink,
   WorkshopSubmission,
   WorkshopTask,
   WorkshopTaskAttachment,
@@ -298,6 +301,7 @@ export function WorkshopTasks({
 function WorkshopTaskEditDialog({ task, onCancel }: { task: WorkshopTask; onCancel: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
+  const [links, setLinks] = useState<WorkshopLink[]>(task.links);
   const [dueAt, setDueAt] = useState(() => {
     const date = new Date(task.dueAt);
     return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -308,7 +312,7 @@ function WorkshopTaskEditDialog({ task, onCancel }: { task: WorkshopTask; onCanc
     event.preventDefault();
     setBusy(true);
     try {
-      await updateWorkshopTask(task, { title: title.trim(), description: description.trim(), dueAt: new Date(dueAt).toISOString() });
+      await updateWorkshopTask(task, { title: title.trim(), description: description.trim(), dueAt: new Date(dueAt).toISOString(), links });
       toast.success("Actividad actualizada");
       onCancel();
     } catch (error) {
@@ -322,6 +326,7 @@ function WorkshopTaskEditDialog({ task, onCancel }: { task: WorkshopTask; onCanc
     <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
     <label>Indicaciones<textarea value={description} minLength={3} maxLength={2000} required onChange={(event) => setDescription(event.target.value)} /></label>
     <label>Fecha límite<input type="datetime-local" value={dueAt} required onChange={(event) => setDueAt(event.target.value)} /></label>
+    <WorkshopLinksEditor links={links} onChange={setLinks} />
   </ContentEditDialog>;
 }
 
@@ -348,6 +353,7 @@ function WorkshopTaskCreateDialog({
   const [status, setStatus] = useState<"draft" | "published">("published");
   const [selectedStudents, setSelectedStudents] = useState<string[]>(rosterIds);
   const [files, setFiles] = useState<File[]>([]);
+  const [links, setLinks] = useState<WorkshopLink[]>([]);
   const [saving, setSaving] = useState(false);
   const accountById = new Map(accounts.map((account) => [account.uid, account]));
   const roster = rosterIds.map((studentId) =>
@@ -383,6 +389,7 @@ function WorkshopTaskCreateDialog({
         status,
         audienceStudentIds: selectedStudents,
         files,
+        links,
       });
       toast.success(status === "published" ? "Trabajo publicado" : "Borrador guardado");
       onClose();
@@ -411,6 +418,7 @@ function WorkshopTaskCreateDialog({
               <UploadCloud size={21} />
               <span><strong>{files.length ? `${files.length} archivo${files.length === 1 ? "" : "s"}` : "Adjuntar material"}</strong><small>Guías, imágenes, audio o video · 20 MB por archivo</small></span>
             </label>
+            <WorkshopLinksEditor links={links} onChange={setLinks} />
           </div>
           <aside className="workshop-roster-picker">
             <div><span><Users size={17} /> Alumnos de este trabajo</span><button type="button" onClick={() => setSelectedStudents(selectedStudents.length === roster.length ? [] : rosterIds)}>{selectedStudents.length === roster.length ? "Quitar todos" : "Elegir todos"}</button></div>
@@ -589,7 +597,7 @@ function WorkshopTaskDetailDialog({
         </header>
         <div className="workshop-task-detail-body">
           <main>
-            <section className="workshop-task-instructions"><span className="eyebrow">Indicaciones</span><p>{task.description}</p>{task.attachments.length > 0 && <div className="workshop-task-attachments">{task.attachments.map((attachment) => <button key={attachment.id} onClick={() => void openAttachment(attachment)}><FileText size={17} /><span><strong>{attachment.name}</strong><small>{fileSize(attachment.size)}</small></span><Download size={15} /></button>)}</div>}</section>
+            <section className="workshop-task-instructions"><span className="eyebrow">Indicaciones</span><p>{task.description}</p>{task.attachments.length > 0 && <div className="workshop-task-attachments">{task.attachments.map((attachment) => <button key={attachment.id} onClick={() => void openAttachment(attachment)}><FileText size={17} /><span><strong>{attachment.name}</strong><small>{fileSize(attachment.size)}</small></span><Download size={15} /></button>)}</div>}{task.links.length > 0 && <div className="workshop-task-links">{task.links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> {link.label}</a>)}</div>}</section>
             {role === "student" ? (
               <section className="workshop-student-delivery">
                 {mySubmission?.teacherFeedback && <div className={`workshop-feedback-card is-${mySubmission.status}`}><MessageSquareText size={20} /><div><span>{mySubmission.status === "reviewed" ? "Entrega finalizada" : "Retroalimentación de tu maestro"}</span><p>{mySubmission.teacherFeedback}</p></div></div>}

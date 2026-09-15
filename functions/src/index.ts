@@ -1697,6 +1697,7 @@ export const updateManagedContent = onCall(async (request) => {
     updates = {
       title,
       description: optionalMaterialText(input.description, "La descripción", 1_000),
+      links: workshopLinks(input.links),
       updatedAt: Timestamp.now(),
     };
   } else if (entityType === "workshop_task") {
@@ -1715,6 +1716,7 @@ export const updateManagedContent = onCall(async (request) => {
       title,
       description: materialText(input.description, "La descripción", 3, 2_000),
       dueAt: editableDate(input.dueAt, "La fecha límite"),
+      links: workshopLinks(input.links),
       updatedAt: Timestamp.now(),
     };
   } else {
@@ -1808,6 +1810,27 @@ function materialGroups(value: unknown) {
     throw new HttpsError("invalid-argument", "Selecciona grupos válidos.");
   }
   return groups;
+}
+
+function workshopLinks(value: unknown) {
+  if (!Array.isArray(value) || value.length > 10) {
+    throw new HttpsError("invalid-argument", "Puedes agregar hasta 10 enlaces al taller.");
+  }
+  return value.map((item, index) => {
+    const link = (item ?? {}) as Record<string, unknown>;
+    const label = materialText(link.label, "El nombre del enlace", 1, 100);
+    const url = String(link.url ?? "").trim();
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new HttpsError("invalid-argument", `El enlace ${index + 1} no es válido.`);
+    }
+    if (!["http:", "https:"].includes(parsed.protocol) || url.length > 2_000) {
+      throw new HttpsError("invalid-argument", `El enlace ${index + 1} no es seguro.`);
+    }
+    return { label, url: parsed.toString() };
+  });
 }
 
 function materialLinks(value: unknown) {
