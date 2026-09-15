@@ -4415,7 +4415,7 @@ const DEFAULT_WHATSAPP_CONFIGURATION: WhatsAppConfiguration = {
   scheduleVersion: 2,
   enabled: false,
   dailySummaryEnabled: true,
-  sendTime: "19:00",
+  sendTime: "18:00",
   sendOnNoTaskDays: true,
   timeZone: WHATSAPP_TIMEZONE,
   templateName: WHATSAPP_DAILY_TEMPLATE,
@@ -4482,7 +4482,7 @@ function whatsappConfigFromData(
     sendTime:
       Number(data?.scheduleVersion) === 2 && isValidSendTime(data?.sendTime)
         ? String(data?.sendTime)
-        : "19:00",
+        : "18:00",
     sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
     templateName:
       storedTemplateName === "cehf_resumen_tareas_diario_v1"

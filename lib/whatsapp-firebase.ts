@@ -25,7 +25,7 @@ export const defaultWhatsAppConfiguration: WhatsAppConfiguration = {
   scheduleVersion: 2,
   enabled: false,
   dailySummaryEnabled: true,
-  sendTime: "19:00",
+  sendTime: "18:00",
   sendOnNoTaskDays: true,
   timeZone: "America/Mexico_City",
   templateName: "cehf_reporte_diario_alumno_v1",
@@ -92,8 +92,8 @@ function configurationFromData(
     sendOnNoTaskDays: data?.sendOnNoTaskDays !== false,
     sendTime:
       Number(data?.scheduleVersion) === 2
-        ? String(data?.sendTime ?? "19:00")
-        : "19:00",
+        ? String(data?.sendTime ?? "18:00")
+        : "18:00",
     timeZone: String(data?.timeZone ?? "America/Mexico_City"),
     templateName:
       storedTemplateName === "cehf_resumen_tareas_diario_v1"

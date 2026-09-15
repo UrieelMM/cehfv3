@@ -93,7 +93,7 @@ destinatarios se toman exclusivamente del campo obligatorio **WhatsApp del
 padre o tutor** del alumno en **Gestión de accesos**; los teléfonos mexicanos
 se guardan en formato internacional `+52` y nacen autorizados.
 
-El reporte se ejecuta de lunes a viernes y la hora inicial es 19:00 de
+El reporte se ejecuta de lunes a viernes y la hora inicial es 18:00 de
 `America/Mexico_City` (Dirección puede cambiarla). Sólo se prepara para un
 alumno cuando tiene capturas válidas en todas las materias que fueron calificadas
 ese día para su grado y grupo; no exige materias que no tuvieron clase.

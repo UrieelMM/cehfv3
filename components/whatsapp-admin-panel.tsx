@@ -399,7 +399,7 @@ export function WhatsAppAdminPanel({
                   }))
                 }
               />
-              <small>Hora de Ciudad de México, de lunes a viernes. Inicialmente 19:00.</small>
+              <small>Hora de Ciudad de México, de lunes a viernes. Inicialmente 18:00.</small>
             </label>
               </div>
               <div className="whatsapp-actions-row">
