@@ -97,6 +97,8 @@ El reporte se ejecuta de lunes a viernes y la hora inicial es 18:00 de
 `America/Mexico_City` (Dirección puede cambiarla). Sólo se prepara para un
 alumno cuando tiene capturas válidas en todas las materias que fueron calificadas
 ese día para su grado y grupo; no exige materias que no tuvieron clase.
+Si la fecha está activa en **Excepciones del calendario** como día no laboral,
+el backend no prepara ni envía reportes, incluso si el mensaje ya estaba en cola.
 Antes de encolar y justo antes de enviar, el backend vuelve a validar la cobertura
 de materias, que el alumno siga activo, que el número sea válido y que
 `guardianWhatsAppAuthorized` no sea `false`. La cola

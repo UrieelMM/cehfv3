@@ -4509,6 +4509,33 @@ async function readWhatsAppConfiguration(institutionId: string) {
   return whatsappConfigFromData(institutionId, snapshot.data());
 }
 
+async function readNonWorkingBusinessDay(
+  institutionId: string,
+  businessDate: string,
+) {
+  if (!institutionId || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return null;
+  const academicConfig = await db
+    .doc(`institutions/${institutionId}/configuracion/academica`)
+    .get();
+  const schoolYearId = String(academicConfig.data()?.schoolYearId ?? "");
+  if (!schoolYearId) return null;
+  const snapshot = await db.doc(
+    `institutions/${institutionId}/ciclosEscolares/${schoolYearId}/diasNoLaborales/${businessDate}`,
+  ).get();
+  const day = snapshot.data();
+  if (
+    !snapshot.exists ||
+    day?.active === false ||
+    String(day?.date ?? snapshot.id) !== businessDate
+  ) {
+    return null;
+  }
+  return {
+    schoolYearId,
+    label: String(day?.label ?? "Día no laboral"),
+  };
+}
+
 async function requireWhatsAppStaff(
   auth: CallableRequest<unknown>["auth"],
 ) {
@@ -5270,6 +5297,16 @@ export const queueDailyWhatsAppSummaries = onCall(async (request) => {
       "Activa los resúmenes diarios antes de encolarlos.",
     );
   }
+  const nonWorkingDay = await readNonWorkingBusinessDay(
+    director.institutionId,
+    businessDate,
+  );
+  if (nonWorkingDay) {
+    throw new HttpsError(
+      "failed-precondition",
+      `No se preparan reportes de WhatsApp en días no laborales: ${nonWorkingDay.label}.`,
+    );
+  }
   const result = await createDailySummaryOutbox(
     director.institutionId,
     businessDate,
@@ -5302,9 +5339,22 @@ export const enqueueDailyWhatsAppSummaries = onSchedule(
     ) {
       return;
     }
+    const businessDate = localDateKey(now, configuration.timeZone);
+    const nonWorkingDay = await readNonWorkingBusinessDay(
+      institutionId,
+      businessDate,
+    );
+    if (nonWorkingDay) {
+      logger.info("Daily WhatsApp summaries skipped for non-working day", {
+        institutionId,
+        businessDate,
+        label: nonWorkingDay.label,
+      });
+      return;
+    }
     const result = await createDailySummaryOutbox(
       institutionId,
-      localDateKey(now, configuration.timeZone),
+      businessDate,
     );
     logger.info("Daily WhatsApp summaries queued", result);
   },
@@ -5359,6 +5409,23 @@ async function sendWhatsAppOutboxDocument(reference: DocumentReference) {
   const message = await claimWhatsAppOutbox(reference);
   if (!message) return { id: reference.id, status: "skipped" };
   const recipientStudentId = String(message.recipientStudentId ?? "");
+  if (message.messageKind === "daily_task_summary") {
+    const businessDate = String(message.businessDate ?? "");
+    const nonWorkingDay = await readNonWorkingBusinessDay(
+      String(message.institutionId ?? ""),
+      businessDate,
+    );
+    if (nonWorkingDay) {
+      await reference.update({
+        status: "cancelled",
+        nextAttemptAt: FieldValue.delete(),
+        lastErrorCode: "business_date_non_working",
+        lastErrorMessage: `Envío cancelado por día no laboral: ${nonWorkingDay.label}.`,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return { id: reference.id, status: "cancelled" };
+    }
+  }
   if (recipientStudentId) {
     const studentSnapshot = await db.doc(`users/${recipientStudentId}`).get();
     const student = studentSnapshot.data();
