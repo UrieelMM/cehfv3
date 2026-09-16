@@ -14272,10 +14272,12 @@ code {
 }
 
 .forum-avatar-stack span {
+  position: relative;
   display: grid;
   width: 27px;
   height: 27px;
   margin-left: -7px;
+  overflow: hidden;
   place-items: center;
   border: 2px solid var(--surface-soft);
   border-radius: 50%;
@@ -14283,6 +14285,10 @@ code {
   color: var(--violet);
   font-size: calc(0.5rem + 0.125rem);
   font-weight: 850;
+}
+
+.forum-avatar-stack span img {
+  object-fit: cover;
 }
 
 .forum-avatar-stack span:first-child {
@@ -14814,15 +14820,21 @@ code {
 }
 
 .forum-mention-menu button span {
+  position: relative;
   display: grid;
   width: 26px;
   height: 26px;
+  overflow: hidden;
   place-items: center;
   border-radius: 8px;
   background: var(--violet-soft);
   color: var(--violet);
   font-size: calc(0.5rem + 0.125rem);
   font-weight: 850;
+}
+
+.forum-mention-menu button span img {
+  object-fit: cover;
 }
 
 .forum-closed-note {

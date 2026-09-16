@@ -1364,7 +1364,8 @@
 .workshop-roster-picker > div > button { padding: 5px 7px; border: 0; background: transparent; color: var(--violet); font-size: calc(0.57rem + 0.125rem); font-weight: 750; }
 .workshop-roster-picker > button { display: grid; width: 100%; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; margin-bottom: 6px; padding: 9px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); text-align: left; }
 .workshop-roster-picker > button.selected { border-color: color-mix(in srgb, var(--violet) 36%, var(--border)); background: color-mix(in srgb, var(--violet-soft) 28%, var(--surface)); }
-.workshop-roster-picker i { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: var(--violet-soft); color: var(--violet); font-size: calc(0.58rem + 0.125rem); font-style: normal; font-weight: 820; }
+.workshop-roster-picker i { position: relative; display: grid; width: 34px; height: 34px; overflow: hidden; place-items: center; border-radius: 10px; background: var(--violet-soft); color: var(--violet); font-size: calc(0.58rem + 0.125rem); font-style: normal; font-weight: 820; }
+.workshop-roster-picker i img { object-fit: cover; }
 .workshop-roster-picker span,
 .workshop-roster-picker strong,
 .workshop-roster-picker small { display: block; min-width: 0; }

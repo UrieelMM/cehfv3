@@ -282,17 +282,21 @@
 }
 
 .academic-student-cell > span {
+  position: relative;
   width: 34px;
   height: 34px;
   display: grid;
   flex: 0 0 34px;
   place-items: center;
+  overflow: hidden;
   border-radius: 9px;
   background: var(--violet-soft);
   color: var(--violet);
   font-size: .68rem;
   font-weight: 850;
 }
+
+.academic-student-cell > span img { object-fit: cover; }
 
 .academic-student-cell strong { font-size: .76rem; }
 

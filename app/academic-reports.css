@@ -212,17 +212,21 @@
 .report-card-kicker { color: var(--violet); font-size: .59rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 
 .report-student-avatar {
+  position: relative;
   width: 36px;
   height: 36px;
   display: grid;
   flex: 0 0 36px;
   place-items: center;
+  overflow: hidden;
   border-radius: 10px;
   background: var(--violet-soft);
   color: var(--violet);
   font-size: .69rem;
   font-weight: 850;
 }
+
+.report-student-avatar img { object-fit: cover; }
 
 .report-status {
   flex: 0 0 auto;

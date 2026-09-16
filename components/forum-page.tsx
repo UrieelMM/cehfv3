@@ -40,6 +40,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import Image from "next/image";
 import {
   useEffect,
   useMemo,
@@ -194,6 +195,14 @@ export function ForumPage({
   const topics = useMemo(
     () => state.forumTopics.map(normalizeTopic),
     [state.forumTopics],
+  );
+  const accountById = useMemo(
+    () => new Map(managedAccounts.map((account) => [account.uid, account])),
+    [managedAccounts],
+  );
+  const accountByName = useMemo(
+    () => new Map(managedAccounts.map((account) => [account.name.toLocaleLowerCase("es-MX"), account])),
+    [managedAccounts],
   );
   const [selectedId, setSelectedId] = useState(() => topicFromPath(topics));
   const [selectedSpace, setSelectedSpace] = useState("all");
@@ -784,12 +793,20 @@ export function ForumPage({
   const parentReply = selectedTopic.replies.find(
     (item) => item.id === replyingTo,
   );
-  const mentionCandidates = selectedTopic.participantProfiles?.length
+  const resolvePhotoURL = (uid?: string, name?: string) => {
+    if ((uid && uid === profile.uid) || (name && name === profile.name)) return profile.photoURL;
+    return (uid ? accountById.get(uid)?.photoURL : undefined)
+      ?? (name ? accountByName.get(name.toLocaleLowerCase("es-MX"))?.photoURL : undefined);
+  };
+  const mentionCandidates = (selectedTopic.participantProfiles?.length
     ? selectedTopic.participantProfiles
     : selectedTopic.participants.map((name) => ({
         uid: "",
         name,
         initials: initialsFor(name),
+      }))).map((participant) => ({
+        ...participant,
+        photoURL: resolvePhotoURL(participant.uid, participant.name),
       }));
   const mentionMatch = reply.match(/(?:^|\s)@([\p{L}]*)$/u);
   const mentionSuggestions = mentionMenuOpen && mentionMatch
@@ -1189,8 +1206,10 @@ export function ForumPage({
 
             <div className="forum-participation-summary">
               <div className="forum-avatar-stack" aria-hidden="true">
-                {selectedTopic.participants.slice(0, 4).map((participant) => (
-                  <span key={participant}>{initialsFor(participant)}</span>
+                {mentionCandidates.slice(0, 4).map((participant) => (
+                  <span key={participant.uid || participant.name}>
+                    {participant.photoURL ? <Image src={participant.photoURL} alt="" fill sizes="27px" unoptimized /> : participant.initials}
+                  </span>
                 ))}
               </div>
               <p>
@@ -1241,6 +1260,7 @@ export function ForumPage({
                     nestedReplies={children}
                     role={role}
                     profile={profile}
+                    resolvePhotoURL={resolvePhotoURL}
                     mentionNames={mentionCandidates.map(
                       (participant) => participant.name,
                     )}
@@ -1280,7 +1300,9 @@ export function ForumPage({
               selectedTopic.allowReplies &&
               !currentBan && (
                 <form className="forum-composer" onSubmit={submitReply}>
-                  <span className="avatar">{profile.initials}</span>
+                  <span className={`avatar${profile.photoURL ? " has-photo" : ""}`} aria-label={profile.photoURL ? `Fotografía de ${profile.name}` : `Iniciales de ${profile.name}`}>
+                    {profile.photoURL ? <Image src={profile.photoURL} alt="" fill sizes="35px" unoptimized /> : profile.initials}
+                  </span>
                   <div className="forum-composer-body">
                     {parentReply && (
                       <div className="forum-replying-to">
@@ -1334,7 +1356,9 @@ export function ForumPage({
                               composerRef.current?.focus();
                             }}
                           >
-                            <span>{participant.initials}</span>
+                            <span>
+                              {participant.photoURL ? <Image src={participant.photoURL} alt="" fill sizes="26px" unoptimized /> : participant.initials}
+                            </span>
                             {participant.name}
                           </button>
                         ))}
@@ -1682,6 +1706,7 @@ function ForumReplyCard({
   nestedReplies,
   role,
   profile,
+  resolvePhotoURL,
   mentionNames,
   onReact,
   onReply,
@@ -1695,6 +1720,7 @@ function ForumReplyCard({
   nestedReplies: ForumReply[];
   role: Role;
   profile: UserProfile;
+  resolvePhotoURL: (uid?: string, name?: string) => string | undefined;
   mentionNames: string[];
   onReact: (item: ForumReply, kind: ForumReactionKind) => void;
   onReply: (replyId: string) => void;
@@ -1705,6 +1731,7 @@ function ForumReplyCard({
   onOpenAttachment: (item: ForumAttachment) => void;
 }) {
   const staff = role !== "student";
+  const photoURL = resolvePhotoURL(item.authorId, item.author);
 
   if (item.status === "hidden" && !staff) return null;
 
@@ -1714,7 +1741,9 @@ function ForumReplyCard({
       id={`forum-post-${item.id}`}
     >
       <div className="forum-reply-main">
-        <span className="avatar">{item.initials}</span>
+        <span className={`avatar${photoURL ? " has-photo" : ""}`} aria-label={photoURL ? `Fotografía de ${item.author}` : `Iniciales de ${item.author}`}>
+          {photoURL ? <Image src={photoURL} alt="" fill sizes="35px" unoptimized /> : item.initials}
+        </span>
         <div className="forum-reply-content">
           <div className="forum-reply-author">
             <div>
@@ -1851,6 +1880,7 @@ function ForumReplyCard({
               nestedReplies={[]}
               role={role}
               profile={profile}
+              resolvePhotoURL={resolvePhotoURL}
               mentionNames={mentionNames}
               onReact={onReact}
               onReply={() => onReply(item.id)}

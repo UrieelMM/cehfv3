@@ -14,6 +14,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
@@ -129,7 +130,11 @@ function CaptureRow({
   return (
     <div className="academic-capture-row">
       <div className="academic-student-cell">
-        <span>{student.initials}</span>
+        <span aria-label={student.photoURL ? `Fotografía de ${student.name}` : `Iniciales de ${student.name}`}>
+          {student.photoURL ? (
+            <Image src={student.photoURL} alt="" fill sizes="34px" unoptimized />
+          ) : student.initials}
+        </span>
         <div><strong>{student.name}</strong><small>{student.grade} {student.group}</small></div>
       </div>
       <div className="academic-score-inputs">

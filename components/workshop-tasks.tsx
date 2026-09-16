@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -361,6 +362,7 @@ function WorkshopTaskCreateDialog({
       uid: studentId,
       name: "Alumno asignado",
       initials: "CE",
+      photoURL: undefined,
       grade: "",
       group: "",
     },
@@ -424,7 +426,12 @@ function WorkshopTaskCreateDialog({
             <div><span><Users size={17} /> Alumnos de este trabajo</span><button type="button" onClick={() => setSelectedStudents(selectedStudents.length === roster.length ? [] : rosterIds)}>{selectedStudents.length === roster.length ? "Quitar todos" : "Elegir todos"}</button></div>
             {roster.length ? roster.map((student) => (
               <button type="button" className={selectedStudents.includes(student.uid) ? "selected" : ""} key={student.uid} onClick={() => toggleStudent(student.uid)}>
-                <i>{student.initials}</i><span><strong>{student.name}</strong><small>{[student.grade, student.group].filter(Boolean).join(" ") || "Taller asignado"}</small></span><em>{selectedStudents.includes(student.uid) && <Check size={13} />}</em>
+                <i aria-label={student.photoURL ? `Fotografía de ${student.name}` : `Iniciales de ${student.name}`}>
+                  {student.photoURL ? (
+                    <Image src={student.photoURL} alt="" fill sizes="34px" unoptimized />
+                  ) : student.initials}
+                </i>
+                <span><strong>{student.name}</strong><small>{[student.grade, student.group].filter(Boolean).join(" ") || "Taller asignado"}</small></span><em>{selectedStudents.includes(student.uid) && <Check size={13} />}</em>
               </button>
             )) : <p className="workshop-no-roster"><ShieldCheck size={20} /> Dirección aún no te asigna alumnos en este taller.</p>}
           </aside>

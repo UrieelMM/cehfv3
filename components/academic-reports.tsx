@@ -13,6 +13,7 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
@@ -122,7 +123,11 @@ function ReportEditor({
   };
   return <article className="report-editor-card">
     <header>
-      <div className="report-student-avatar">{student.initials}</div>
+      <div className="report-student-avatar" aria-label={student.photoURL ? `Fotografía de ${student.name}` : `Iniciales de ${student.name}`}>
+        {student.photoURL ? (
+          <Image src={student.photoURL} alt="" fill sizes="36px" unoptimized />
+        ) : student.initials}
+      </div>
       <div><span className="report-card-kicker">Reporte individual · {groupLabel(student)}</span><h3>{student.name}</h3><p>{grade?.subject ?? report?.subject ?? "Materia"}</p></div>
       <span className={`report-status is-${report?.status ?? "new"}`}>{report?.status === "published" ? "Publicado" : report?.status === "draft" ? "Borrador" : "Sin iniciar"}</span>
     </header>
@@ -136,9 +141,10 @@ function ReportEditor({
   </article>;
 }
 
-function PublishedReportCard({ report, grade, onEdit, onDelete }: { report: StudentWeeklyReport; grade?: WeeklyGradeRecord; onEdit?: (report: StudentWeeklyReport) => void; onDelete?: (report: StudentWeeklyReport) => void }) {
+function PublishedReportCard({ report, grade, student, onEdit, onDelete }: { report: StudentWeeklyReport; grade?: WeeklyGradeRecord; student?: ManagedAccount; onEdit?: (report: StudentWeeklyReport) => void; onDelete?: (report: StudentWeeklyReport) => void }) {
+  const initials = student?.initials ?? report.studentName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
   return <article className="published-report-card" id={`report-${report.id}`}>
-    <header><div><span className={`report-status is-${report.status}`}>{report.status === "published" ? "Publicado" : "Borrador"}</span><h3>{report.studentName}</h3><p>{report.subject} · {report.weekLabel} · {report.termLabel}</p></div><FileText size={25} /></header>
+    <header><span className="report-student-avatar" aria-label={student?.photoURL ? `Fotografía de ${report.studentName}` : `Iniciales de ${report.studentName}`}>{student?.photoURL ? <Image src={student.photoURL} alt="" fill sizes="36px" unoptimized /> : initials}</span><div><span className={`report-status is-${report.status}`}>{report.status === "published" ? "Publicado" : "Borrador"}</span><h3>{report.studentName}</h3><p>{report.subject} · {report.weekLabel} · {report.termLabel}</p></div><FileText size={25} /></header>
     <WeeklyEvidence grade={grade} />
     <div className="published-report-fields">
       <section className="is-achievement"><CheckCircle2 size={19} /><div><strong>Un logro para reconocer</strong><p>{report.achievement}</p></div></section>
@@ -287,7 +293,7 @@ export function AcademicReportsPage({
         const report = reports.find((item) => item.weekId === week?.id && subjectsMatch(item.subject, activeSubject) && item.studentId === student.uid && item.teacherId === profile.uid);
         return <div id={report ? `report-${report.id}` : undefined} key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`}><ReportEditor student={student} grade={grade} report={report} onSave={persist} onDelete={setReportToDelete} /></div>;
       })}</div>
-    ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} onEdit={profile.role === "director" ? setReportToEdit : undefined} onDelete={profile.role === "director" ? setReportToDelete : undefined} />)}</div>}
+    ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} student={accounts.find((account) => account.uid === report.studentId)} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} onEdit={profile.role === "director" ? setReportToEdit : undefined} onDelete={profile.role === "director" ? setReportToDelete : undefined} />)}</div>}
     <Pagination page={page} total={total} onChange={setPage} />
     <ConfirmDeleteDialog
       open={Boolean(reportToDelete)}
