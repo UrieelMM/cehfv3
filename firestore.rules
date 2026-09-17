@@ -875,6 +875,20 @@ service cloud.firestore {
         return subjects is list
           && (
             (
+              subjectId in [
+                "desarrollo-integral-y-motrocidad",
+                "desarrollo-integral-y-motricidad"
+              ]
+              && subject in [
+                "Desarrollo Integral y Motrocidad",
+                "Desarrollo Integral y Motricidad"
+              ]
+              && subjects.hasAny([
+                "Desarrollo Integral y Motrocidad",
+                "Desarrollo Integral y Motricidad"
+              ])
+            )
+            || (
               subjectId == "lenguaje"
               && subject in ["Lenguaje", "Español", "Espanol"]
               && subjects.hasAny(["Lenguaje", "Español", "Espanol"])
@@ -928,6 +942,10 @@ service cloud.firestore {
       }
 
       function gradeCatalogHasSubject(student, subjectId) {
+        let preschool = [
+          "desarrollo-integral-y-motrocidad",
+          "desarrollo-integral-y-motricidad"
+        ];
         let primaryLower = [
           "lenguaje", "matematicas", "ciencias", "civica", "historia",
           "fisica", "ingles", "lectura-y-comprension"
@@ -948,7 +966,7 @@ service cloud.firestore {
         return (
             student.schoolLevel == "preschool"
             && student.grade in ["1.º", "2.º", "3.º"]
-            && subjectId in primaryLower
+            && subjectId in preschool
           )
           || (
             (

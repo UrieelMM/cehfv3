@@ -32,6 +32,28 @@ test("Firestore accepts every grade from 0 to 10 for assigned teachers", async (
   assert.match(rules, /gradeCatalogHasSubject\(student, data\.subjectId\)/);
 });
 
+test("Firestore lets preschool teachers grade their assigned subject", async () => {
+  const rules = await readFile(new URL("firestore.rules", projectRoot), "utf8");
+  const assignedSubjectCheck = rules.slice(
+    rules.indexOf("function hasAssignedGradeSubject"),
+    rules.indexOf("function gradeCatalogHasSubject"),
+  );
+  const gradeCatalogCheck = rules.slice(
+    rules.indexOf("function gradeCatalogHasSubject"),
+    rules.indexOf("function teacherCanGrade"),
+  );
+  const preschoolCatalogBranch = gradeCatalogCheck.slice(
+    gradeCatalogCheck.indexOf('student.schoolLevel == "preschool"'),
+    gradeCatalogCheck.indexOf('student.schoolLevel == "primary"'),
+  );
+
+  assert.match(assignedSubjectCheck, /desarrollo-integral-y-motrocidad/);
+  assert.match(assignedSubjectCheck, /Desarrollo Integral y Motrocidad/);
+  assert.match(gradeCatalogCheck, /let preschool = \[/);
+  assert.match(preschoolCatalogBranch, /subjectId in preschool/);
+  assert.doesNotMatch(preschoolCatalogBranch, /subjectId in primaryLower/);
+});
+
 test("Firestore validates integer, decimal, zero and mixed scores without integer division", async () => {
   const rules = await readFile(new URL("firestore.rules", projectRoot), "utf8");
   const weights = [45, 10, 15, 10, 20];
