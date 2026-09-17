@@ -53,17 +53,33 @@ test("academic task edits preserve legacy attachments by their Storage path", as
 });
 
 test("workshops expose a configurable Zoom link and authorized file reads", async () => {
-  const [pageSource, dataSource, firestoreRules, storageRules] = await Promise.all([
+  const [pageSource, dataSource, firestoreRules, storageRules, workshopStyles] = await Promise.all([
     readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
     readFile(new URL("lib/workshops-firebase.ts", projectRoot), "utf8"),
     readFile(new URL("firestore.rules", projectRoot), "utf8"),
     readFile(new URL("storage.rules", projectRoot), "utf8"),
+    readFile(new URL("app/workshops.css", projectRoot), "utf8"),
   ]);
 
   assert.match(pageSource, /Enlace de Zoom/);
   assert.match(pageSource, /Entrar a Zoom/);
   assert.match(dataSource, /normalizeZoomUrl/);
+  assert.match(dataSource, /where\("status", "==", status\)/);
+  assert.doesNotMatch(dataSource, /where\("status", "in", \["published", "closed"\]\)/);
   assert.match(firestoreRules, /data\.zoomUrl\.matches/);
   assert.match(storageRules, /profile\(\)\.role == "director"/);
   assert.match(storageRules, /resources\/\{resourceId\}/);
+  assert.match(workshopStyles, /\.workshop-task-control button \+ button \{ margin-top: 8px; \}/);
+});
+
+test("the authorized contacts modal renders above the page and scrolls its list", async () => {
+  const [component, styles] = await Promise.all([
+    readFile(new URL("components/whatsapp-admin-panel.tsx", projectRoot), "utf8"),
+    readFile(new URL("app/whatsapp-settings.css", projectRoot), "utf8"),
+  ]);
+
+  assert.match(component, /createPortal\(/);
+  assert.match(component, /document\.body/);
+  assert.match(styles, /grid-template-rows: auto minmax\(0, 1fr\)/);
+  assert.match(styles, /\.whatsapp-contact-modal-list[\s\S]*overflow-y: auto/);
 });

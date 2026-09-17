@@ -27,12 +27,10 @@ const {
 
 test("each grade exposes only its canonical subjects", () => {
   assert.deepEqual(subjectsForGrade("preschool", "1.º"), [
-    "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
-    "Inglés", "Lectura y comprensión",
+    "Desarrollo Integral y Motrocidad",
   ]);
   assert.deepEqual(subjectsForGrade("preschool", "3.º"), [
-    "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
-    "Inglés", "Lectura y comprensión",
+    "Desarrollo Integral y Motrocidad",
   ]);
   assert.deepEqual(subjectsForGrade("primary", "1.º"), [
     "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
@@ -115,4 +113,5 @@ test("registration, editing and backend saves use the grade catalog", () => {
   assert.match(functionsSource, /subjectsBelongToCatalog\(rawSubjects, allowedSubjects\)/);
   assert.match(rulesSource, /validManagedAccountSubjects\(request\.resource\.data\)/);
   assert.match(rulesSource, /data\.schoolLevel == "preschool"/);
+  assert.match(rulesSource, /data\.subjects\.hasOnly\(preschoolSubjects\)/);
 });

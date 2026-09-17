@@ -568,19 +568,44 @@ export function watchWorkshopTasks(
     callback([]);
     return () => undefined;
   }
+
+  if (profile.role === "student") {
+    const tasksByStatus = new Map<"published" | "closed", WorkshopTask[]>();
+    const emit = () => {
+      const tasksById = new Map<string, WorkshopTask>();
+      tasksByStatus.forEach((tasks) => {
+        tasks.forEach((task) => tasksById.set(task.id, task));
+      });
+      callback(
+        [...tasksById.values()].sort((first, second) =>
+          second.createdAt.localeCompare(first.createdAt),
+        ),
+      );
+    };
+    const unsubscribes = (["published", "closed"] as const).map((status) =>
+      onSnapshot(
+        query(
+          taskCollection(profile.institutionId, workshop.id),
+          where("audienceStudentIds", "array-contains", profile.uid),
+          where("status", "==", status),
+        ),
+        (snapshot) => {
+          tasksByStatus.set(status, snapshot.docs.map(taskFromSnapshot));
+          emit();
+        },
+        (error) => onError?.(error),
+      ),
+    );
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }
+
   const source =
     profile.role === "director"
       ? query(taskCollection(profile.institutionId, workshop.id))
-      : profile.role === "teacher"
-        ? query(
-            taskCollection(profile.institutionId, workshop.id),
-            where("createdBy", "==", profile.uid),
-          )
-        : query(
-            taskCollection(profile.institutionId, workshop.id),
-            where("audienceStudentIds", "array-contains", profile.uid),
-            where("status", "in", ["published", "closed"]),
-          );
+      : query(
+          taskCollection(profile.institutionId, workshop.id),
+          where("createdBy", "==", profile.uid),
+        );
   return onSnapshot(
     source,
     (snapshot) =>

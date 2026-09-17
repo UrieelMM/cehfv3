@@ -7,6 +7,7 @@ export const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
 };
 
 export const academicSubjectOptions = [
+  "Desarrollo Integral y Motrocidad",
   "Lenguaje",
   "Matemáticas",
   "Cívica",
@@ -20,6 +21,10 @@ export const academicSubjectOptions = [
 ] as const;
 
 type AcademicSubject = (typeof academicSubjectOptions)[number];
+
+const preschoolSubjects = [
+  "Desarrollo Integral y Motrocidad",
+] as const satisfies readonly AcademicSubject[];
 
 const primaryLowerSubjects = [
   "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
@@ -44,9 +49,9 @@ const subjectsByGrade: Record<
   Record<string, readonly AcademicSubject[]>
 > = {
   preschool: {
-    "1.º": primaryLowerSubjects,
-    "2.º": primaryLowerSubjects,
-    "3.º": primaryLowerSubjects,
+    "1.º": preschoolSubjects,
+    "2.º": preschoolSubjects,
+    "3.º": preschoolSubjects,
   },
   primary: {
     "1.º": primaryLowerSubjects,

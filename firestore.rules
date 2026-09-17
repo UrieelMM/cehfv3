@@ -47,6 +47,9 @@ service cloud.firestore {
     }
 
     function validManagedAccountSubjects(data) {
+      let preschoolSubjects = [
+        "Desarrollo Integral y Motrocidad"
+      ];
       let primaryLower = [
         "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia",
         "Física", "Inglés", "Lectura y comprensión"
@@ -65,6 +68,7 @@ service cloud.firestore {
         "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés"
       ];
       let allSubjects = [
+        "Desarrollo Integral y Motrocidad",
         "Lenguaje", "Matemáticas", "Cívica", "Historia", "Física", "Inglés",
         "Ciencias", "Geografía", "Lectura y comprensión", "Biología"
       ];
@@ -80,7 +84,7 @@ service cloud.firestore {
               (
                 data.schoolLevel == "preschool"
                 && data.grade in ["1.º", "2.º", "3.º"]
-                && data.subjects.hasOnly(primaryLower)
+                && data.subjects.hasOnly(preschoolSubjects)
               )
               ||
               (

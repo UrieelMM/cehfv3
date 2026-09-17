@@ -1453,6 +1453,7 @@
 .workshop-task-control { margin-top: 17px !important; }
 .workshop-task-control > span { margin-bottom: 8px; font-weight: 740; }
 .workshop-task-control button { display: inline-flex; width: 100%; align-items: center; justify-content: center; gap: 6px; padding: 8px; border: 0; border-radius: 8px; background: var(--violet); color: var(--on-primary); font-size: calc(0.6rem + 0.125rem); font-weight: 760; }
+.workshop-task-control button + button { margin-top: 8px; }
 .workshop-task-control button.danger-button { margin-top: 8px; background: var(--danger); color: white; }
 
 .spin { animation: workshop-spin 0.9s linear infinite; }

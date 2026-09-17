@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import type {
@@ -719,7 +720,7 @@ export function WhatsAppAdminPanel({
           </div>
         </>
       )}
-      {contactsOpen && (
+      {contactsOpen && typeof document !== "undefined" && createPortal(
         <div
           className="whatsapp-contact-modal-backdrop"
           onMouseDown={(event) => {
@@ -752,7 +753,8 @@ export function WhatsAppAdminPanel({
               {contacts.map(renderContactCard)}
             </div>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </section>
   );
