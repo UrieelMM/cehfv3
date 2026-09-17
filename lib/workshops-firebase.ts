@@ -497,12 +497,9 @@ function attachmentsFromData(value: unknown) {
     : [];
 }
 
-function taskFromSnapshot(
-  snapshot: QueryDocumentSnapshot<DocumentData>,
-): WorkshopTask {
-  const data = snapshot.data();
+function taskFromData(id: string, data: DocumentData): WorkshopTask {
   return {
-    id: snapshot.id,
+    id,
     workshopId: String(data.workshopId ?? ""),
     institutionId: String(data.institutionId ?? ""),
     title: String(data.title ?? "Trabajo del taller"),
@@ -519,6 +516,12 @@ function taskFromSnapshot(
     createdAt: asIso(data.createdAt),
     updatedAt: asIso(data.updatedAt),
   };
+}
+
+function taskFromSnapshot(
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+): WorkshopTask {
+  return taskFromData(snapshot.id, snapshot.data());
 }
 
 function submissionFromData(
@@ -570,33 +573,38 @@ export function watchWorkshopTasks(
   }
 
   if (profile.role === "student") {
-    const tasksByStatus = new Map<"published" | "closed", WorkshopTask[]>();
-    const emit = () => {
-      const tasksById = new Map<string, WorkshopTask>();
-      tasksByStatus.forEach((tasks) => {
-        tasks.forEach((task) => tasksById.set(task.id, task));
+    if (!firebase.functions) {
+      onError?.(new Error("Firebase Functions no está configurado para Talleres."));
+      return () => undefined;
+    }
+    let active = true;
+    const callable = httpsCallable<
+      { workshopId: string },
+      { tasks: Array<Record<string, unknown>> }
+    >(firebase.functions, "listStudentWorkshopTasks");
+    void callable({ workshopId: workshop.id })
+      .then(({ data }) => {
+        if (!active) return;
+        callback(
+          data.tasks
+            .map((task) => taskFromData(String(task.id ?? ""), task))
+            .sort((first, second) =>
+              second.createdAt.localeCompare(first.createdAt),
+            ),
+        );
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          onError?.(
+            error instanceof Error
+              ? error
+              : new Error("No pudimos cargar las actividades del taller."),
+          );
+        }
       });
-      callback(
-        [...tasksById.values()].sort((first, second) =>
-          second.createdAt.localeCompare(first.createdAt),
-        ),
-      );
+    return () => {
+      active = false;
     };
-    const unsubscribes = (["published", "closed"] as const).map((status) =>
-      onSnapshot(
-        query(
-          taskCollection(profile.institutionId, workshop.id),
-          where("audienceStudentIds", "array-contains", profile.uid),
-          where("status", "==", status),
-        ),
-        (snapshot) => {
-          tasksByStatus.set(status, snapshot.docs.map(taskFromSnapshot));
-          emit();
-        },
-        (error) => onError?.(error),
-      ),
-    );
-    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }
 
   const source =

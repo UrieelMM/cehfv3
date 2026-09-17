@@ -53,9 +53,10 @@ test("academic task edits preserve legacy attachments by their Storage path", as
 });
 
 test("workshops expose a configurable Zoom link and authorized file reads", async () => {
-  const [pageSource, dataSource, firestoreRules, storageRules, workshopStyles] = await Promise.all([
+  const [pageSource, dataSource, functionsSource, firestoreRules, storageRules, workshopStyles] = await Promise.all([
     readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
     readFile(new URL("lib/workshops-firebase.ts", projectRoot), "utf8"),
+    readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
     readFile(new URL("firestore.rules", projectRoot), "utf8"),
     readFile(new URL("storage.rules", projectRoot), "utf8"),
     readFile(new URL("app/workshops.css", projectRoot), "utf8"),
@@ -64,9 +65,11 @@ test("workshops expose a configurable Zoom link and authorized file reads", asyn
   assert.match(pageSource, /Enlace de Zoom/);
   assert.match(pageSource, /Entrar a Zoom/);
   assert.match(dataSource, /normalizeZoomUrl/);
-  assert.match(dataSource, /where\("status", "==", status\)/);
-  assert.doesNotMatch(dataSource, /where\("status", "in", \["published", "closed"\]\)/);
+  assert.match(dataSource, /"listStudentWorkshopTasks"/);
+  assert.match(functionsSource, /export const listStudentWorkshopTasks = onCall/);
+  assert.match(functionsSource, /\.where\("audienceStudentIds", "array-contains", student\.uid\)/);
   assert.match(firestoreRules, /data\.zoomUrl\.matches/);
+  assert.match(firestoreRules, /request\.auth\.uid == studentId\s+&& canReadWorkshopTask\(task\)/);
   assert.match(storageRules, /profile\(\)\.role == "director"/);
   assert.match(storageRules, /resources\/\{resourceId\}/);
   assert.match(workshopStyles, /\.workshop-task-control button \+ button \{ margin-top: 8px; \}/);

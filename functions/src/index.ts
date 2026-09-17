@@ -2120,6 +2120,94 @@ export const listStudentMaterials = onCall(async (request) => {
   return { materials };
 });
 
+function serializeWorkshopTask(
+  snapshot: QueryDocumentSnapshot<DocumentData>,
+) {
+  const data = snapshot.data();
+  const links = Array.isArray(data.links)
+    ? data.links.flatMap((item: unknown) => {
+        if (!item || typeof item !== "object") return [];
+        const link = item as Record<string, unknown>;
+        const label = String(link.label ?? "").trim();
+        const url = String(link.url ?? "").trim();
+        return label && /^https?:\/\//i.test(url) ? [{ label, url }] : [];
+      })
+    : [];
+  const attachments = Array.isArray(data.attachments)
+    ? data.attachments.flatMap((item: unknown) => {
+        if (!item || typeof item !== "object") return [];
+        const attachment = item as Record<string, unknown>;
+        const storagePath = String(attachment.storagePath ?? "");
+        const name = String(attachment.name ?? "");
+        if (!storagePath || !name) return [];
+        return [{
+          id: String(attachment.id ?? storagePath),
+          name,
+          storagePath,
+          contentType: String(
+            attachment.contentType ?? "application/octet-stream",
+          ),
+          size: Number(attachment.size ?? 0),
+        }];
+      })
+    : [];
+  return {
+    id: snapshot.id,
+    workshopId: String(data.workshopId ?? ""),
+    institutionId: String(data.institutionId ?? ""),
+    title: String(data.title ?? "Trabajo del taller"),
+    description: String(data.description ?? ""),
+    dueAt: accountTimestamp(data.dueAt),
+    status: String(data.status ?? "published"),
+    audienceStudentIds: notificationRecipients(data.audienceStudentIds),
+    attachments,
+    links,
+    createdBy: String(data.createdBy ?? ""),
+    teacherName: String(data.teacherName ?? "Equipo docente"),
+    createdAt: accountTimestamp(data.createdAt),
+    updatedAt: accountTimestamp(data.updatedAt),
+  };
+}
+
+export const listStudentWorkshopTasks = onCall(async (request) => {
+  const student = await requireMaterialStudent(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const workshopId = deletionId(input.workshopId, "taller");
+  const workshopReference = db.doc(
+    `institutions/${student.institutionId}/workshops/${workshopId}`,
+  );
+  const workshopSnapshot = await workshopReference.get();
+  const workshop = workshopSnapshot.data();
+  const memberIds = new Set([
+    ...notificationRecipients(workshop?.memberIds),
+    ...notificationRecipients(workshop?.studentIds),
+  ]);
+  if (
+    !workshopSnapshot.exists ||
+    workshop?.institutionId !== student.institutionId ||
+    !memberIds.has(student.uid)
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "No tienes acceso a este taller.",
+    );
+  }
+  const snapshot = await workshopReference
+    .collection("tasks")
+    .where("audienceStudentIds", "array-contains", student.uid)
+    .get();
+  const tasks = snapshot.docs
+    .filter((document) => {
+      const data = document.data();
+      return data.institutionId === student.institutionId &&
+        data.workshopId === workshopId &&
+        ["published", "closed"].includes(String(data.status ?? ""));
+    })
+    .map(serializeWorkshopTask)
+    .sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+  return { tasks };
+});
+
 export const listStaffMaterials = onCall(async (request) => {
   const actor = await requireMaterialStaff(request.auth);
   const snapshot = await db

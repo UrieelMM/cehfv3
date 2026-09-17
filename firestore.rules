@@ -696,7 +696,7 @@ service cloud.firestore {
                 && studentId in task.audienceStudentIds;
             }
 
-            function canReadWorkshopSubmission(data) {
+            function canReadWorkshopSubmission() {
               let task = parentTask();
               return canReadWorkshop(workshopData())
                 && (
@@ -708,12 +708,12 @@ service cloud.firestore {
                   || (
                     roleIs("student")
                     && request.auth.uid == studentId
-                    && data.studentId == studentId
+                    && canReadWorkshopTask(task)
                   )
                 );
             }
 
-            allow read: if canReadWorkshopSubmission(resource.data);
+            allow read: if canReadWorkshopSubmission();
             allow create: if studentCanSubmit()
               && request.resource.data.studentId == studentId
               && request.resource.data.taskId == taskId
