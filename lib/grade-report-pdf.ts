@@ -9,6 +9,7 @@ const INK: [number, number, number] = [25, 39, 68];
 const MUTED: [number, number, number] = [92, 105, 128];
 const BORDER: [number, number, number] = [219, 226, 238];
 const TOTAL_PAGES = "{total_pages_count_string}";
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
 let brandLogoPromise: Promise<Uint8Array | null> | undefined;
 
 export type GradeReportInput = {
@@ -64,12 +65,18 @@ function uniqueCount(records: WeeklyGradeRecord[], field: "studentId" | "teacher
 }
 
 async function loadBrandLogoBytes() {
-  brandLogoPromise ??= fetch(logoCehf.src)
+  const logoSource = typeof logoCehf === "string" ? logoCehf : logoCehf.src;
+  brandLogoPromise ??= fetch(logoSource)
     .then((response) => {
       if (!response.ok) throw new Error("No pudimos cargar el logo institucional.");
       return response.arrayBuffer();
     })
-    .then((buffer) => new Uint8Array(buffer))
+    .then((buffer) => {
+      const bytes = new Uint8Array(buffer);
+      return PNG_SIGNATURE.every((value, index) => bytes[index] === value)
+        ? bytes
+        : null;
+    })
     .catch(() => null);
   return brandLogoPromise;
 }
@@ -87,9 +94,16 @@ function addHeader(
 ) {
   doc.setFillColor(...BRAND_BLUE);
   doc.rect(0, 0, pageWidth, 31, "F");
+  let logoAdded = false;
   if (brandLogo) {
-    doc.addImage(brandLogo, "PNG", 10.5, 3.5, 24, 24, "cehf-logo", "FAST");
-  } else {
+    try {
+      doc.addImage(brandLogo, "PNG", 10.5, 3.5, 24, 24, "cehf-logo", "FAST");
+      logoAdded = true;
+    } catch {
+      logoAdded = false;
+    }
+  }
+  if (!logoAdded) {
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(14, 9, 16, 13, 3, 3, "F");
     doc.setTextColor(...BRAND_BLUE);
