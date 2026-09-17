@@ -1740,7 +1740,12 @@ export const updateManagedContent = onCall(async (request) => {
     });
   }
   await writeContentEditAudit(actor, entityType, entityId, title);
-  return { updated: true };
+  return {
+    updated: true,
+    ...(["workshop_resource", "workshop_task"].includes(entityType)
+      ? { links: updates.links }
+      : {}),
+  };
 });
 
 function editableTaskAttachments(value: unknown, firestorePath: string) {

@@ -13,8 +13,10 @@ test("Talleres guarda enlaces al crear y editar recursos y actividades", async (
   ]);
   assert.match(firebase, /links: workshopLinksFromData\(data\.links\)/);
   assert.match(firebase, /const links = normalizeWorkshopLinks\(input\.links\)/);
+  assert.match(firebase, /return requirePersistedWorkshopLinks\(result, links\)/g);
   assert.match(firebase, /links: WorkshopLink\[\]/);
   assert.match(functions, /links: workshopLinks\(input\.links\)/);
+  assert.match(functions, /\? \{ links: updates\.links \}/);
   assert.match(rules, /request\.resource\.data\.links\.size\(\) <= 10/g);
 });
 

@@ -141,6 +141,28 @@ function normalizeWorkshopLinks(links: WorkshopLink[]): WorkshopLink[] {
   });
 }
 
+function requirePersistedWorkshopLinks(
+  result: { updated: boolean; links?: WorkshopLink[] },
+  expected: WorkshopLink[],
+) {
+  const persisted = workshopLinksFromData(result.links);
+  const matches =
+    result.updated === true &&
+    persisted.length === expected.length &&
+    persisted.every(
+      (link, index) =>
+        link.label === expected[index]?.label && link.url === expected[index]?.url,
+    );
+
+  if (!matches) {
+    throw new Error(
+      "El servidor no confirmó los enlaces del taller. Recarga la página e inténtalo de nuevo.",
+    );
+  }
+
+  return result;
+}
+
 function resourceFromSnapshot(
   snapshot: QueryDocumentSnapshot<DocumentData>,
 ): WorkshopResource {
@@ -428,9 +450,10 @@ export async function updateWorkshopResource(
   const links = normalizeWorkshopLinks(input.links);
   const callable = httpsCallable<
     { entityType: "workshop_resource"; workshopId: string; resourceId: string } & typeof input,
-    { updated: boolean }
+    { updated: boolean; links?: WorkshopLink[] }
   >(firebase.functions, "updateManagedContent");
-  return (await callable({ entityType: "workshop_resource", workshopId: resource.workshopId, resourceId: resource.id, ...input, links })).data;
+  const result = (await callable({ entityType: "workshop_resource", workshopId: resource.workshopId, resourceId: resource.id, ...input, links })).data;
+  return requirePersistedWorkshopLinks(result, links);
 }
 
 export async function getWorkshopResourceUrl(resource: WorkshopResource) {
@@ -696,9 +719,10 @@ export async function updateWorkshopTask(
   const links = normalizeWorkshopLinks(input.links);
   const callable = httpsCallable<
     { entityType: "workshop_task"; workshopId: string; taskId: string } & typeof input,
-    { updated: boolean }
+    { updated: boolean; links?: WorkshopLink[] }
   >(firebase.functions, "updateManagedContent");
-  return (await callable({ entityType: "workshop_task", workshopId: task.workshopId, taskId: task.id, ...input, links })).data;
+  const result = (await callable({ entityType: "workshop_task", workshopId: task.workshopId, taskId: task.id, ...input, links })).data;
+  return requirePersistedWorkshopLinks(result, links);
 }
 
 export function watchWorkshopSubmissions(
