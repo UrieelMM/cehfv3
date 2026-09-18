@@ -517,7 +517,10 @@ function WorkshopTaskDetailDialog({
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
 
-  async function openAttachment(attachment: WorkshopTaskAttachment) {
+  async function openAttachment(
+    attachment: WorkshopTaskAttachment,
+    submissionStudentId?: string,
+  ) {
     if (!firebaseReady || !attachment.storagePath) {
       toast.error("El archivo no está disponible en Firebase Storage.");
       return;
@@ -527,7 +530,11 @@ function WorkshopTaskDetailDialog({
     setPreviewUrl("");
     setPreviewLoading(true);
     try {
-      const url = await getWorkshopTaskAttachmentUrl(attachment);
+      const url = await getWorkshopTaskAttachmentUrl(
+        task,
+        attachment,
+        submissionStudentId,
+      );
       if (previewRequest.current === requestId) setPreviewUrl(url);
     } catch (error) {
       if (previewRequest.current === requestId) {
@@ -614,7 +621,7 @@ function WorkshopTaskDetailDialog({
             ) : (
               <section className="workshop-teacher-review">
                 <div className="workshop-submission-tabs"><span><Users size={16} /> Entregas ({submissions.length}/{task.audienceStudentIds.length})</span>{submissions.length ? submissions.map((submission) => <button className={selectedSubmission?.id === submission.id ? "active" : ""} key={submission.id} onClick={() => setSelectedSubmissionId(submission.id)}><i>{studentById.get(submission.studentId)?.initials ?? submission.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</i><span><strong>{submission.studentName}</strong><small>Versión {submission.version} · {submission.status === "reviewed" ? "Finalizada" : submission.status === "feedback" ? "Con comentarios" : "Por revisar"}</small></span></button>) : <p>Aún no hay entregas.</p>}</div>
-                {selectedSubmission && <div className="workshop-review-pane"><span className="eyebrow">Entrega de {selectedSubmission.studentName}</span><p>{selectedSubmission.content || "Entrega basada en archivos adjuntos."}</p>{selectedSubmission.attachments.map((attachment) => <button className="workshop-submission-file" key={attachment.id} onClick={() => void openAttachment(attachment)}><FileText size={17} /> {attachment.name} <Download size={15} /></button>)}<label><span>Retroalimentación</span><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={5} maxLength={1600} placeholder="Reconoce lo logrado e indica el siguiente paso…" /></label><div><button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button><button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button></div></div>}
+                {selectedSubmission && <div className="workshop-review-pane"><span className="eyebrow">Entrega de {selectedSubmission.studentName}</span><p>{selectedSubmission.content || "Entrega basada en archivos adjuntos."}</p>{selectedSubmission.attachments.map((attachment) => <button className="workshop-submission-file" key={attachment.id} onClick={() => void openAttachment(attachment, selectedSubmission.studentId)}><FileText size={17} /> {attachment.name} <Download size={15} /></button>)}<label><span>Retroalimentación</span><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={5} maxLength={1600} placeholder="Reconoce lo logrado e indica el siguiente paso…" /></label><div><button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button><button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button></div></div>}
               </section>
             )}
           </main>

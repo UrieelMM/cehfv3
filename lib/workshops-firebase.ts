@@ -18,7 +18,6 @@ import {
 import { httpsCallable } from "firebase/functions";
 import {
   deleteObject,
-  getDownloadURL,
   ref,
   uploadBytes,
 } from "firebase/storage";
@@ -460,8 +459,22 @@ export async function getWorkshopResourceUrl(resource: WorkshopResource) {
   if (!resource.storagePath) {
     throw new Error("Este recurso no tiene un archivo disponible.");
   }
-  const { storage } = requireFirebase();
-  return getDownloadURL(ref(storage, resource.storagePath));
+  if (!firebase.functions) {
+    throw new Error("Firebase Functions no está configurado para Talleres.");
+  }
+  const callable = httpsCallable<
+    {
+      workshopId: string;
+      resourceId: string;
+      storagePath: string;
+    },
+    { url: string }
+  >(firebase.functions, "getWorkshopFileUrl");
+  return (await callable({
+    workshopId: resource.workshopId,
+    resourceId: resource.id,
+    storagePath: resource.storagePath,
+  })).data.url;
 }
 
 export type WorkshopTaskCreateInput = {
@@ -883,8 +896,29 @@ export async function saveWorkshopFeedback(
 }
 
 export async function getWorkshopTaskAttachmentUrl(
+  task: WorkshopTask,
   attachment: WorkshopTaskAttachment,
+  submissionStudentId?: string,
 ) {
-  const { storage } = requireFirebase();
-  return getDownloadURL(ref(storage, attachment.storagePath));
+  if (!attachment.storagePath) {
+    throw new Error("Este archivo no está disponible.");
+  }
+  if (!firebase.functions) {
+    throw new Error("Firebase Functions no está configurado para Talleres.");
+  }
+  const callable = httpsCallable<
+    {
+      workshopId: string;
+      taskId: string;
+      storagePath: string;
+      submissionStudentId?: string;
+    },
+    { url: string }
+  >(firebase.functions, "getWorkshopFileUrl");
+  return (await callable({
+    workshopId: task.workshopId,
+    taskId: task.id,
+    storagePath: attachment.storagePath,
+    ...(submissionStudentId ? { submissionStudentId } : {}),
+  })).data.url;
 }

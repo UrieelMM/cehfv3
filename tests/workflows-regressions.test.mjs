@@ -53,8 +53,9 @@ test("academic task edits preserve legacy attachments by their Storage path", as
 });
 
 test("workshops expose a configurable Zoom link and authorized file reads", async () => {
-  const [pageSource, dataSource, functionsSource, firestoreRules, storageRules, workshopStyles] = await Promise.all([
+  const [pageSource, taskSource, dataSource, functionsSource, firestoreRules, storageRules, workshopStyles] = await Promise.all([
     readFile(new URL("components/workshops-page.tsx", projectRoot), "utf8"),
+    readFile(new URL("components/workshop-tasks.tsx", projectRoot), "utf8"),
     readFile(new URL("lib/workshops-firebase.ts", projectRoot), "utf8"),
     readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
     readFile(new URL("firestore.rules", projectRoot), "utf8"),
@@ -66,7 +67,14 @@ test("workshops expose a configurable Zoom link and authorized file reads", asyn
   assert.match(pageSource, /Entrar a Zoom/);
   assert.match(dataSource, /normalizeZoomUrl/);
   assert.match(dataSource, /"listStudentWorkshopTasks"/);
+  assert.match(dataSource, /"getWorkshopFileUrl"/);
+  assert.doesNotMatch(dataSource, /getDownloadURL\(ref\(storage, (resource|attachment)\.storagePath\)\)/);
   assert.match(functionsSource, /export const listStudentWorkshopTasks = onCall/);
+  assert.match(functionsSource, /export const getWorkshopFileUrl = onCall/);
+  assert.match(functionsSource, /resource\.storagePath !== storagePath/);
+  assert.match(functionsSource, /hasWorkshopAttachment\(submission, storagePath\)/);
+  assert.match(taskSource, /getWorkshopTaskAttachmentUrl\(\s*task,\s*attachment,\s*submissionStudentId/);
+  assert.match(taskSource, /openAttachment\(attachment, selectedSubmission\.studentId\)/);
   assert.match(functionsSource, /\.where\("audienceStudentIds", "array-contains", student\.uid\)/);
   assert.match(firestoreRules, /data\.zoomUrl\.matches/);
   assert.match(firestoreRules, /request\.auth\.uid == studentId\s+&& canReadWorkshopTask\(task\)/);

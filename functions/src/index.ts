@@ -1,7 +1,7 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getStorage } from "firebase-admin/storage";
+import { getDownloadURL as getAdminDownloadURL, getStorage } from "firebase-admin/storage";
 import {
   FieldValue,
   Timestamp,
@@ -1731,6 +1731,187 @@ async function requireManagedWorkshopRecord(actor: MaterialStaff, workshopId: st
   }
   return workshop;
 }
+
+type WorkshopFileViewer = {
+  uid: string;
+  institutionId: string;
+  role: "director" | "teacher" | "student";
+};
+
+async function requireWorkshopFileViewer(
+  auth: CallableRequest<unknown>["auth"],
+): Promise<WorkshopFileViewer> {
+  if (!auth) throw new HttpsError("unauthenticated", "Inicia sesión para continuar.");
+  const snapshot = await db.doc(`users/${auth.uid}`).get();
+  const profile = snapshot.data();
+  const role = String(profile?.role ?? "");
+  const institutionId = String(profile?.institutionId ?? "");
+  const directorClaimsAreValid = role !== "director" || (
+    auth.token.role === "director" &&
+    auth.token.allPermissions === true &&
+    auth.token.institutionId === institutionId
+  );
+  if (
+    !snapshot.exists ||
+    profile?.active !== true ||
+    !["director", "teacher", "student"].includes(role) ||
+    !institutionId ||
+    !directorClaimsAreValid
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "Tu perfil no tiene acceso a archivos de Talleres.",
+    );
+  }
+  return {
+    uid: auth.uid,
+    institutionId,
+    role: role as WorkshopFileViewer["role"],
+  };
+}
+
+function workshopIncludesViewer(workshop: DocumentData, viewer: WorkshopFileViewer) {
+  if (viewer.role === "director") return true;
+  return ["memberIds", "studentIds", "teacherIds", "managerIds"].some(
+    (field) => notificationRecipients(workshop[field]).includes(viewer.uid),
+  );
+}
+
+function hasWorkshopAttachment(data: DocumentData, storagePath: string) {
+  return Array.isArray(data.attachments) && data.attachments.some((value: unknown) => {
+    if (!value || typeof value !== "object") return false;
+    return String((value as Record<string, unknown>).storagePath ?? "") === storagePath;
+  });
+}
+
+async function authorizedWorkshopDownloadUrl(storagePath: string) {
+  const file = getStorage().bucket().file(storagePath);
+  const [exists] = await file.exists();
+  if (!exists) {
+    throw new HttpsError("not-found", "El archivo ya no existe en Firebase Storage.");
+  }
+  try {
+    return await getAdminDownloadURL(file);
+  } catch (error) {
+    const code = typeof error === "object" && error && "code" in error
+      ? String(error.code)
+      : "";
+    if (code !== "storage/no-download-token") throw error;
+    const [metadata] = await file.getMetadata();
+    const token = randomUUID();
+    await file.setMetadata({
+      metadata: {
+        ...(metadata.metadata ?? {}),
+        firebaseStorageDownloadTokens: token,
+      },
+    });
+    return `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(file.bucket.name)}/o/${encodeURIComponent(file.name)}?alt=media&token=${encodeURIComponent(token)}`;
+  }
+}
+
+export const getWorkshopFileUrl = onCall(async (request) => {
+  const viewer = await requireWorkshopFileViewer(request.auth);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const workshopId = deletionId(input.workshopId, "taller");
+  const storagePath = String(input.storagePath ?? "").trim();
+  if (!storagePath || storagePath.length > 2_000 || storagePath.includes("\u0000")) {
+    throw new HttpsError("invalid-argument", "La ruta del archivo no es válida.");
+  }
+  const workshopReference = db.doc(
+    `institutions/${viewer.institutionId}/workshops/${workshopId}`,
+  );
+  const workshopSnapshot = await workshopReference.get();
+  const workshop = workshopSnapshot.data();
+  if (
+    !workshopSnapshot.exists ||
+    !workshop ||
+    workshop.institutionId !== viewer.institutionId
+  ) {
+    throw new HttpsError("not-found", "El taller ya no existe.");
+  }
+
+  const resourceIdValue = String(input.resourceId ?? "").trim();
+  const taskIdValue = String(input.taskId ?? "").trim();
+  if (resourceIdValue) {
+    const resourceId = deletionId(resourceIdValue, "recurso");
+    const resourceSnapshot = await workshopReference
+      .collection("resources")
+      .doc(resourceId)
+      .get();
+    const resource = resourceSnapshot.data();
+    if (
+      !resourceSnapshot.exists ||
+      !resource ||
+      resource.institutionId !== viewer.institutionId ||
+      resource.workshopId !== workshopId ||
+      resource.storagePath !== storagePath ||
+      !workshopIncludesViewer(workshop, viewer)
+    ) {
+      throw new HttpsError("permission-denied", "No puedes abrir este recurso del taller.");
+    }
+  } else if (taskIdValue) {
+    const taskId = deletionId(taskIdValue, "actividad");
+    const taskReference = workshopReference.collection("tasks").doc(taskId);
+    const taskSnapshot = await taskReference.get();
+    const task = taskSnapshot.data();
+    if (
+      !taskSnapshot.exists ||
+      !task ||
+      task.institutionId !== viewer.institutionId ||
+      task.workshopId !== workshopId
+    ) {
+      throw new HttpsError("not-found", "La actividad del taller ya no existe.");
+    }
+    const audience = notificationRecipients(task.audienceStudentIds);
+    const teacherCanRead = viewer.role === "teacher" && (
+      task.createdBy === viewer.uid || workshopIncludesViewer(workshop, viewer)
+    );
+    const studentCanRead = viewer.role === "student" &&
+      audience.includes(viewer.uid) &&
+      ["published", "closed"].includes(String(task.status ?? ""));
+    const canReadTask = viewer.role === "director" || teacherCanRead || studentCanRead;
+    const submissionStudentIdValue = String(input.submissionStudentId ?? "").trim();
+    if (submissionStudentIdValue) {
+      const submissionStudentId = accountUid(submissionStudentIdValue);
+      const submissionSnapshot = await taskReference
+        .collection("submissions")
+        .doc(submissionStudentId)
+        .get();
+      const submission = submissionSnapshot.data();
+      const canReadSubmission = viewer.role === "director" ||
+        teacherCanRead ||
+        (viewer.role === "student" && viewer.uid === submissionStudentId && studentCanRead);
+      if (
+        !submissionSnapshot.exists ||
+        !submission ||
+        !hasWorkshopAttachment(submission, storagePath) ||
+        !canReadSubmission
+      ) {
+        throw new HttpsError("permission-denied", "No puedes abrir este archivo de la entrega.");
+      }
+    } else if (!canReadTask || !hasWorkshopAttachment(task, storagePath)) {
+      throw new HttpsError("permission-denied", "No puedes abrir esta guía del taller.");
+    }
+  } else {
+    throw new HttpsError(
+      "invalid-argument",
+      "Indica el recurso o actividad que contiene el archivo.",
+    );
+  }
+
+  try {
+    return { url: await authorizedWorkshopDownloadUrl(storagePath) };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error("Could not create workshop file URL", {
+      error,
+      workshopId,
+      storagePath,
+      viewerId: viewer.uid,
+    });
+    throw new HttpsError("internal", "No pudimos preparar el archivo del taller.");
+  }
+});
 
 export const deleteWorkshopResource = onCall(async (request) => {
   const actor = await requireMaterialStaff(request.auth);
