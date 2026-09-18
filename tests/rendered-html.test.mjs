@@ -343,6 +343,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(appSource, /label: "Calificaciones", icon: GraduationCap/);
   assert.doesNotMatch(appSource, /"my-week": "\/my-week"/);
   assert.match(gradesUiSource, /Día de captura/);
+  assert.match(gradesUiSource, /Día actual/);
+  assert.match(gradesUiSource, /Día seleccionado/);
+  assert.match(gradesUiSource, /activeDate === todayDate/);
+  assert.match(gradesCss, /\.academic-today-badge/);
   assert.match(gradesUiSource, /días hábiles esperados/);
   assert.match(gradesUiSource, /Diarias/);
   assert.match(gradesUiSource, /Semanales/);

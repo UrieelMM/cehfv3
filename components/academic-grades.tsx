@@ -423,6 +423,8 @@ export function AcademicGradesPanel({
     ? selectedDate
     : dateWithinWeek(calendar, selectedWeek, academicConfig.timezone);
   const [level, setLevel] = useState<GradePeriodLevel>(profile.role === "teacher" ? "daily" : "weekly");
+  const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: academicConfig.timezone });
+  const isActiveDateToday = level === "daily" && activeDate === todayDate;
   const [records, setRecords] = useState<DailyGradeRecord[]>([]);
   const [config, setConfig] = useState<TeacherGradingConfig>(() => defaultConfig(profile));
   const [loading, setLoading] = useState(firebaseReady);
@@ -572,7 +574,14 @@ export function AcademicGradesPanel({
           {!workingDates.length && <option value="">Sin días hábiles</option>}
           {workingDates.map((date) => <option key={date} value={date}>{dateLabel(date, true)}</option>)}
         </select></label>}
-        <div className="academic-context-readout is-date"><Sparkles size={18} /><span><small>Contexto exacto</small><strong>{level === "daily" ? dateLabel(activeDate, true) : selectedWeek?.label}</strong></span></div>
+        <div className={`academic-context-readout is-date${isActiveDateToday ? " is-today" : ""}`}>
+          <Sparkles size={18} />
+          <span>
+            <small>{level === "daily" ? isActiveDateToday ? "Día actual" : "Día seleccionado" : "Semana seleccionada"}</small>
+            <strong>{level === "daily" ? dateLabel(activeDate, true) : selectedWeek?.label}</strong>
+          </span>
+          {isActiveDateToday && <b className="academic-today-badge"><i /> Hoy</b>}
+        </div>
       </div>
 
       <nav className="academic-level-tabs" aria-label="Nivel de calificaciones">
