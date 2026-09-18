@@ -234,6 +234,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(usersSource, /Editar cuenta de \$\{account\.name\}/);
   assert.match(usersSource, /Desactivar acceso/);
   assert.match(usersSource, /Eliminar cuenta definitivamente/);
+  assert.match(usersSource, /const PAGE_SIZE = 10/);
+  assert.match(usersSource, /filteredAccounts\.slice/);
+  assert.match(usersSource, /aria-label="Paginación de la comunidad"/);
+  assert.match(css, /\.account-pagination/);
   assert.match(functionsSource, /Sólo Dirección puede administrar cuentas/);
   assert.match(functionsSource, /revokeRefreshTokens/);
   assert.match(functionsSource, /recursiveDelete/);

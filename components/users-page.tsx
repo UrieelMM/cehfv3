@@ -2,6 +2,8 @@
 
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   GraduationCap,
   Library,
   LockKeyhole,
@@ -45,6 +47,8 @@ const schoolLevelLabels: Record<SchoolLevel, string> = {
 
 type AccountAction = { account: ManagedAccount; kind: "status" | "delete" };
 
+const PAGE_SIZE = 10;
+
 export function UsersPage({
   role,
   accounts,
@@ -64,28 +68,25 @@ export function UsersPage({
 }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "student" | "teacher">("all");
+  const [page, setPage] = useState(1);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [editing, setEditing] = useState<ManagedAccount | null>(null);
   const [action, setAction] = useState<AccountAction | null>(null);
 
-  if (role === "student") {
-    return (
-      <section className="panel guided-state">
-        <LockKeyhole size={28} />
-        <h2>Esta sección es para personal autorizado</h2>
-        <p>Tu información académica sigue disponible en Calificaciones, Avance y Reportes.</p>
-      </section>
-    );
-  }
-
   const normalizedQuery = query.trim().toLocaleLowerCase("es-MX");
-  const visibleAccounts = accounts.filter(
+  const filteredAccounts = accounts.filter(
     (account) =>
       (filter === "all" || account.role === filter) &&
       (!normalizedQuery ||
         `${account.name} ${account.email}`
           .toLocaleLowerCase("es-MX")
           .includes(normalizedQuery)),
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredAccounts.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const visibleAccounts = filteredAccounts.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
   );
   const students = accounts.filter((account) => account.role === "student");
   const teachers = accounts.filter((account) => account.role === "teacher");
@@ -96,6 +97,16 @@ export function UsersPage({
       )
       .filter(Boolean),
   );
+
+  if (role === "student") {
+    return (
+      <section className="panel guided-state">
+        <LockKeyhole size={28} />
+        <h2>Esta sección es para personal autorizado</h2>
+        <p>Tu información académica sigue disponible en Calificaciones, Avance y Reportes.</p>
+      </section>
+    );
+  }
 
   return (
     <div className="account-directory-page">
@@ -131,7 +142,11 @@ export function UsersPage({
               aria-label="Buscar personas"
               placeholder="Buscar por nombre o correo…"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setPage(1);
+                setOpenMenu(null);
+              }}
             />
           </div>
           <div className="filter-pills" aria-label="Filtrar cuentas">
@@ -141,7 +156,11 @@ export function UsersPage({
                   type="button"
                   className={filter === value ? "active" : ""}
                   aria-pressed={filter === value}
-                  onClick={() => setFilter(value)}
+                  onClick={() => {
+                    setFilter(value);
+                    setPage(1);
+                    setOpenMenu(null);
+                  }}
                   key={value}
                 >
                   {label}
@@ -241,7 +260,7 @@ export function UsersPage({
               </motion.div>
             ))}
           </AnimatePresence>
-          {!loading && visibleAccounts.length === 0 && (
+          {!loading && filteredAccounts.length === 0 && (
             <div className="account-empty-state">
               <Search size={22} /><strong>No encontramos cuentas</strong>
               <span>Prueba con otro nombre o cambia el filtro.</span>
@@ -249,6 +268,38 @@ export function UsersPage({
           )}
           {loading && <div className="account-loading-state"><span className="button-spinner" /> Sincronizando cuentas…</div>}
         </div>
+        {!loading && filteredAccounts.length > PAGE_SIZE && (
+          <nav className="account-pagination" aria-label="Paginación de la comunidad">
+            <span>
+              Mostrando <strong>{(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredAccounts.length)}</strong> de {filteredAccounts.length}
+            </span>
+            <div>
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => {
+                  setPage(currentPage - 1);
+                  setOpenMenu(null);
+                }}
+                aria-label="Página anterior"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span>Página <strong>{currentPage}</strong> de {pageCount}</span>
+              <button
+                type="button"
+                disabled={currentPage === pageCount}
+                onClick={() => {
+                  setPage(currentPage + 1);
+                  setOpenMenu(null);
+                }}
+                aria-label="Página siguiente"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </nav>
+        )}
       </section>
 
       <AnimatePresence>

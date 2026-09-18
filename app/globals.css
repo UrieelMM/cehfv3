@@ -9520,6 +9520,49 @@ code {
   font-size: calc(0.7rem + 0.125rem);
 }
 
+.account-pagination,
+.account-pagination > div {
+  display: flex;
+  align-items: center;
+}
+
+.account-pagination {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: calc(0.61rem + 0.125rem);
+}
+
+.account-pagination > div {
+  gap: 8px;
+}
+
+.account-pagination button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.account-pagination button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+@media (max-width: 620px) {
+  .account-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .account-empty-state svg {
   margin-bottom: 5px;
   color: var(--violet);
