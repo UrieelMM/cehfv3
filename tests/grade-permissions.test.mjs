@@ -48,7 +48,7 @@ test("Firestore lets preschool teachers grade their assigned subject", async () 
   );
 
   assert.match(assignedSubjectCheck, /desarrollo-integral-y-motrocidad/);
-  assert.match(assignedSubjectCheck, /Desarrollo Integral y Motrocidad/);
+  assert.match(assignedSubjectCheck, /Desarrollo Integral y Motricidad/);
   assert.match(gradeCatalogCheck, /let preschool = \[/);
   assert.match(preschoolCatalogBranch, /subjectId in preschool/);
   assert.doesNotMatch(preschoolCatalogBranch, /subjectId in primaryLower/);
@@ -101,4 +101,22 @@ test("teachers can correct their own daily grade without changing its academic s
   assert.match(rules, /sameDailyGradeScope\(before, after\)/);
   assert.match(dailyGradesMatch, /allow update: if validDailyGradeCorrection/);
   assert.doesNotMatch(dailyGradesMatch.slice(0, 850), /teacherCanGrade\(resource\.data\)/);
+});
+
+test("weekly reports publish through the backend and notify the student", async () => {
+  const [client, functions] = await Promise.all([
+    readFile(new URL("lib/reports-firebase.ts", projectRoot), "utf8"),
+    readFile(new URL("functions/src/index.ts", projectRoot), "utf8"),
+  ]);
+  const clientSave = client.slice(
+    client.indexOf("export async function saveStudentWeeklyReport"),
+    client.indexOf("export async function deleteStudentWeeklyReport"),
+  );
+
+  assert.match(clientSave, /"saveStudentWeeklyReport"/);
+  assert.doesNotMatch(clientSave, /writeBatch|batch\.set/);
+  assert.match(functions, /export const saveStudentWeeklyReport = onCall/);
+  assert.match(functions, /export const onStudentWeeklyReportChanged = onDocumentWritten/);
+  assert.match(functions, /eventType: "report_published"/);
+  assert.match(functions, /`\/reports\/\$\{encodeURIComponent/);
 });

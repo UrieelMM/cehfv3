@@ -27,10 +27,10 @@ const {
 
 test("each grade exposes only its canonical subjects", () => {
   assert.deepEqual(subjectsForGrade("preschool", "1.º"), [
-    "Desarrollo Integral y Motrocidad",
+    "Desarrollo Integral y Motricidad",
   ]);
   assert.deepEqual(subjectsForGrade("preschool", "3.º"), [
-    "Desarrollo Integral y Motrocidad",
+    "Desarrollo Integral y Motricidad",
   ]);
   assert.deepEqual(subjectsForGrade("primary", "1.º"), [
     "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia", "Física",
@@ -71,6 +71,10 @@ test("legacy and unaccented names are normalized for exact-match filters", () =>
   assert.equal(subjectsMatch("Matematicas", "Matemáticas"), true);
   assert.equal(subjectsMatch("Historia", "Geografía"), false);
   assert.equal(canonicalizeSubject("lectura y compresion"), "Lectura y comprensión");
+  assert.equal(
+    canonicalizeSubject("Desarrollo Integral y Motrocidad"),
+    "Desarrollo Integral y Motricidad",
+  );
   assert.deepEqual(
     sanitizeSubjects(
       ["Matematicas", "MATEMÁTICAS", "Civica", "Artes"],
@@ -114,4 +118,7 @@ test("registration, editing and backend saves use the grade catalog", () => {
   assert.match(rulesSource, /validManagedAccountSubjects\(request\.resource\.data\)/);
   assert.match(rulesSource, /data\.schoolLevel == "preschool"/);
   assert.match(rulesSource, /data\.subjects\.hasOnly\(preschoolSubjects\)/);
+  assert.match(functionsSource, /export const migrateAcademicSubjectNames = onCall/);
+  assert.match(functionsSource, /academic_subject_catalog\.normalized/);
+  assert.match(firebaseSource, /"migrateAcademicSubjectNames"/);
 });

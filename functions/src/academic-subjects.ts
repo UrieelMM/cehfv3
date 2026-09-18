@@ -7,7 +7,7 @@ export const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
 };
 
 export const academicSubjectOptions = [
-  "Desarrollo Integral y Motrocidad",
+  "Desarrollo Integral y Motricidad",
   "Lenguaje",
   "Matemáticas",
   "Cívica",
@@ -23,7 +23,7 @@ export const academicSubjectOptions = [
 type AcademicSubject = (typeof academicSubjectOptions)[number];
 
 const preschoolSubjects = [
-  "Desarrollo Integral y Motrocidad",
+  "Desarrollo Integral y Motricidad",
 ] as const satisfies readonly AcademicSubject[];
 
 const primaryLowerSubjects = [
@@ -85,6 +85,8 @@ const subjectAliases = new Map<string, AcademicSubject>([
   ["formacion civica", "Cívica"],
   ["educacion fisica", "Física"],
   ["lectura y compresion", "Lectura y comprensión"],
+  // Compatibilidad temporal para normalizar perfiles ya existentes.
+  ["desarrollo integral y motrocidad", "Desarrollo Integral y Motricidad"],
 ]);
 
 export function subjectsForGrade(

@@ -2,21 +2,16 @@
 
 import {
   collection,
-  deleteField,
-  doc,
   onSnapshot,
   query,
-  serverTimestamp,
   Timestamp,
   where,
-  writeBatch,
   type DocumentData,
   type QueryConstraint,
   type Unsubscribe,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { firebase } from "./firebase";
-import { gradeSubjectId } from "./grades-firebase";
 import { clampGradeScore, normalizeStoredGradeScore } from "./grade-scale";
 import { includesSubject, studentCanTakeSubject } from "./academic-subjects";
 import type {
@@ -135,40 +130,36 @@ export async function saveStudentWeeklyReport(
   if ([achievement, supportArea, nextStep].some((value) => value.length > 600)) {
     throw new Error("Cada campo puede tener hasta 600 caracteres.");
   }
-  const db = firebase.db;
-  if (!db) throw new Error("Firebase no está configurado para Reportes.");
-  const subjectId = gradeSubjectId(input.subject);
-  const reportId = [
-    academicConfig.schoolYearId,
-    input.week.id,
-    subjectId,
-    profile.uid,
-    input.student.uid,
-  ].join("__");
-  const reference = doc(
-    db,
-    "institutions",
-    profile.institutionId,
-    "studentWeeklyReports",
-    reportId,
-  );
-  const batch = writeBatch(db);
-  batch.set(reference, {
-    institutionId: profile.institutionId,
+  if (!firebase.functions) throw new Error("Firebase no está configurado para Reportes.");
+  const callable = httpsCallable<
+    {
+      schoolYearId: string;
+      schoolYearLabel: string;
+      termId: string;
+      termLabel: string;
+      weekId: string;
+      weekLabel: string;
+      studentId: string;
+      subject: string;
+      achievement: string;
+      supportArea: string;
+      nextStep: string;
+      weeklyScore: number;
+      gradedDays: number;
+      workingDays: number;
+      status: "draft" | "published";
+    },
+    { reportId: string; status: "draft" | "published" }
+  >(firebase.functions, "saveStudentWeeklyReport");
+  return (await callable({
     schoolYearId: academicConfig.schoolYearId,
     schoolYearLabel: academicConfig.schoolYearLabel,
     termId: input.term.id,
     termLabel: input.term.label,
     weekId: input.week.id,
     weekLabel: input.week.label,
-    subjectId,
-    subject: input.subject,
-    teacherId: profile.uid,
-    teacherName: profile.name,
     studentId: input.student.uid,
-    studentName: input.student.name,
-    studentGrade: input.student.grade ?? "",
-    studentGroup: input.student.group ?? "",
+    subject: input.subject,
     achievement,
     supportArea,
     nextStep,
@@ -176,11 +167,7 @@ export async function saveStudentWeeklyReport(
     gradedDays: Math.max(0, Math.round(input.gradedDays)),
     workingDays: Math.max(0, Math.round(input.workingDays)),
     status: input.status,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-    publishedAt: input.status === "published" ? serverTimestamp() : deleteField(),
-  }, { merge: true });
-  await batch.commit();
+  })).data;
 }
 
 export async function deleteStudentWeeklyReport(report: StudentWeeklyReport) {

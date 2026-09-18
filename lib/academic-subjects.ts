@@ -7,7 +7,7 @@ export const gradesBySchoolLevel: Record<SchoolLevel, readonly string[]> = {
 };
 
 export const academicSubjectOptions = [
-  "Desarrollo Integral y Motrocidad",
+  "Desarrollo Integral y Motricidad",
   "Lenguaje",
   "Matemáticas",
   "Cívica",
@@ -23,7 +23,7 @@ export const academicSubjectOptions = [
 export type AcademicSubject = (typeof academicSubjectOptions)[number];
 
 const preschoolSubjects = [
-  "Desarrollo Integral y Motrocidad",
+  "Desarrollo Integral y Motricidad",
 ] as const satisfies readonly AcademicSubject[];
 
 const primaryLowerSubjects = [
@@ -116,6 +116,9 @@ const subjectAliases = new Map<string, AcademicSubject>([
   ["formacion civica", "Cívica"],
   ["educacion fisica", "Física"],
   ["lectura y compresion", "Lectura y comprensión"],
+  // Compatibilidad de lectura para perfiles creados antes de corregir el
+  // nombre. Toda escritura nueva usa el valor canónico con "Motricidad".
+  ["desarrollo integral y motrocidad", "Desarrollo Integral y Motricidad"],
 ]);
 
 export function canonicalizeSubject(value: string): AcademicSubject | null {

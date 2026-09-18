@@ -186,6 +186,19 @@ service firebase.storage {
             data.memberIds is list
             && request.auth.uid in data.memberIds
           )
+          // Talleres creados antes de memberIds conservan sus listas por rol.
+          // La actividad ya es visible para estas personas; Storage debe usar
+          // el mismo criterio para que también puedan abrir sus archivos.
+          || (
+            profile().role == "teacher"
+            && data.teacherIds is list
+            && request.auth.uid in data.teacherIds
+          )
+          || (
+            profile().role == "student"
+            && data.studentIds is list
+            && request.auth.uid in data.studentIds
+          )
         );
     }
 

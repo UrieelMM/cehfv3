@@ -91,9 +91,13 @@ const WORKSHOP_RESOURCE_PATH = `${WORKSHOP_PATH}/resources/{resourceId}`;
 const WORKSHOP_TASK_PATH = `${WORKSHOP_PATH}/tasks/{taskId}`;
 const WORKSHOP_SUBMISSION_PATH =
   `${WORKSHOP_TASK_PATH}/submissions/{studentId}`;
+const STUDENT_WEEKLY_REPORT_PATH =
+  "institutions/{institutionId}/studentWeeklyReports/{reportId}";
 const STAFF_WORKSPACE_PATH =
   "institutions/{institutionId}/staffWorkspace/{itemId}";
 const ACADEMIC_TIMEZONE = "America/Mexico_City";
+const LEGACY_PRESCHOOL_SUBJECT = "Desarrollo Integral y Motrocidad";
+const PRESCHOOL_SUBJECT = "Desarrollo Integral y Motricidad";
 
 type CalendarWeek = {
   id: string;
@@ -133,6 +137,15 @@ function calendarId(value: unknown, field: string) {
     );
   }
   return normalized;
+}
+
+function academicSubjectId(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || "general";
 }
 
 function calendarLabel(value: unknown, field: string) {
@@ -401,6 +414,74 @@ function serializeManagedAccount(uid: string, data: DocumentData) {
     createdAt: accountTimestamp(data.createdAt),
   };
 }
+
+function correctedPreschoolSubjects(value: unknown) {
+  if (!Array.isArray(value)) return null;
+  const current = value.map(String);
+  if (!current.includes(LEGACY_PRESCHOOL_SUBJECT)) return null;
+  return [...new Set(current.map((subject) =>
+    subject === LEGACY_PRESCHOOL_SUBJECT ? PRESCHOOL_SUBJECT : subject
+  ))];
+}
+
+async function migrateInstitutionAcademicSubjectNames(
+  institutionId: string,
+  actor: { uid: string; name: string },
+) {
+  const [usersSnapshot, gradingConfigsSnapshot] = await Promise.all([
+    db.collection("users").where("institutionId", "==", institutionId).get(),
+    db.collection(`institutions/${institutionId}/gradingConfigs`).get(),
+  ]);
+  const updates = [
+    ...usersSnapshot.docs.flatMap((snapshot) => {
+      const subjects = correctedPreschoolSubjects(snapshot.data().subjects);
+      return subjects ? [{ reference: snapshot.ref, subjects, profile: true }] : [];
+    }),
+    ...gradingConfigsSnapshot.docs.flatMap((snapshot) => {
+      const subjects = correctedPreschoolSubjects(snapshot.data().subjects);
+      return subjects ? [{ reference: snapshot.ref, subjects, profile: false }] : [];
+    }),
+  ];
+
+  for (let offset = 0; offset < updates.length; offset += 400) {
+    const batch = db.batch();
+    updates.slice(offset, offset + 400).forEach((update) => {
+      batch.update(update.reference, {
+        subjects: update.subjects,
+        updatedAt: FieldValue.serverTimestamp(),
+        ...(update.profile ? { updatedBy: actor.uid } : {}),
+      });
+    });
+    await batch.commit();
+  }
+
+  const profileCount = updates.filter((update) => update.profile).length;
+  const gradingConfigCount = updates.length - profileCount;
+  if (updates.length) {
+    await db.collection("auditEvents").add({
+      entityType: "academic_subject_catalog",
+      entityId: institutionId,
+      institutionId,
+      action: "academic_subject_catalog.normalized",
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: "director",
+      after: {
+        from: LEGACY_PRESCHOOL_SUBJECT,
+        to: PRESCHOOL_SUBJECT,
+        profileCount,
+        gradingConfigCount,
+      },
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
+  return { updated: updates.length, profileCount, gradingConfigCount };
+}
+
+export const migrateAcademicSubjectNames = onCall(async (request) => {
+  const director = await requireAccountDirector(request.auth);
+  return migrateInstitutionAcademicSubjectNames(director.institutionId, director);
+});
 
 export const updateManagedAccount = onCall(async (request) => {
   const director = await requireAccountDirector(request.auth);
@@ -1455,6 +1536,177 @@ export const deleteWeeklyReview = onCall(async (request) => {
   }
   await deleteContentRecord({ actor, reference, entityType: "weekly_review", entityId: reviewId, title: String(review.title ?? "Repaso"), notificationField: "reviewId", storagePrefix: `institutions/${actor.institutionId}/weeklyReviews/${reviewId}/` });
   return { deleted: true };
+});
+
+export const saveStudentWeeklyReport = onCall(async (request) => {
+  const actor = await requireMaterialStaff(request.auth);
+  if (actor.role !== "teacher") {
+    throw new HttpsError(
+      "permission-denied",
+      "Sólo los docentes pueden elaborar reportes.",
+    );
+  }
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const studentId = accountUid(input.studentId);
+  const schoolYearId = calendarId(input.schoolYearId, "El ciclo escolar");
+  const termId = calendarId(input.termId, "El bimestre");
+  const weekId = calendarId(input.weekId, "La semana");
+  const subject = sanitizeSubjects(
+    [String(input.subject ?? "")],
+    academicSubjectOptions,
+  )[0];
+  if (!subject) {
+    throw new HttpsError("invalid-argument", "La materia no es válida.");
+  }
+  const teacherSubjects = sanitizeSubjects(actor.subjects, academicSubjectOptions);
+  if (!teacherSubjects.includes(subject)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Esta materia no está asignada a tu perfil.",
+    );
+  }
+  const status = input.status === "published" ? "published" : "draft";
+  const weeklyScoreValue = Number(input.weeklyScore);
+  const gradedDays = Math.max(0, Math.round(Number(input.gradedDays) || 0));
+  const workingDays = Math.max(0, Math.round(Number(input.workingDays) || 0));
+  if (!Number.isFinite(weeklyScoreValue) || weeklyScoreValue < 0 || weeklyScoreValue > 10) {
+    throw new HttpsError("invalid-argument", "El promedio semanal no es válido.");
+  }
+  if (gradedDays > workingDays) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Los días calificados no pueden superar los días hábiles.",
+    );
+  }
+
+  const studentReference = db.doc(`users/${studentId}`);
+  const weekReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/semanas/${weekId}`,
+  );
+  const termReference = db.doc(
+    `institutions/${actor.institutionId}/ciclosEscolares/${schoolYearId}/bimestres/${termId}`,
+  );
+  const configReference = db.doc(
+    `institutions/${actor.institutionId}/configuracion/academica`,
+  );
+  const [studentSnapshot, weekSnapshot, termSnapshot, configSnapshot] =
+    await db.getAll(
+      studentReference,
+      weekReference,
+      termReference,
+      configReference,
+    );
+  const student = studentSnapshot.data();
+  const week = weekSnapshot.data();
+  const term = termSnapshot.data();
+  const config = configSnapshot.data();
+  const schoolLevel: SchoolLevel = student?.schoolLevel === "preschool" ||
+      student?.schoolLevel === "secondary"
+    ? student.schoolLevel
+    : "primary";
+  const gradeSubjects = subjectsForGrade(schoolLevel, String(student?.grade ?? ""));
+  const studentSubjects = sanitizeSubjects(
+    Array.isArray(student?.subjects) ? student.subjects.map(String) : [],
+    academicSubjectOptions,
+  );
+  const studentCanTakeSubject =
+    gradeSubjects.includes(subject) || studentSubjects.includes(subject);
+  if (
+    !studentSnapshot.exists ||
+    student?.active !== true ||
+    student?.role !== "student" ||
+    student?.institutionId !== actor.institutionId ||
+    !Array.isArray(student?.teacherIds) ||
+    !student.teacherIds.includes(actor.uid) ||
+    !studentCanTakeSubject
+  ) {
+    throw new HttpsError(
+      "permission-denied",
+      "El alumno no está asignado a esta materia contigo.",
+    );
+  }
+  if (
+    !weekSnapshot.exists ||
+    !termSnapshot.exists ||
+    week?.active !== true ||
+    term?.active !== true ||
+    !Array.isArray(term?.weekIds) ||
+    !term.weekIds.includes(weekId) ||
+    (config?.schoolYearId && config.schoolYearId !== schoolYearId)
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "La semana seleccionada no pertenece al calendario académico activo.",
+    );
+  }
+
+  const subjectId = academicSubjectId(subject);
+  const reportId = [schoolYearId, weekId, subjectId, actor.uid, studentId].join("__");
+  const reference = db.doc(
+    `institutions/${actor.institutionId}/studentWeeklyReports/${reportId}`,
+  );
+  const existing = await reference.get();
+  const previous = existing.data();
+  if (
+    existing.exists &&
+    (previous?.institutionId !== actor.institutionId ||
+      previous?.teacherId !== actor.uid ||
+      previous?.studentId !== studentId ||
+      previous?.subjectId !== subjectId ||
+      previous?.weekId !== weekId)
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "El reporte existente no coincide con la selección académica.",
+    );
+  }
+
+  const now = Timestamp.now();
+  const report = {
+    institutionId: actor.institutionId,
+    schoolYearId,
+    schoolYearLabel: String(config?.schoolYearLabel ?? input.schoolYearLabel ?? schoolYearId),
+    termId,
+    termLabel: String(term?.label ?? input.termLabel ?? "Bimestre"),
+    weekId,
+    weekLabel: String(week?.label ?? input.weekLabel ?? "Semana"),
+    subjectId,
+    subject,
+    teacherId: actor.uid,
+    teacherName: actor.name,
+    studentId,
+    studentName: String(student?.name ?? "Alumno"),
+    studentGrade: String(student?.grade ?? ""),
+    studentGroup: String(student?.group ?? ""),
+    achievement: materialText(input.achievement, "El logro", 1, 600),
+    supportArea: materialText(input.supportArea, "El área de acompañamiento", 1, 600),
+    nextStep: materialText(input.nextStep, "El próximo paso", 1, 600),
+    weeklyScore: Math.round(weeklyScoreValue * 10) / 10,
+    gradedDays,
+    workingDays,
+    status,
+    createdAt: previous?.createdAt ?? now,
+    updatedAt: now,
+    ...(status === "published"
+      ? { publishedAt: now }
+      : { publishedAt: FieldValue.delete() }),
+  };
+  const batch = db.batch();
+  batch.set(reference, report, { merge: true });
+  batch.create(db.collection("auditEvents").doc(), {
+    entityType: "student_weekly_report",
+    entityId: reportId,
+    institutionId: actor.institutionId,
+    action: status === "published" ? "report.published" : "report.draft_saved",
+    actorId: actor.uid,
+    actorName: actor.name,
+    actorRole: actor.role,
+    before: existing.exists ? { status: String(previous?.status ?? "draft") } : null,
+    after: { status, subject, weekId, studentId },
+    createdAt: now,
+  });
+  await batch.commit();
+  return { reportId, status };
 });
 
 export const deleteStudentWeeklyReport = onCall(async (request) => {
@@ -3142,6 +3394,38 @@ export const onWorkshopSubmissionChanged = onDocumentWritten(
         },
       );
     }
+  },
+);
+
+export const onStudentWeeklyReportChanged = onDocumentWritten(
+  { document: STUDENT_WEEKLY_REPORT_PATH, retry: true },
+  async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) return;
+    const before = event.data?.before.exists ? event.data.before.data() : null;
+    const after = afterSnapshot.data();
+    if (
+      !after ||
+      after.status !== "published" ||
+      before?.status === "published" ||
+      after.institutionId !== event.params.institutionId
+    ) {
+      return;
+    }
+    const studentId = String(after.studentId ?? "");
+    if (!studentId) return;
+    await writeNotifications(
+      [studentId],
+      `report-published-${event.params.reportId}-${event.id}`,
+      {
+        category: "report",
+        title: `Nuevo reporte de ${String(after.subject ?? "tu materia")}`,
+        detail: `${String(after.weekLabel ?? "Semana")} · ${String(after.teacherName ?? "Tu maestro")}`,
+        reportId: event.params.reportId,
+        url: `/reports/${encodeURIComponent(String(event.params.reportId))}`,
+        eventType: "report_published",
+      },
+    );
   },
 );
 

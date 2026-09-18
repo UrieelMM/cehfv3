@@ -241,6 +241,14 @@ export async function listManagedAccounts(
   callerRole: Role = "director",
 ): Promise<ManagedAccount[]> {
   if (!db) return [];
+  if (callerRole === "director" && auth?.currentUser && functions) {
+    await refreshPortalAccess(auth.currentUser);
+    await httpsCallable<void, {
+      updated: number;
+      profileCount: number;
+      gradingConfigCount: number;
+    }>(functions, "migrateAcademicSubjectNames")();
+  }
   const snapshot = await getDocs(
     callerRole === "teacher"
       ? query(

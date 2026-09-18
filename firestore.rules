@@ -48,7 +48,7 @@ service cloud.firestore {
 
     function validManagedAccountSubjects(data) {
       let preschoolSubjects = [
-        "Desarrollo Integral y Motrocidad"
+        "Desarrollo Integral y Motricidad"
       ];
       let primaryLower = [
         "Lenguaje", "Matemáticas", "Ciencias", "Cívica", "Historia",
@@ -68,7 +68,7 @@ service cloud.firestore {
         "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés"
       ];
       let allSubjects = [
-        "Desarrollo Integral y Motrocidad",
+        "Desarrollo Integral y Motricidad",
         "Lenguaje", "Matemáticas", "Cívica", "Historia", "Física", "Inglés",
         "Ciencias", "Geografía", "Lectura y comprensión", "Biología"
       ];
@@ -549,6 +549,16 @@ service cloud.firestore {
               || (
                 data.memberIds is list
                 && request.auth.uid in data.memberIds
+              )
+              || (
+                roleIs("teacher")
+                && data.teacherIds is list
+                && request.auth.uid in data.teacherIds
+              )
+              || (
+                roleIs("student")
+                && data.studentIds is list
+                && request.auth.uid in data.studentIds
               )
             );
         }

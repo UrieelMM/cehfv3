@@ -71,6 +71,8 @@ test("workshops expose a configurable Zoom link and authorized file reads", asyn
   assert.match(firestoreRules, /data\.zoomUrl\.matches/);
   assert.match(firestoreRules, /request\.auth\.uid == studentId\s+&& canReadWorkshopTask\(task\)/);
   assert.match(storageRules, /profile\(\)\.role == "director"/);
+  assert.match(storageRules, /data\.teacherIds is list/);
+  assert.match(storageRules, /data\.studentIds is list/);
   assert.match(storageRules, /resources\/\{resourceId\}/);
   assert.match(workshopStyles, /\.workshop-task-control button \+ button \{ margin-top: 8px; \}/);
 });
