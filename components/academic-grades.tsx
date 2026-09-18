@@ -13,9 +13,13 @@ import {
   Save,
   Search,
   Sparkles,
+  UserRound,
+  UsersRound,
+  X,
 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { studentCanTakeSubject, subjectsMatch } from "@/lib/academic-subjects";
@@ -29,6 +33,7 @@ import {
   GRADING_CRITERIA,
   saveDailyGrade,
   watchDailyGrades,
+  watchGradeReportDirectors,
   watchTeacherGradingConfig,
   workingDatesForWeek,
 } from "@/lib/grades-firebase";
@@ -42,6 +47,7 @@ import type {
   ManagedAccount,
   TeacherGradingConfig,
   UserProfile,
+  WeeklyGradeRecord,
   WeeklyGradeScores,
 } from "@/lib/types";
 
@@ -223,6 +229,177 @@ function DailyTable({ records }: { records: DailyGradeRecord[] }) {
   );
 }
 
+type GradeExportScope = "student" | "group";
+
+function GradeExportDialog({
+  profile,
+  records,
+  selectedWeek,
+  termLabel,
+  schoolYearLabel,
+  accounts,
+  directorNames,
+  onClose,
+}: {
+  profile: UserProfile;
+  records: WeeklyGradeRecord[];
+  selectedWeek?: AcademicWeek;
+  termLabel?: string;
+  schoolYearLabel: string;
+  accounts: ManagedAccount[];
+  directorNames: string[];
+  onClose: () => void;
+}) {
+  const groups = Array.from(new Set(records.map(groupLabel)))
+    .sort((first, second) => first.localeCompare(second, "es"));
+  const [scope, setScope] = useState<GradeExportScope>("student");
+  const [group, setGroup] = useState(groups[0] ?? "");
+  const [studentId, setStudentId] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const selectedGroup = groups.includes(group) ? group : groups[0] ?? "";
+  const groupRecords = records.filter((record) => groupLabel(record) === selectedGroup);
+  const students = Array.from(new Map(groupRecords.map((record) => (
+    [record.studentId, record.studentName]
+  ))).entries()).sort((first, second) => first[1].localeCompare(second[1], "es"));
+  const selectedStudentId = students.some(([id]) => id === studentId)
+    ? studentId
+    : students[0]?.[0] ?? "";
+  const selectedStudentName = students.find(([id]) => id === selectedStudentId)?.[1];
+  const filteredRecords = scope === "group"
+    ? groupRecords
+    : groupRecords.filter((record) => record.studentId === selectedStudentId);
+  const guardianName = scope === "student"
+    ? accounts.find((account) => account.uid === selectedStudentId)?.guardianName
+    : undefined;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !exporting) onClose();
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [exporting, onClose]);
+
+  async function exportPdf() {
+    if (!selectedWeek || !filteredRecords.length) {
+      toast.error("No hay calificaciones para el alcance seleccionado.");
+      return;
+    }
+    setExporting(true);
+    try {
+      const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
+      await downloadGradeReportPdf({
+        role: scope === "student" ? "student" : profile.role,
+        generatedBy: profile.name,
+        records: filteredRecords,
+        weekLabel: selectedWeek.label,
+        weekRange: formatWeekRange(selectedWeek),
+        termLabel,
+        schoolYearLabel,
+        directorNames,
+        guardianName,
+        fileNameLabel: scope === "student"
+          ? `${selectedStudentName ?? "alumno"}-${selectedWeek.label}`
+          : `${selectedGroup}-${selectedWeek.label}`,
+        filters: [
+          `Grupo: ${selectedGroup}`,
+          `Alcance: ${scope === "student" ? "Por alumno" : "Grupo completo"}`,
+        ],
+      });
+      toast.success(scope === "student"
+        ? `El PDF de ${selectedStudentName ?? "el alumno"} se descargó correctamente.`
+        : `El PDF del grupo ${selectedGroup} se descargó correctamente.`);
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos generar el PDF.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="grade-export-modal-backdrop" onClick={() => !exporting && onClose()}>
+      <section
+        className="grade-export-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="academic-grade-export-title"
+      >
+        <header>
+          <span className="grade-export-icon"><FileDown size={22} /></span>
+          <div>
+            <span className="eyebrow">Reporte listo para firma</span>
+            <h2 id="academic-grade-export-title">Exportar calificaciones a PDF</h2>
+            <p>Elige si necesitas la boleta de un alumno o el reporte completo de un grupo.</p>
+          </div>
+          <button disabled={exporting} onClick={onClose} type="button" aria-label="Cerrar exportación"><X size={19} /></button>
+        </header>
+
+        <div className="grade-export-scope" role="radiogroup" aria-label="Alcance del PDF">
+          <button
+            className={scope === "student" ? "active" : ""}
+            type="button"
+            role="radio"
+            aria-checked={scope === "student"}
+            onClick={() => setScope("student")}
+          >
+            <UserRound size={20} />
+            <span><strong>Por alumno</strong><small>Genera una boleta individual.</small></span>
+          </button>
+          <button
+            className={scope === "group" ? "active" : ""}
+            type="button"
+            role="radio"
+            aria-checked={scope === "group"}
+            onClick={() => setScope("group")}
+          >
+            <UsersRound size={20} />
+            <span><strong>Grupo completo</strong><small>Incluye a todos sus alumnos.</small></span>
+          </button>
+        </div>
+
+        <div className="grade-export-fields">
+          <label>
+            <span>Grupo</span>
+            <select value={selectedGroup} onChange={(event) => { setGroup(event.target.value); setStudentId(""); }}>
+              {groups.map((item) => <option value={item} key={item}>{item}</option>)}
+            </select>
+          </label>
+          {scope === "student" && (
+            <label>
+              <span>Alumno</span>
+              <select value={selectedStudentId} onChange={(event) => setStudentId(event.target.value)}>
+                {students.map(([id, name]) => <option value={id} key={id}>{name}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+
+        <div className="grade-export-preview">
+          <span><strong>{scope === "student" ? (filteredRecords.length ? 1 : 0) : students.length}</strong><small>{scope === "student" ? "alumno" : "alumnos"}</small></span>
+          <div>
+            <strong>{scope === "student" ? selectedStudentName ?? "Sin alumno disponible" : selectedGroup || "Sin grupo disponible"}</strong>
+            <p>{filteredRecords.length} {filteredRecords.length === 1 ? "calificación incluida" : "calificaciones incluidas"} de {selectedWeek?.label.toLowerCase() ?? "la semana"}.</p>
+          </div>
+        </div>
+
+        <footer>
+          <button className="grade-export-cancel" disabled={exporting} onClick={onClose} type="button">Cancelar</button>
+          <button className="grade-export-submit" disabled={exporting || !filteredRecords.length || !selectedWeek} onClick={() => void exportPdf()} type="button">
+            <FileDown size={17} /> {exporting ? "Generando…" : "Descargar PDF"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 export function AcademicGradesPanel({
   profile,
   academicConfig,
@@ -251,6 +428,9 @@ export function AcademicGradesPanel({
   const [loading, setLoading] = useState(firebaseReady);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportingStudentPdf, setExportingStudentPdf] = useState(false);
+  const [directorNames, setDirectorNames] = useState<string[]>(profile.role === "director" ? [profile.name] : []);
   const teacherSubjects = useMemo(() => profile.subjects ?? [], [profile.subjects]);
   const availableSubjects = useMemo(() => [...new Set([
     ...teacherSubjects,
@@ -270,7 +450,12 @@ export function AcademicGradesPanel({
     const stopConfig = profile.role === "teacher"
       ? watchTeacherGradingConfig(profile, setConfig, () => toast.error("No pudimos cargar la ponderación."))
       : () => undefined;
-    return () => { stopGrades(); stopConfig(); };
+    const stopDirectors = watchGradeReportDirectors(
+      profile,
+      (directors) => setDirectorNames(directors.map((director) => director.name)),
+      () => toast.error("No pudimos cargar los perfiles de Dirección para el PDF."),
+    );
+    return () => { stopGrades(); stopConfig(); stopDirectors(); };
   }, [profile]);
 
   const cycleRecords = records.filter((record) => record.schoolYearId === academicConfig.schoolYearId);
@@ -301,7 +486,14 @@ export function AcademicGradesPanel({
   )).filter((student) => !normalizedSearch || `${student.name} ${student.grade ?? ""} ${student.group ?? ""}`.toLocaleLowerCase("es").includes(normalizedSearch));
   const capturePageStudents = eligibleStudents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const daySubjectRecords = cycleRecords.filter((record) => record.weekId === selectedWeek?.id && record.gradeDate === activeDate && subjectsMatch(record.subject, activeSubject) && record.teacherId === profile.uid);
-  const weeklyRecords = aggregateDailyGradesByWeek(cycleRecords, calendar).filter((record) => record.weekId === selectedWeek?.id && matches(record));
+  const firebaseAccountNames = new Map(accounts.map((account) => [account.uid, account.name]));
+  const selectedWeekRecords = aggregateDailyGradesByWeek(cycleRecords, calendar)
+    .filter((record) => record.weekId === selectedWeek?.id)
+    .map((record) => ({
+      ...record,
+      studentName: firebaseAccountNames.get(record.studentId) ?? record.studentName,
+      teacherName: firebaseAccountNames.get(record.teacherId) ?? record.teacherName,
+    }));
   const average = (items: Array<{ weightedScore: number }>) => items.length
     ? Math.round(items.reduce((sum, record) => sum + record.weightedScore, 0) / items.length * 10) / 10
     : 0;
@@ -319,22 +511,32 @@ export function AcademicGradesPanel({
     }
   }
 
-  async function exportWeeklyPdf() {
-    if (!selectedWeek || !weeklyRecords.length) {
+  async function exportStudentPdf() {
+    if (!selectedWeek || !selectedWeekRecords.length) {
       toast.error("No hay promedios semanales para exportar.");
       return;
     }
-    const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
-    await downloadGradeReportPdf({
-      role: profile.role,
-      generatedBy: profile.name,
-      records: weeklyRecords,
-      weekLabel: selectedWeek.label,
-      weekRange: formatWeekRange(selectedWeek),
-      termLabel: selectedTerm?.label,
-      schoolYearLabel: academicConfig.schoolYearLabel,
-      guardianName: profile.guardianName,
-    });
+    setExportingStudentPdf(true);
+    try {
+      const { downloadGradeReportPdf } = await import("@/lib/grade-report-pdf");
+      await downloadGradeReportPdf({
+        role: "student",
+        generatedBy: profile.name,
+        records: selectedWeekRecords,
+        weekLabel: selectedWeek.label,
+        weekRange: formatWeekRange(selectedWeek),
+        termLabel: selectedTerm?.label,
+        schoolYearLabel: academicConfig.schoolYearLabel,
+        directorNames,
+        guardianName: profile.guardianName,
+        fileNameLabel: `${profile.name}-${selectedWeek.label}`,
+      });
+      toast.success("Tu boleta semanal se descargó en PDF.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos generar el PDF.");
+    } finally {
+      setExportingStudentPdf(false);
+    }
   }
 
   const captureTotal = profile.role === "teacher" && level === "daily" ? eligibleStudents.length : total;
@@ -346,7 +548,14 @@ export function AcademicGradesPanel({
           <h2>Del día al ciclo, sin recapturar</h2>
           <p>La captura diaria alimenta automáticamente el promedio semanal, cada bimestre y la calificación final del ciclo.</p>
         </div>
-        <button type="button" className="academic-export" onClick={() => void exportWeeklyPdf()}><FileDown size={17} /> Exportar semana</button>
+        <button
+          type="button"
+          className="academic-export"
+          disabled={loading || exportingStudentPdf || !selectedWeekRecords.length}
+          onClick={() => profile.role === "student" ? void exportStudentPdf() : setExportOpen(true)}
+        >
+          <FileDown size={17} /> {exportingStudentPdf ? "Generando…" : "Exportar PDF"}
+        </button>
       </header>
 
       <div className="academic-context-bar">
@@ -408,6 +617,21 @@ export function AcademicGradesPanel({
         </div>
       ) : level === "daily" ? <DailyTable records={pagedDaily} /> : <SummaryTable records={pagedSummary} level={level} />}
       <Pagination page={page} total={captureTotal} onChange={setPage} />
+      {typeof document !== "undefined" && createPortal(
+        exportOpen && profile.role !== "student" ? (
+          <GradeExportDialog
+            profile={profile}
+            records={selectedWeekRecords}
+            selectedWeek={selectedWeek}
+            termLabel={selectedTerm?.label}
+            schoolYearLabel={academicConfig.schoolYearLabel}
+            accounts={accounts}
+            directorNames={directorNames}
+            onClose={() => setExportOpen(false)}
+          />
+        ) : null,
+        document.body,
+      )}
     </section>
   );
 }

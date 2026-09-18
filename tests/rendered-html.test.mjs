@@ -353,6 +353,10 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradesUiSource, /Todas las materias/);
   assert.match(gradesUiSource, /downloadGradeReportPdf/);
   assert.match(gradesUiSource, /profile\.guardianName/);
+  assert.match(gradesUiSource, /Por alumno/);
+  assert.match(gradesUiSource, /Grupo completo/);
+  assert.match(gradesUiSource, /scope === "student" \? "student" : profile\.role/);
+  assert.match(gradesUiSource, /selectedWeekRecords/);
   assert.match(gradesCss, /\.academic-level-tabs/);
   assert.match(gradesCss, /\.academic-capture-row/);
   assert.match(gradesCss, /\.academic-results-table/);
@@ -375,6 +379,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradeReportPdfSource, /Docente responsable/);
   assert.match(gradeReportPdfSource, /Vo\. Bo\. Dirección/);
   assert.match(gradeReportPdfSource, /directorNames/);
+  assert.match(gradeReportPdfSource, /fileNameLabel/);
   assert.match(gradeReportPdfSource, /teacherNames\[0\]/);
   assert.match(gradeReportPdfSource, /Página \$\{page\} de/);
   assert.match(gradeReportPdfSource, /loadBrandLogoBytes/);

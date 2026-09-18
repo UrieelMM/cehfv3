@@ -20,6 +20,7 @@ export type GradeReportInput = {
   weekRange?: string;
   termLabel?: string;
   schoolYearLabel: string;
+  fileNameLabel?: string;
   filters?: string[];
   institutionName?: string;
   directorNames?: string[];
@@ -37,9 +38,9 @@ function reportTitle(role: Role) {
 }
 
 function reportFileName(input: GradeReportInput) {
-  const subject = input.role === "student"
+  const subject = input.fileNameLabel ?? (input.role === "student"
     ? input.records[0]?.studentName ?? "alumno"
-    : input.weekLabel;
+    : input.weekLabel);
   const safe = subject
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
