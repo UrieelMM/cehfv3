@@ -25,6 +25,7 @@
     "@mantine/hooks": "^9.6.0",
     "algoliasearch": "^5.57.0",
     "dayjs": "^1.11.21",
+    "docx": "^9.7.1",
     "firebase": "^12.16.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",

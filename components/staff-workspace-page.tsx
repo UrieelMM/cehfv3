@@ -24,6 +24,11 @@ import {
 import { friendlyFirebaseError } from "@/lib/firebase";
 import { subjectsMatch } from "@/lib/academic-subjects";
 import {
+  downloadWorkspaceDocument,
+  type WorkspaceExportFormat,
+  type WorkspaceExportInput,
+} from "@/lib/staff-workspace-export";
+import {
   createStaffWorkspaceComment, createStaffWorkspaceItem,
   deleteStaffWorkspaceFile, deleteStaffWorkspaceItem,
   markStaffWorkspaceItemRead, setStaffWorkspaceItemArchived,
@@ -363,6 +368,10 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
   const [draftBaseline, setDraftBaseline] = useState(JSON.stringify(emptyDraft()));
   const [confirmation, setConfirmation] = useState<WorkspaceConfirmation | null>(null);
   const [confirmationBusy, setConfirmationBusy] = useState(false);
+  const [exporting, setExporting] = useState<{
+    itemId: string;
+    format: WorkspaceExportFormat;
+  } | null>(null);
 
   const teamMembers = useMemo<WorkspaceMentionMember[]>(() => {
     const members = new Map<string, WorkspaceMentionMember>();
@@ -921,6 +930,26 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
     }
   }
 
+  async function exportDocument(
+    itemId: string,
+    source: WorkspaceExportInput,
+    format: WorkspaceExportFormat,
+  ) {
+    if (exporting) return;
+    setExporting({ itemId, format });
+    try {
+      await downloadWorkspaceDocument(source, format);
+      toast.success(format === "docx" ? "Documento Word descargado" : "Documento PDF descargado");
+    } catch (error) {
+      console.error("[Campus CEHF] No se pudo exportar el documento", error);
+      toast.error("No pudimos generar el archivo", {
+        description: error instanceof Error ? error.message : "Intenta nuevamente.",
+      });
+    } finally {
+      setExporting(null);
+    }
+  }
+
   async function togglePinned(item: StaffWorkspaceItem) {
     try {
       if (firebaseReady) await setStaffWorkspaceItemPinned(profile, item.id, !item.pinned);
@@ -1172,6 +1201,8 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
                           <summary aria-label={`Acciones de ${item.title}`}><MoreHorizontal size={19} /></summary>
                           <div>
                             <button onClick={() => openItem(item)} type="button"><Pencil size={15} /> {owned ? "Editar" : "Abrir"}</button>
+                            {!item.isTemplate && <button disabled={Boolean(exporting)} onClick={() => void exportDocument(item.id, item, "docx")} type="button">{exporting?.itemId === item.id && exporting.format === "docx" ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />} Descargar Word</button>}
+                            {!item.isTemplate && <button disabled={Boolean(exporting)} onClick={() => void exportDocument(item.id, item, "pdf")} type="button">{exporting?.itemId === item.id && exporting.format === "pdf" ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />} Descargar PDF</button>}
                             {!item.isTemplate && <button onClick={() => duplicateItem(item)} type="button"><Copy size={15} /> Duplicar</button>}
                             {owned && !item.isTemplate && <button disabled={saving} onClick={() => void saveAsTemplate(item)} type="button"><Sparkles size={15} /> Guardar como plantilla</button>}
                             {owned && <button onClick={() => void toggleArchived(item)} type="button">{item.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{item.archived ? "Restaurar" : "Archivar"}</button>}
@@ -1263,6 +1294,8 @@ export function StaffWorkspacePage({ profile, accounts, firebaseReady }: Props) 
                 <details className="staff-workspace-item-menu editor-actions">
                   <summary><MoreHorizontal size={18} /> Más opciones</summary>
                   <div>
+                    {selectedItem && !draft.isTemplate && <button disabled={Boolean(exporting)} onClick={() => void exportDocument(selectedItem.id, { ...draft, ownerName: selectedItem.ownerName, createdAt: selectedItem.createdAt, updatedAt: selectedItem.updatedAt }, "docx")} type="button">{exporting?.itemId === selectedItem.id && exporting.format === "docx" ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />} Descargar Word</button>}
+                    {selectedItem && !draft.isTemplate && <button disabled={Boolean(exporting)} onClick={() => void exportDocument(selectedItem.id, { ...draft, ownerName: selectedItem.ownerName, createdAt: selectedItem.createdAt, updatedAt: selectedItem.updatedAt }, "pdf")} type="button">{exporting?.itemId === selectedItem.id && exporting.format === "pdf" ? <LoaderCircle className="spin" size={15} /> : <Download size={15} />} Descargar PDF</button>}
                     {selectedItem && <button disabled={saving || uploadingFiles > 0} onClick={() => removeItem(selectedItem)} type="button"><Trash2 size={15} /> Eliminar</button>}
                     {selectedItem && <button disabled={saving || uploadingFiles > 0 || draftDirty} title={draftDirty ? "Guarda o descarta los cambios antes de archivar" : undefined} onClick={() => void toggleArchived(selectedItem)} type="button">{selectedItem.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}{selectedItem.archived ? "Restaurar" : "Archivar"}</button>}
                     {draftDirty && <button disabled={saving || uploadingFiles > 0} onClick={discardDraft} type="button">Descartar borrador</button>}
