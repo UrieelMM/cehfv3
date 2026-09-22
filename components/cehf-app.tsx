@@ -159,6 +159,7 @@ import {
 } from "@/lib/forum-firebase";
 import { ForumRichText } from "@/components/forum-rich-text";
 import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
+import { isResizeObserverLoopError } from "@/lib/resize-observer-error";
 import logoCehf from "@/assets/img/logoCEHF.png";
 import {
   publishAcademicCalendarImage,
@@ -642,6 +643,18 @@ export function CEHFApp() {
   const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>([]);
   const [managedAccountsLoading, setManagedAccountsLoading] = useState(false);
   const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    const ignoreBenignResizeObserverLoop = (event: ErrorEvent) => {
+      if (!isResizeObserverLoopError(event.message)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+
+    window.addEventListener("error", ignoreBenignResizeObserverLoop, true);
+    return () =>
+      window.removeEventListener("error", ignoreBenignResizeObserverLoop, true);
+  }, []);
 
   const currentProfile = profile ?? pendingProfile;
   const role = currentProfile.role;
