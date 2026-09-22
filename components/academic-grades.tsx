@@ -606,7 +606,7 @@ export function AcademicGradesPanel({
       </section>
 
       <div className="academic-metrics">
-        <article><span>Promedio visible</span><strong>{score(level === "daily" ? average(dailyVisible) : average(summaryVisible))}</strong><small>Escala de 0 a 10</small></article>
+        <article><span>Promedio</span><strong>{score(level === "daily" ? average(dailyVisible) : average(summaryVisible))}</strong><small>Escala de 0 a 10</small></article>
         <article><span>{profile.role === "teacher" && level === "daily" ? "Capturados hoy" : "Registros"}</span><strong>{profile.role === "teacher" && level === "daily" ? daySubjectRecords.length : total}</strong><small>{profile.role === "teacher" && level === "daily" ? `de ${eligibleStudents.length} alumnos` : "según filtros"}</small></article>
         <article><span>Regla de cálculo</span><strong>{level === "daily" ? "Captura" : "Promedio"}</strong><small>{level === "weekly" ? `${workingDates.length} días hábiles esperados` : level === "bimonthly" ? "semanas del bimestre" : level === "cycle" ? "bimestres del ciclo" : "cinco criterios"}</small></article>
       </div>

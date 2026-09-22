@@ -237,7 +237,7 @@ export function ReviewsPage({
           <h2>
             {profile.role === "student"
               ? "Practica un poco, aprende mucho."
-              : "Prácticas breves con avance visible."}
+              : "Practica un poco, aprende mucho."}
           </h2>
           <p>
             {profile.role === "student"
