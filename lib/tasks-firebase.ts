@@ -23,6 +23,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
+import { normalizeForumRichText } from "./forum-rich-text";
 import type {
   AcademicCalendar,
   AcademicCalendarInput,
@@ -254,6 +255,7 @@ function submissionFromData(id: string, data: DocumentData): TaskSubmission {
     teacherId: String(data.teacherId ?? ""),
     taskId: String(data.taskId ?? ""),
     content: String(data.content ?? ""),
+    contentRich: data.contentRich ? String(data.contentRich) : undefined,
     attachments: attachmentsFromData(data.attachments),
     status: data.status ?? "draft",
     version: Number(data.version ?? 0),
@@ -261,6 +263,9 @@ function submissionFromData(id: string, data: DocumentData): TaskSubmission {
     updatedAt: asIso(data.updatedAt),
     teacherFeedback: data.teacherFeedback
       ? String(data.teacherFeedback)
+      : undefined,
+    teacherFeedbackRich: data.teacherFeedbackRich
+      ? String(data.teacherFeedbackRich)
       : undefined,
     feedbackAt: data.feedbackAt ? asIso(data.feedbackAt) : undefined,
     reviewedAt: data.reviewedAt ? asIso(data.reviewedAt) : undefined,
@@ -275,6 +280,7 @@ function historyFromData(id: string, data: DocumentData): TaskHistoryEvent {
     authorName: String(data.authorName ?? "Campus CEHF"),
     authorRole: data.authorRole ?? "teacher",
     message: String(data.message ?? ""),
+    messageRich: data.messageRich ? String(data.messageRich) : undefined,
     createdAt: asIso(data.createdAt),
     version: data.version ? Number(data.version) : undefined,
     attachments: attachmentsFromData(data.attachments),
@@ -855,6 +861,7 @@ export async function submitTaskResponse(
   task: TaskAssignment,
   profile: UserProfile,
   content: string,
+  contentRich: string,
   files: File[],
 ) {
   const { db } = requireFirebase();
@@ -880,6 +887,7 @@ export async function submitTaskResponse(
     version,
     files,
   );
+  const normalizedContentRich = normalizeForumRichText(contentRich || content);
   const batch = writeBatch(db);
   batch.set(
     submissionReference,
@@ -890,6 +898,7 @@ export async function submitTaskResponse(
       studentName: profile.name,
       teacherId: task.createdBy,
       content: content.trim(),
+      contentRich: normalizedContentRich,
       attachments,
       status: "submitted",
       version,
@@ -912,6 +921,7 @@ export async function submitTaskResponse(
     studentId: profile.uid,
     studentName: profile.name,
     message: content.trim(),
+    messageRich: normalizedContentRich,
     attachments,
     version,
     createdAt: serverTimestamp(),
@@ -925,13 +935,16 @@ export async function sendTaskFeedback(
   submission: TaskSubmission,
   profile: UserProfile,
   feedback: string,
+  feedbackRich: string,
 ) {
   const { db } = requireFirebase();
+  const normalizedFeedbackRich = normalizeForumRichText(feedbackRich || feedback);
   const submissionReference = doc(taskRef(task), "entregas", submission.studentId);
   const batch = writeBatch(db);
   batch.update(submissionReference, {
     status: "feedback",
     teacherFeedback: feedback.trim(),
+    teacherFeedbackRich: normalizedFeedbackRich,
     feedbackAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -943,6 +956,7 @@ export async function sendTaskFeedback(
     studentId: submission.studentId,
     studentName: submission.studentName,
     message: feedback.trim(),
+    messageRich: normalizedFeedbackRich,
     version: submission.version,
     createdAt: serverTimestamp(),
   });

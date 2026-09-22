@@ -489,12 +489,14 @@ export type TaskSubmission = {
   teacherId: string;
   taskId: string;
   content: string;
+  contentRich?: string;
   attachments: TaskAttachment[];
   status: TaskSubmissionStatus;
   version: number;
   submittedAt?: string;
   updatedAt: string;
   teacherFeedback?: string;
+  teacherFeedbackRich?: string;
   feedbackAt?: string;
   reviewedAt?: string;
 };
@@ -520,6 +522,7 @@ export type TaskHistoryEvent = {
   authorName: string;
   authorRole: Role;
   message: string;
+  messageRich?: string;
   createdAt: string;
   version?: number;
   attachments?: TaskAttachment[];

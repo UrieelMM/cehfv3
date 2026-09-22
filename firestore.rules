@@ -1542,6 +1542,31 @@ service cloud.firestore {
         }
 
         match /entregas/{studentId} {
+          function validSubmissionRichText(data) {
+            return (
+                !data.keys().hasAny(["contentRich"])
+                || (
+                  data.contentRich is string
+                  && data.contentRich.size() <= 100000
+                )
+              )
+              && (
+                !data.keys().hasAny(["teacherFeedbackRich"])
+                || (
+                  data.teacherFeedbackRich is string
+                  && data.teacherFeedbackRich.size() <= 100000
+                )
+              );
+          }
+
+          function validHistoryRichText(data) {
+            return !data.keys().hasAny(["messageRich"])
+              || (
+                data.messageRich is string
+                && data.messageRich.size() <= 100000
+              );
+          }
+
           allow read: if taskBelongsToInstitution(parentTask()) && (
             isTaskStaff(parentTask()) || request.auth.uid == studentId
           );
@@ -1551,6 +1576,7 @@ service cloud.firestore {
             && request.resource.data.studentId == studentId
             && request.resource.data.teacherId == parentTask().createdBy
             && request.resource.data.status == "submitted"
+            && validSubmissionRichText(request.resource.data)
             && request.resource.data.version == 1;
           allow update: if taskBelongsToInstitution(parentTask()) && (
             (
@@ -1563,9 +1589,10 @@ service cloud.firestore {
               && request.resource.data.status == "submitted"
               && request.resource.data.version == resource.data.version + 1
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                "content", "attachments", "status", "version", "submittedAt",
-                "updatedAt", "teacherFeedback"
+                "content", "contentRich", "attachments", "status", "version",
+                "submittedAt", "updatedAt", "teacherFeedback"
               ])
+              && validSubmissionRichText(request.resource.data)
             ) || (
               isTaskStaff(parentTask())
               && request.resource.data.studentId == resource.data.studentId
@@ -1573,9 +1600,11 @@ service cloud.firestore {
               && request.resource.data.taskId == resource.data.taskId
               && request.resource.data.institutionId == resource.data.institutionId
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                "status", "teacherFeedback", "feedbackAt", "reviewedAt", "updatedAt"
+                "status", "teacherFeedback", "teacherFeedbackRich",
+                "feedbackAt", "reviewedAt", "updatedAt"
               ])
               && request.resource.data.status in ["feedback", "reviewed"]
+              && validSubmissionRichText(request.resource.data)
             )
           );
           allow delete: if false;
@@ -1584,7 +1613,9 @@ service cloud.firestore {
             allow read: if taskBelongsToInstitution(parentTask()) && (
               isTaskStaff(parentTask()) || request.auth.uid == studentId
             );
-            allow create: if taskBelongsToInstitution(parentTask()) && (
+            allow create: if taskBelongsToInstitution(parentTask())
+              && validHistoryRichText(request.resource.data)
+              && (
               (
                 canStudentSubmit(studentId)
                 && request.resource.data.authorId == studentId

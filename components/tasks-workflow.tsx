@@ -38,8 +38,10 @@ import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
+import { ForumRichText } from "@/components/forum-rich-text";
 import { TaskResourceViewer } from "@/components/task-resource-viewer";
 import { academicSubjectOptions, subjectsMatch } from "@/lib/academic-subjects";
+import { normalizeForumRichText } from "@/lib/forum-rich-text";
 import {
   closeTaskAssignment,
   deleteTaskAssignment,
@@ -786,8 +788,12 @@ export function TaskDetailModal({
   const [viewedResourceIds, setViewedResourceIds] = useState<Set<string>>(new Set());
   const [extension, setExtension] = useState<TaskExtension | null>(null);
   const [response, setResponse] = useState("");
+  const [responseRich, setResponseRich] = useState(() => normalizeForumRichText(""));
+  const [responseRevision, setResponseRevision] = useState(0);
   const [responseFiles, setResponseFiles] = useState<File[]>([]);
   const [feedback, setFeedback] = useState("");
+  const [feedbackRich, setFeedbackRich] = useState(() => normalizeForumRichText(""));
+  const [feedbackRevision, setFeedbackRevision] = useState(0);
   const [groupDueAt, setGroupDueAt] = useState(() =>
     toLocalDateTime(
       new Date(
@@ -914,8 +920,10 @@ export function TaskDetailModal({
     await runAction(
       "submit",
       async () => {
-        const version = await submitTaskResponse(task, profile, response, responseFiles);
+        const version = await submitTaskResponse(task, profile, response, responseRich, responseFiles);
         setResponse("");
+        setResponseRich(normalizeForumRichText(""));
+        setResponseRevision((current) => current + 1);
         setResponseFiles([]);
         toast.success(`Versión ${version} entregada y maestro notificado`);
       },
@@ -928,11 +936,20 @@ export function TaskDetailModal({
     await runAction(
       "feedback",
       async () => {
-        await sendTaskFeedback(task, selectedSubmission, profile, feedback);
+        await sendTaskFeedback(task, selectedSubmission, profile, feedback, feedbackRich);
         setFeedback("");
+        setFeedbackRich(normalizeForumRichText(""));
+        setFeedbackRevision((current) => current + 1);
       },
       "Retroalimentación enviada al alumno",
     );
+  }
+
+  function selectStudentForReview(studentId: string) {
+    setSelectedStudentId(studentId);
+    setFeedback("");
+    setFeedbackRich(normalizeForumRichText(""));
+    setFeedbackRevision((current) => current + 1);
   }
 
   async function removeTask() {
@@ -1080,11 +1097,14 @@ export function TaskDetailModal({
               submissions={submissions}
               selectedSubmission={selectedSubmission}
               selectedStudentId={activeSelectedStudentId}
-              setSelectedStudentId={setSelectedStudentId}
+              setSelectedStudentId={selectStudentForReview}
               history={history}
               taskHistory={taskHistory}
               feedback={feedback}
               setFeedback={setFeedback}
+              feedbackRich={feedbackRich}
+              setFeedbackRich={setFeedbackRich}
+              feedbackRevision={feedbackRevision}
               sendFeedback={sendFeedback}
               busy={busy}
               runAction={runAction}
@@ -1108,6 +1128,9 @@ export function TaskDetailModal({
               task={task}
               response={response}
               setResponse={setResponse}
+              responseRich={responseRich}
+              setResponseRich={setResponseRich}
+              responseRevision={responseRevision}
               responseFiles={responseFiles}
               setResponseFiles={setResponseFiles}
               submitResponse={submitResponse}
@@ -1232,6 +1255,9 @@ function StudentTaskFlow({
   task,
   response,
   setResponse,
+  responseRich,
+  setResponseRich,
+  responseRevision,
   responseFiles,
   setResponseFiles,
   submitResponse,
@@ -1245,6 +1271,9 @@ function StudentTaskFlow({
   task: TaskAssignment;
   response: string;
   setResponse: (value: string) => void;
+  responseRich: string;
+  setResponseRich: (value: string) => void;
+  responseRevision: number;
   responseFiles: File[];
   setResponseFiles: (files: File[]) => void;
   submitResponse: () => Promise<void>;
@@ -1278,15 +1307,17 @@ function StudentTaskFlow({
         )}
         {effectiveOpen ? (
           <>
-            <label>
-              Respuesta o comentario
-              <textarea
-                rows={6}
-                value={response}
-                onChange={(event) => setResponse(event.target.value)}
-                placeholder="Describe tu trabajo, hallazgos o cambios de esta versión…"
+            <div className="task-rich-field">
+              <label>Respuesta o comentario</label>
+              <ForumRichText
+                content={responseRich}
+                editorKey={`task-response-${task.id}-${responseRevision}`}
+                onChange={(richText, plainText) => {
+                  setResponseRich(richText);
+                  setResponse(plainText);
+                }}
               />
-            </label>
+            </div>
             <label className="task-response-upload">
               <UploadCloud size={20} />
               <span>
@@ -1365,6 +1396,9 @@ function StaffTaskFlow({
   taskHistory,
   feedback,
   setFeedback,
+  feedbackRich,
+  setFeedbackRich,
+  feedbackRevision,
   sendFeedback,
   busy,
   runAction,
@@ -1389,6 +1423,9 @@ function StaffTaskFlow({
   taskHistory: TaskHistoryEvent[];
   feedback: string;
   setFeedback: (value: string) => void;
+  feedbackRich: string;
+  setFeedbackRich: (value: string) => void;
+  feedbackRevision: number;
   sendFeedback: () => Promise<void>;
   busy: string;
   runAction: (key: string, action: () => Promise<void>, success: string) => Promise<void>;
@@ -1581,18 +1618,28 @@ function StaffTaskFlow({
                           : "Borrador"}
                   </span>
                   <strong>Versión {selectedSubmission.version}</strong>
-                  <p>{selectedSubmission.content}</p>
+                  {selectedSubmission.content && (
+                    selectedSubmission.contentRich ? (
+                      <ForumRichText
+                        content={selectedSubmission.contentRich}
+                        editorKey={`task-submission-${selectedSubmission.id}-${selectedSubmission.version}`}
+                        editable={false}
+                      />
+                    ) : <p>{selectedSubmission.content}</p>
+                  )}
                 </div>
               )}
-              <label>
-                Retroalimentación para el alumno
-                <textarea
-                  rows={5}
-                  value={feedback}
-                  onChange={(event) => setFeedback(event.target.value)}
-                  placeholder="Reconoce el avance y explica el siguiente paso…"
+              <div className="task-rich-field">
+                <label>Retroalimentación para el alumno</label>
+                <ForumRichText
+                  content={feedbackRich}
+                  editorKey={`task-feedback-${task.id}-${selectedStudentId}-${feedbackRevision}`}
+                  onChange={(richText, plainText) => {
+                    setFeedbackRich(richText);
+                    setFeedback(plainText);
+                  }}
                 />
-              </label>
+              </div>
               <div className="task-feedback-actions">
                 <button
                   className="primary-button"
@@ -1707,7 +1754,15 @@ function TaskTimeline({
                             ? "Finalizó la entrega"
                             : "Actualizó la actividad"}
                   </span>
-                  {event.message && <p>{event.message}</p>}
+                  {event.message && (
+                    event.messageRich ? (
+                      <ForumRichText
+                        content={event.messageRich}
+                        editorKey={`task-history-${event.id}`}
+                        editable={false}
+                      />
+                    ) : <p>{event.message}</p>
+                  )}
                   {event.attachments && event.attachments.length > 0 && (
                     <div className="task-event-files">
                       {event.attachments.map((attachment) => (
