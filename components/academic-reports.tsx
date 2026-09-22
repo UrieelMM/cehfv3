@@ -221,8 +221,9 @@ export function AcademicReportsPage({
     const openingKey = `${report.id}:${report.updatedAt}`;
     if (recordedOpeningsRef.current.has(openingKey)) return;
     recordedOpeningsRef.current.add(openingKey);
-    void markStudentWeeklyReportViewed(report, profile).catch(() => {
+    void markStudentWeeklyReportViewed(report, profile).catch((error) => {
       recordedOpeningsRef.current.delete(openingKey);
+      console.error("[Campus CEHF] No se pudo registrar la lectura del reporte", error);
     });
   }, [firebaseReady, profile]);
 

@@ -3,14 +3,11 @@
 import {
   collection,
   doc,
-  getDoc,
-  increment,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
-  setDoc,
   Timestamp,
-  updateDoc,
   where,
   type DocumentData,
   type QueryConstraint,
@@ -146,23 +143,27 @@ export async function markStudentWeeklyReportViewed(
     "studentWeeklyReportViews",
     report.id,
   );
-  const snapshot = await getDoc(reference);
-  if (snapshot.exists()) {
-    await updateDoc(reference, {
+  await runTransaction(firebase.db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (snapshot.exists()) {
+      transaction.update(reference, {
+        lastOpenedAt: serverTimestamp(),
+        viewCount: Math.max(1, Number(snapshot.data().viewCount ?? 1)) + 1,
+      });
+      return;
+    }
+    transaction.set(reference, {
+      reportId: report.id,
+      institutionId: report.institutionId,
+      teacherId: report.teacherId,
+      studentId: report.studentId,
+      // The report keeps the canonical student snapshot that the security
+      // rules validate. The profile name may have changed after publication.
+      studentName: report.studentName,
+      firstOpenedAt: serverTimestamp(),
       lastOpenedAt: serverTimestamp(),
-      viewCount: increment(1),
+      viewCount: 1,
     });
-    return;
-  }
-  await setDoc(reference, {
-    reportId: report.id,
-    institutionId: profile.institutionId,
-    teacherId: report.teacherId,
-    studentId: profile.uid,
-    studentName: profile.name,
-    firstOpenedAt: serverTimestamp(),
-    lastOpenedAt: serverTimestamp(),
-    viewCount: 1,
   });
 }
 
