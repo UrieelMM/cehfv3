@@ -397,6 +397,17 @@ export type StudentWeeklyReport = {
   publishedAt?: string;
 };
 
+export type StudentWeeklyReportView = {
+  reportId: string;
+  institutionId: string;
+  teacherId: string;
+  studentId: string;
+  studentName: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  viewCount: number;
+};
+
 export type TaskPublicationStatus =
   | "draft"
   | "scheduled"
@@ -811,6 +822,7 @@ export type ForumReply = {
   author: string;
   initials: string;
   body: string;
+  bodyRich?: string;
   createdAt: string;
   teacher?: boolean;
   parentId?: string;
@@ -841,6 +853,7 @@ export type ForumTopic = {
   forumName: string;
   title: string;
   prompt: string;
+  promptRich?: string;
   kind: ForumTopicKind;
   subject: string;
   group: string;

@@ -2,7 +2,6 @@
 
 import {
   Archive,
-  AtSign,
   BadgeCheck,
   BookOpen,
   Bookmark,
@@ -49,7 +48,9 @@ import {
   type FormEvent,
 } from "react";
 import { toast } from "sonner";
+import { ForumRichText } from "@/components/forum-rich-text";
 import { friendlyFirebaseError } from "@/lib/firebase";
+import { normalizeForumRichText } from "@/lib/forum-rich-text";
 import { subjectsMatch } from "@/lib/academic-subjects";
 import {
   deleteForumTopic,
@@ -65,7 +66,6 @@ import {
   updateForumTopic,
   watchForumFollowing,
 } from "@/lib/forum-firebase";
-import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
 import type {
   ForumAttachment,
   ForumBan,
@@ -213,7 +213,9 @@ export function ForumPage({
   const [sort, setSort] = useState<TopicSort>("recent");
   const [currentPage, setCurrentPage] = useState(1);
   const [reply, setReply] = useState("");
-  const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
+  const [replyRich, setReplyRich] = useState("");
+  const [composerFocusRequest, setComposerFocusRequest] = useState(0);
+  const [composerRevision, setComposerRevision] = useState(0);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [attachment, setAttachment] = useState<ForumAttachment | null>(null);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
@@ -229,11 +231,6 @@ export function ForumPage({
       : window.localStorage.getItem("cehf-forum-guidelines") === "accepted",
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
-  const mentionMenuRef = useOutsidePointerDismiss<HTMLDivElement>(
-    mentionMenuOpen,
-    setMentionMenuOpen,
-  );
   const publishCooldownRef = useRef(false);
   const staff = role !== "student";
   const pageSize = 5;
@@ -423,7 +420,10 @@ export function ForumPage({
 
   function selectTopic(topic: ForumTopic) {
     setSelectedId(topic.id);
+    setReply("");
+    setReplyRich("");
     setReplyingTo(null);
+    setComposerRevision((current) => current + 1);
     const nextPath = `/forum/${topic.forumId}/${topic.id}`;
     window.history.pushState({}, "", nextPath);
   }
@@ -692,6 +692,7 @@ export function ForumPage({
           profile,
           topicId: selectedTopic.id,
           body: cleanReply,
+          bodyRich: replyRich,
           parentId: replyingTo ?? undefined,
           mentionedUserIds,
           file: attachmentFile,
@@ -702,7 +703,8 @@ export function ForumPage({
             : "Tu aportación se publicó en el grupo",
         );
         setReply("");
-        setMentionMenuOpen(false);
+        setReplyRich("");
+        setComposerRevision((current) => current + 1);
         setReplyingTo(null);
         setAttachment(null);
         setAttachmentFile(null);
@@ -735,6 +737,7 @@ export function ForumPage({
                     author: profile.name,
                     initials: profile.initials,
                     body: cleanReply,
+                    bodyRich: replyRich,
                     createdAt: "Ahora",
                     teacher: staff,
                     parentId: replyingTo ?? undefined,
@@ -754,7 +757,8 @@ export function ForumPage({
         : "Tu aportación se publicó en el grupo",
     );
     setReply("");
-    setMentionMenuOpen(false);
+    setReplyRich("");
+    setComposerRevision((current) => current + 1);
     setReplyingTo(null);
     setAttachment(null);
     setAttachmentFile(null);
@@ -768,6 +772,10 @@ export function ForumPage({
   function submitReply(event: FormEvent) {
     event.preventDefault();
     const cleanReply = reply.trim();
+    if (cleanReply.length > 600) {
+      setComposerError("La aportación puede tener hasta 600 caracteres.");
+      return;
+    }
     const includesPrivateContact =
       /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i.test(cleanReply) ||
       /(?:\+?52[\s.-]?)?(?:\d[\s.-]?){10}\b/.test(cleanReply);
@@ -808,17 +816,6 @@ export function ForumPage({
         ...participant,
         photoURL: resolvePhotoURL(participant.uid, participant.name),
       }));
-  const mentionMatch = reply.match(/(?:^|\s)@([\p{L}]*)$/u);
-  const mentionSuggestions = mentionMenuOpen && mentionMatch
-    ? mentionCandidates
-        .filter((participant) =>
-          participant.name
-            .toLocaleLowerCase("es-MX")
-            .startsWith(mentionMatch[1].toLocaleLowerCase("es-MX")),
-        )
-        .slice(0, 4)
-    : [];
-
   const topLevelReplies = selectedTopic.replies.filter(
     (item) => !item.parentId,
   );
@@ -1185,7 +1182,11 @@ export function ForumPage({
                 <span>{selectedTopic.subject}</span>
               </div>
               <h2>{selectedTopic.title}</h2>
-              <p>{selectedTopic.prompt}</p>
+              <ForumRichText
+                content={selectedTopic.promptRich ?? selectedTopic.prompt}
+                editorKey={`forum-topic-${selectedTopic.id}-${selectedTopic.lastActivityAt ?? "content"}`}
+                editable={false}
+              />
               <div className="forum-post-meta">
                 <span>
                   <Users size={15} /> {selectedTopic.group}
@@ -1267,7 +1268,7 @@ export function ForumPage({
                     onReact={reactToReply}
                     onReply={(replyId) => {
                       setReplyingTo(replyId);
-                      requestAnimationFrame(() => composerRef.current?.focus());
+                      setComposerFocusRequest((current) => current + 1);
                     }}
                     onReport={reportReply}
                     onHide={(replyItem) =>
@@ -1318,52 +1319,22 @@ export function ForumPage({
                         </button>
                       </div>
                     )}
-                    <textarea
-                      ref={composerRef}
-                      value={reply}
+                    <ForumRichText
+                      content={replyRich}
+                      editorKey={`forum-reply-${selectedTopic.id}-${composerRevision}`}
+                      focusRequest={composerFocusRequest}
                       maxLength={600}
-                      onChange={(event) => {
-                        const nextReply = event.target.value;
-                        setReply(nextReply);
-                        setMentionMenuOpen(
-                          /(?:^|\s)@[\p{L}]*$/u.test(nextReply),
-                        );
+                      members={mentionCandidates.map((participant) => ({
+                        id: participant.uid || participant.name,
+                        name: participant.name,
+                        initials: participant.initials,
+                      }))}
+                      onChange={(richText, plainText) => {
+                        setReplyRich(richText);
+                        setReply(plainText);
                         setComposerError("");
                       }}
-                      placeholder="Comparte una idea, una pregunta o algo que aprendiste…"
-                      aria-label="Escribe tu aportación"
-                      rows={3}
                     />
-                    {mentionSuggestions.length > 0 && (
-                      <div
-                        className="forum-mention-menu"
-                        role="listbox"
-                        ref={mentionMenuRef}
-                      >
-                        <span>Mencionar participante</span>
-                        {mentionSuggestions.map((participant) => (
-                          <button
-                            type="button"
-                            key={participant.uid || participant.name}
-                            onClick={() => {
-                              setReply((current) =>
-                                current.replace(
-                                  /@[\p{L}]*$/u,
-                                  `@${participant.name} `,
-                                ),
-                              );
-                              setMentionMenuOpen(false);
-                              composerRef.current?.focus();
-                            }}
-                          >
-                            <span>
-                              {participant.photoURL ? <Image src={participant.photoURL} alt="" fill sizes="26px" unoptimized /> : participant.initials}
-                            </span>
-                            {participant.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                     {attachment && (
                       <div className="forum-pending-attachment">
                         <Paperclip size={16} />
@@ -1439,23 +1410,10 @@ export function ForumPage({
                             </button>
                           </>
                         )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReply((current) => `${current}@`);
-                            setMentionMenuOpen(true);
-                            composerRef.current?.focus();
-                          }}
-                          aria-label="Mencionar a un participante"
-                        >
-                          <AtSign size={18} />
-                          <span>Mencionar</span>
-                        </button>
                       </div>
-                      <span>{reply.length}/600</span>
                       <button
                         className="forum-publish-button"
-                        disabled={!reply.trim() || publishing}
+                        disabled={!reply.trim() || reply.length > 600 || publishing}
                       >
                         <Send size={17} /> {publishing ? "Publicando…" : "Publicar"}
                       </button>
@@ -1784,7 +1742,15 @@ function ForumReplyCard({
             </div>
           ) : (
             <>
-              <p>{highlightForumMentions(item.body, mentionNames)}</p>
+              {item.bodyRich ? (
+                <ForumRichText
+                  content={item.bodyRich}
+                  editorKey={`forum-post-${item.id}-${item.edited ? "edited" : "original"}`}
+                  editable={false}
+                />
+              ) : (
+                <p>{highlightForumMentions(item.body, mentionNames)}</p>
+              )}
               {item.attachment && (
                 <button
                   type="button"
@@ -1994,6 +1960,7 @@ function TopicSettingsDialog({
       ForumTopic,
       | "title"
       | "prompt"
+      | "promptRich"
       | "status"
       | "opensAt"
       | "allowReplies"
@@ -2005,6 +1972,9 @@ function TopicSettingsDialog({
 }) {
   const [title, setTitle] = useState(topic.title);
   const [prompt, setPrompt] = useState(topic.prompt);
+  const [promptRich, setPromptRich] = useState(
+    normalizeForumRichText(topic.promptRich ?? topic.prompt),
+  );
   const [status, setStatus] = useState(topic.status);
   const [opensAt, setOpensAt] = useState(dateTimeLocalValue(topic.opensAt));
   const [closesAt, setClosesAt] = useState(
@@ -2044,6 +2014,7 @@ function TopicSettingsDialog({
             await onSave({
               title: title.trim(),
               prompt: prompt.trim(),
+              promptRich,
               status,
               opensAt: opensAt ? new Date(opensAt).toISOString() : "",
               allowReplies,
@@ -2075,15 +2046,18 @@ function TopicSettingsDialog({
               required
             />
           </label>
-          <label className="forum-field forum-field-wide">
+          <div className="forum-field forum-field-wide">
             <span>Consigna</span>
-            <textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              rows={4}
-              required
+            <ForumRichText
+              content={promptRich}
+              editorKey={`forum-settings-${topic.id}`}
+              maxLength={2_000}
+              onChange={(richText, plainText) => {
+                setPromptRich(richText);
+                setPrompt(plainText);
+              }}
             />
-          </label>
+          </div>
           <label className="forum-field">
             <span>Estado</span>
             <select
@@ -2174,7 +2148,7 @@ function TopicSettingsDialog({
           </button>
           <button
             className="primary-button"
-            disabled={!title.trim() || submitting}
+            disabled={!title.trim() || prompt.trim().length < 8 || prompt.length > 2_000 || submitting}
           >
             <Settings2 size={17} />
             {submitting ? "Guardando…" : "Guardar cambios"}

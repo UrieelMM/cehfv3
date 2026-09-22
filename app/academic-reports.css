@@ -241,6 +241,27 @@
 .report-status.is-published { background: var(--mint-soft); color: var(--mint); }
 .report-status.is-draft { background: var(--gold-soft); color: var(--gold); }
 
+.report-header-statuses {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+.report-view-status {
+  display: inline-flex;
+  max-width: 240px;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: .59rem;
+  font-weight: 750;
+  text-align: right;
+}
+
+.report-view-status.is-viewed { color: var(--mint); }
+.report-view-status.is-pending { color: var(--gold); }
+.report-view-status > svg { flex: 0 0 auto; }
+
 .report-evidence {
   gap: 12px;
   padding: 10px 14px;
@@ -411,6 +432,32 @@
   font-size: .66rem;
 }
 
+.published-report-card.is-student-summary:not(.is-expanded) > header {
+  border-bottom: 0;
+}
+
+.published-report-card > footer button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: .66rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.published-report-card > footer .report-open-button {
+  margin-left: auto;
+  border-color: var(--violet);
+  background: var(--violet);
+  color: var(--on-primary);
+}
+
 .report-empty,
 .report-loading {
   min-height: 180px;
@@ -465,6 +512,7 @@
   .report-evidence-score { border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 12px; }
   .report-evidence-rubrics { overflow-x: auto; }
   .report-editor-card > footer, .published-report-card > footer, .report-pagination { align-items: flex-start; flex-direction: column; }
+  .published-report-card > footer .report-open-button { width: 100%; justify-content: center; margin-left: 0; }
   .report-editor-card > footer > div { width: 100%; }
   .report-editor-card footer button { flex: 1; }
 }

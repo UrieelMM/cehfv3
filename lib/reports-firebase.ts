@@ -2,9 +2,15 @@
 
 import {
   collection,
+  doc,
+  getDoc,
+  increment,
   onSnapshot,
   query,
+  serverTimestamp,
+  setDoc,
   Timestamp,
+  updateDoc,
   where,
   type DocumentData,
   type QueryConstraint,
@@ -20,6 +26,7 @@ import type {
   AcademicWeek,
   ManagedAccount,
   StudentWeeklyReport,
+  StudentWeeklyReportView,
   UserProfile,
 } from "./types";
 
@@ -62,6 +69,19 @@ function fromData(id: string, data: DocumentData): StudentWeeklyReport {
   };
 }
 
+function viewFromData(data: DocumentData): StudentWeeklyReportView {
+  return {
+    reportId: String(data.reportId ?? ""),
+    institutionId: String(data.institutionId ?? ""),
+    teacherId: String(data.teacherId ?? ""),
+    studentId: String(data.studentId ?? ""),
+    studentName: String(data.studentName ?? "Alumno"),
+    firstOpenedAt: asIso(data.firstOpenedAt),
+    lastOpenedAt: asIso(data.lastOpenedAt),
+    viewCount: Math.max(1, Number(data.viewCount ?? 1)),
+  };
+}
+
 export function watchStudentWeeklyReports(
   profile: UserProfile,
   callback: (reports: StudentWeeklyReport[]) => void,
@@ -88,6 +108,62 @@ export function watchStudentWeeklyReports(
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))),
     (error) => onError?.(error),
   );
+}
+
+export function watchStudentWeeklyReportViews(
+  profile: UserProfile,
+  callback: (views: StudentWeeklyReportView[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db) {
+    callback([]);
+    return () => undefined;
+  }
+  const constraints: QueryConstraint[] = [];
+  if (profile.role === "teacher") constraints.push(where("teacherId", "==", profile.uid));
+  if (profile.role === "student") constraints.push(where("studentId", "==", profile.uid));
+  return onSnapshot(
+    query(
+      collection(firebase.db, "institutions", profile.institutionId, "studentWeeklyReportViews"),
+      ...constraints,
+    ),
+    (snapshot) => callback(snapshot.docs
+      .map((entry) => viewFromData(entry.data()))
+      .sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt))),
+    (error) => onError?.(error),
+  );
+}
+
+export async function markStudentWeeklyReportViewed(
+  report: StudentWeeklyReport,
+  profile: UserProfile,
+) {
+  if (!firebase.db || profile.role !== "student" || report.studentId !== profile.uid) return;
+  const reference = doc(
+    firebase.db,
+    "institutions",
+    profile.institutionId,
+    "studentWeeklyReportViews",
+    report.id,
+  );
+  const snapshot = await getDoc(reference);
+  if (snapshot.exists()) {
+    await updateDoc(reference, {
+      lastOpenedAt: serverTimestamp(),
+      viewCount: increment(1),
+    });
+    return;
+  }
+  await setDoc(reference, {
+    reportId: report.id,
+    institutionId: profile.institutionId,
+    teacherId: report.teacherId,
+    studentId: profile.uid,
+    studentName: profile.name,
+    firstOpenedAt: serverTimestamp(),
+    lastOpenedAt: serverTimestamp(),
+    viewCount: 1,
+  });
 }
 
 export type SaveStudentWeeklyReportInput = {

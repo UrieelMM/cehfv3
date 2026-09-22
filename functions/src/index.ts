@@ -6494,6 +6494,64 @@ function forumText(
   return normalized;
 }
 
+function forumRichText(
+  value: unknown,
+  label: string,
+  expectedPlainText: string,
+  maximumPlainText: number,
+) {
+  const serialized = String(value ?? "").trim();
+  if (!serialized || serialized.length > 50_000) {
+    throw new HttpsError("invalid-argument", `${label} no tiene un formato válido.`);
+  }
+  let document: unknown;
+  try {
+    document = JSON.parse(serialized);
+  } catch {
+    throw new HttpsError("invalid-argument", `${label} no tiene un formato válido.`);
+  }
+  if (!Array.isArray(document) || !document.length) {
+    throw new HttpsError("invalid-argument", `${label} no tiene contenido.`);
+  }
+  const extractInline = (node: unknown): string => {
+    if (typeof node === "string") return node;
+    if (Array.isArray(node)) return node.map(extractInline).join("");
+    if (!node || typeof node !== "object") return "";
+    const valueNode = node as Record<string, unknown>;
+    if (typeof valueNode.text === "string") return valueNode.text;
+    if (valueNode.type === "tableContent" && Array.isArray(valueNode.rows)) {
+      return valueNode.rows.map((row) => {
+        if (!row || typeof row !== "object") return "";
+        const cells = (row as Record<string, unknown>).cells;
+        return Array.isArray(cells) ? cells.map(extractInline).join(" ") : "";
+      }).join(" ");
+    }
+    return extractInline(valueNode.content);
+  };
+  const chunks: string[] = [];
+  const visitBlocks = (blocks: unknown[]) => {
+    for (const block of blocks) {
+      if (!block || typeof block !== "object") continue;
+      const record = block as Record<string, unknown>;
+      chunks.push(extractInline(record.content));
+      if (Array.isArray(record.children)) visitBlocks(record.children);
+    }
+  };
+  visitBlocks(document);
+  const plainText = chunks.join(" ")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const normalizedExpected = forumText(expectedPlainText, label, 1, maximumPlainText);
+  if (plainText !== normalizedExpected) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${label} no coincide con su contenido de texto.`,
+    );
+  }
+  return JSON.stringify(document);
+}
+
 function forumOptionalText(value: unknown, maximum: number) {
   const normalized = String(value ?? "")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
@@ -6682,6 +6740,7 @@ export const createForumTopic = onCall(async (request) => {
   const input = (request.data ?? {}) as Record<string, unknown>;
   const title = forumText(input.title, "El título", 3, 140);
   const prompt = forumText(input.prompt, "La consigna", 8, 2_000);
+  const promptRich = forumRichText(input.promptRich, "La consigna", prompt, 2_000);
   const subject = forumText(input.subject, "La materia", 2, 80);
   const targetGroup = forumText(input.group, "El grupo", 2, 80);
   const forumName = forumText(input.forumName, "El espacio", 2, 100);
@@ -6708,6 +6767,7 @@ export const createForumTopic = onCall(async (request) => {
     forumName,
     title,
     prompt,
+    promptRich,
     kind,
     subject,
     targetGroup,
@@ -6789,6 +6849,12 @@ export const updateForumTopic = onCall(async (request) => {
     const next = {
       title: forumText(values.title, "El título", 3, 140),
       prompt: forumText(values.prompt, "La consigna", 8, 2_000),
+      promptRich: forumRichText(
+        values.promptRich,
+        "La consigna",
+        String(values.prompt ?? ""),
+        2_000,
+      ),
       status,
       opensAt,
       closesAt,
@@ -6922,6 +6988,7 @@ export const createForumPost = onCall(async (request) => {
   const postId = forumId(input.postId, "La publicación");
   const topicId = forumId(input.topicId, "El tema");
   const body = forumText(input.body, "La aportación", 1, 600);
+  const bodyRich = forumRichText(input.bodyRich, "La aportación", body, 600);
   const parentId = input.parentId ? forumId(input.parentId, "La respuesta") : "";
   const attachment = forumAttachment(input.attachment, actor, topicId, postId);
   let mentionedUserIds = await validForumMentions(
@@ -6988,6 +7055,7 @@ export const createForumPost = onCall(async (request) => {
       authorInitials: actor.initials,
       authorRole: actor.role,
       body,
+      bodyRich,
       parentId: parentId || null,
       mentionedUserIds,
       attachment,
@@ -7153,6 +7221,7 @@ export const moderateForumPost = onCall(async (request) => {
     if (action === "hidden") {
       transaction.update(postReference, {
         body: "",
+        bodyRich: "",
         attachment: null,
         status: "hidden",
         hiddenAt: now,
@@ -7162,6 +7231,7 @@ export const moderateForumPost = onCall(async (request) => {
     } else if (action === "restored") {
       transaction.update(postReference, {
         body: String(moderationCase?.originalBody ?? ""),
+        bodyRich: String(moderationCase?.originalBodyRich ?? ""),
         attachment: moderationCase?.originalAttachment ?? null,
         status: "visible",
         restoredAt: now,
@@ -7181,6 +7251,7 @@ export const moderateForumPost = onCall(async (request) => {
         reason: String(moderationCase?.reason ?? "Acción directa de moderación"),
         status: action,
         originalBody: String(moderationCase?.originalBody ?? post.body ?? ""),
+        originalBodyRich: String(moderationCase?.originalBodyRich ?? post.bodyRich ?? ""),
         originalAttachment: moderationCase?.originalAttachment ?? post.attachment ?? null,
         reportCount: Number(moderationCase?.reportCount ?? post.reportCount ?? 0),
         createdAt: moderationCase?.createdAt ?? now,

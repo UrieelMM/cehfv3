@@ -41,6 +41,7 @@ export type ForumWorkspace = {
 export type ForumTopicInput = {
   title: string;
   prompt: string;
+  promptRich: string;
   subject: string;
   group: string;
   forumName: string;
@@ -56,6 +57,7 @@ export type ForumTopicUpdate = Pick<
   ForumTopic,
   | "title"
   | "prompt"
+  | "promptRich"
   | "status"
   | "opensAt"
   | "closesAt"
@@ -163,6 +165,7 @@ function replyFromSnapshot(
       author: String(data.authorName ?? "Integrante CEHF"),
       initials: String(data.authorInitials ?? "CE"),
       body: String(data.body ?? ""),
+      bodyRich: data.bodyRich ? String(data.bodyRich) : undefined,
       createdAt: forumDateLabel(createdAt, "Reciente"),
       teacher: ["teacher", "director"].includes(String(data.authorRole)),
       parentId: data.parentId ? String(data.parentId) : undefined,
@@ -211,6 +214,7 @@ function topicFromSnapshot(
     forumName: String(data.forumName ?? data.subject ?? "Conversaciones"),
     title: String(data.title ?? "Tema sin título"),
     prompt: String(data.prompt ?? ""),
+    promptRich: data.promptRich ? String(data.promptRich) : undefined,
     kind,
     subject: String(data.subject ?? "Comunidad"),
     group: String(data.targetGroup ?? "Todo el campus"),
@@ -446,6 +450,7 @@ export async function publishForumReply(input: {
   profile: UserProfile;
   topicId: string;
   body: string;
+  bodyRich: string;
   parentId?: string;
   mentionedUserIds: string[];
   file?: File | null;
@@ -484,6 +489,7 @@ export async function publishForumReply(input: {
         postId: string;
         topicId: string;
         body: string;
+        bodyRich: string;
         parentId?: string;
         mentionedUserIds: string[];
         attachment?: ForumAttachment;
@@ -493,6 +499,7 @@ export async function publishForumReply(input: {
       postId,
       topicId: input.topicId,
       body: input.body,
+      bodyRich: input.bodyRich,
       ...(input.parentId ? { parentId: input.parentId } : {}),
       mentionedUserIds: input.mentionedUserIds,
       ...(attachment ? { attachment } : {}),

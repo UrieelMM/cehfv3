@@ -1265,6 +1265,70 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      match /studentWeeklyReportViews/{reportId} {
+        function reportForView() {
+          return get(
+            /databases/$(database)/documents/institutions/$(institutionId)/studentWeeklyReports/$(reportId)
+          ).data;
+        }
+
+        function validReportView(data) {
+          return data.keys().hasAll([
+              "reportId", "institutionId", "teacherId", "studentId",
+              "studentName", "firstOpenedAt", "lastOpenedAt", "viewCount"
+            ])
+            && data.keys().hasOnly([
+              "reportId", "institutionId", "teacherId", "studentId",
+              "studentName", "firstOpenedAt", "lastOpenedAt", "viewCount"
+            ])
+            && data.reportId == reportId
+            && data.institutionId == institutionId
+            && data.teacherId is string
+            && data.studentId is string
+            && data.studentName is string
+            && data.studentName.size() > 0
+            && data.firstOpenedAt is timestamp
+            && data.lastOpenedAt is timestamp
+            && data.viewCount is int
+            && data.viewCount > 0;
+        }
+
+        function studentCanOpenReport(data) {
+          let report = reportForView();
+          return roleIs("student")
+            && profile().institutionId == institutionId
+            && request.auth.uid == data.studentId
+            && report.institutionId == institutionId
+            && report.studentId == request.auth.uid
+            && report.teacherId == data.teacherId
+            && report.studentName == data.studentName
+            && report.status == "published";
+        }
+
+        allow read: if isActive()
+          && profile().institutionId == institutionId
+          && (
+            isDirector()
+            || (roleIs("teacher") && resource.data.teacherId == request.auth.uid)
+            || (roleIs("student") && resource.data.studentId == request.auth.uid)
+          );
+        allow create: if validReportView(request.resource.data)
+          && studentCanOpenReport(request.resource.data)
+          && request.resource.data.viewCount == 1;
+        allow update: if validReportView(request.resource.data)
+          && studentCanOpenReport(request.resource.data)
+          && request.resource.data.reportId == resource.data.reportId
+          && request.resource.data.institutionId == resource.data.institutionId
+          && request.resource.data.teacherId == resource.data.teacherId
+          && request.resource.data.studentId == resource.data.studentId
+          && request.resource.data.studentName == resource.data.studentName
+          && request.resource.data.firstOpenedAt == resource.data.firstOpenedAt
+          && request.resource.data.viewCount == resource.data.viewCount + 1
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["lastOpenedAt", "viewCount"]);
+        allow delete: if false;
+      }
+
       match /ciclosEscolares/{schoolYearId} {
         allow read: if isActive() && profile().institutionId == institutionId;
         allow write: if false;

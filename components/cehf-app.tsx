@@ -156,6 +156,7 @@ import {
   createForumTopic,
   watchForumWorkspace,
 } from "@/lib/forum-firebase";
+import { ForumRichText } from "@/components/forum-rich-text";
 import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
 import logoCehf from "@/assets/img/logoCEHF.png";
 import {
@@ -195,6 +196,7 @@ type IconType = typeof Home;
 
 type ForumDraftDetails = {
   prompt: string;
+  promptRich: string;
   group: string;
   forumName: string;
   kind: ForumTopicKind;
@@ -3649,6 +3651,7 @@ function CreateModal({
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState(forumSubjects?.[0] ?? "Ciencias");
   const [prompt, setPrompt] = useState("");
+  const [promptRich, setPromptRich] = useState("");
   const [group, setGroup] = useState(forumGroups?.[0] ?? "5.º A");
   const [forumName, setForumName] = useState(
     `${forumSubjects?.[0] ?? "Ciencias"} · ${forumGroups?.[0] ?? "5.º A"}`,
@@ -3711,6 +3714,7 @@ function CreateModal({
               isForum
                 ? {
                     prompt: prompt.trim(),
+                    promptRich,
                     group,
                     forumName: forumName.trim(),
                     kind: forumKind,
@@ -3771,16 +3775,19 @@ function CreateModal({
         </label>
         {isForum ? (
           <>
-            <label>
-              Consigna
-              <textarea
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                placeholder="Escribe la pregunta o indicación que guiará la conversación"
-                rows={3}
-                required
+            <div className="forum-create-prompt">
+              <span>Consigna</span>
+              <ForumRichText
+                content={promptRich}
+                editorKey="new-forum-topic"
+                maxLength={2_000}
+                onChange={(richText, plainText) => {
+                  setPromptRich(richText);
+                  setPrompt(plainText);
+                }}
               />
-            </label>
+              <small>Da formato a la pregunta o indicación que guiará la conversación.</small>
+            </div>
             <div className="forum-create-grid">
               <label>
                 Tipo de foro
@@ -3924,6 +3931,7 @@ function CreateModal({
               !title.trim() ||
               (isForum &&
                 (!prompt.trim() ||
+                  prompt.length > 2_000 ||
                   (forumStatus === "scheduled" && !opensAt)))
             }
           >

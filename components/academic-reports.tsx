@@ -7,6 +7,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleHelp,
+  Eye,
+  EyeOff,
   FileText,
   Pencil,
   Search,
@@ -14,7 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
@@ -27,8 +29,10 @@ import {
 } from "@/lib/grades-firebase";
 import {
   deleteStudentWeeklyReport,
+  markStudentWeeklyReportViewed,
   saveStudentWeeklyReport,
   updateStudentWeeklyReport,
+  watchStudentWeeklyReportViews,
   watchStudentWeeklyReports,
 } from "@/lib/reports-firebase";
 import type {
@@ -38,6 +42,7 @@ import type {
   DailyGradeRecord,
   ManagedAccount,
   StudentWeeklyReport,
+  StudentWeeklyReportView,
   UserProfile,
   WeeklyGradeRecord,
 } from "@/lib/types";
@@ -94,16 +99,37 @@ function WeeklyEvidence({ grade }: { grade?: WeeklyGradeRecord }) {
   </section>;
 }
 
+function reportViewLabel(report: StudentWeeklyReport, view?: StudentWeeklyReportView) {
+  if (!view) return { current: false, label: "El alumno aún no lo abre" };
+  const current = Date.parse(view.lastOpenedAt) >= Date.parse(report.updatedAt);
+  if (!current) return { current: false, label: "Actualizado después de la última lectura" };
+  return {
+    current: true,
+    label: `Visto ${new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(view.lastOpenedAt))}`,
+  };
+}
+
+function ReportViewStatus({ report, view }: { report: StudentWeeklyReport; view?: StudentWeeklyReportView }) {
+  if (report.status !== "published") return null;
+  const status = reportViewLabel(report, view);
+  return <span className={`report-view-status ${status.current ? "is-viewed" : "is-pending"}`} title={status.label}>
+    {status.current ? <Eye size={13} /> : <EyeOff size={13} />}
+    {status.label}
+  </span>;
+}
+
 function ReportEditor({
   student,
   grade,
   report,
+  view,
   onSave,
   onDelete,
 }: {
   student: ManagedAccount;
   grade?: WeeklyGradeRecord;
   report?: StudentWeeklyReport;
+  view?: StudentWeeklyReportView;
   onSave: (student: ManagedAccount, values: Pick<StudentWeeklyReport, "achievement" | "supportArea" | "nextStep" | "status">) => Promise<void>;
   onDelete: (report: StudentWeeklyReport) => void;
 }) {
@@ -129,7 +155,7 @@ function ReportEditor({
         ) : student.initials}
       </div>
       <div><span className="report-card-kicker">Reporte individual · {groupLabel(student)}</span><h3>{student.name}</h3><p>{grade?.subject ?? report?.subject ?? "Materia"}</p></div>
-      <span className={`report-status is-${report?.status ?? "new"}`}>{report?.status === "published" ? "Publicado" : report?.status === "draft" ? "Borrador" : "Sin iniciar"}</span>
+      <div className="report-header-statuses"><span className={`report-status is-${report?.status ?? "new"}`}>{report?.status === "published" ? "Publicado" : report?.status === "draft" ? "Borrador" : "Sin iniciar"}</span>{report && <ReportViewStatus report={report} view={view} />}</div>
     </header>
     <WeeklyEvidence grade={grade} />
     <div className="report-field-grid">
@@ -141,17 +167,17 @@ function ReportEditor({
   </article>;
 }
 
-function PublishedReportCard({ report, grade, student, onEdit, onDelete }: { report: StudentWeeklyReport; grade?: WeeklyGradeRecord; student?: ManagedAccount; onEdit?: (report: StudentWeeklyReport) => void; onDelete?: (report: StudentWeeklyReport) => void }) {
+function PublishedReportCard({ report, grade, student, view, studentMode = false, expanded = true, onToggle, onEdit, onDelete }: { report: StudentWeeklyReport; grade?: WeeklyGradeRecord; student?: ManagedAccount; view?: StudentWeeklyReportView; studentMode?: boolean; expanded?: boolean; onToggle?: (report: StudentWeeklyReport) => void; onEdit?: (report: StudentWeeklyReport) => void; onDelete?: (report: StudentWeeklyReport) => void }) {
   const initials = student?.initials ?? report.studentName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
-  return <article className="published-report-card" id={`report-${report.id}`}>
-    <header><span className="report-student-avatar" aria-label={student?.photoURL ? `Fotografía de ${report.studentName}` : `Iniciales de ${report.studentName}`}>{student?.photoURL ? <Image src={student.photoURL} alt="" fill sizes="36px" unoptimized /> : initials}</span><div><span className={`report-status is-${report.status}`}>{report.status === "published" ? "Publicado" : "Borrador"}</span><h3>{report.studentName}</h3><p>{report.subject} · {report.weekLabel} · {report.termLabel}</p></div><FileText size={25} /></header>
-    <WeeklyEvidence grade={grade} />
+  return <article className={`published-report-card ${studentMode ? "is-student-summary" : ""} ${expanded ? "is-expanded" : ""}`} id={`report-${report.id}`}>
+    <header><span className="report-student-avatar" aria-label={student?.photoURL ? `Fotografía de ${report.studentName}` : `Iniciales de ${report.studentName}`}>{student?.photoURL ? <Image src={student.photoURL} alt="" fill sizes="36px" unoptimized /> : initials}</span><div><span className={`report-status is-${report.status}`}>{report.status === "published" ? "Publicado" : "Borrador"}</span><h3>{report.studentName}</h3><p>{report.subject} · {report.weekLabel} · {report.termLabel}</p></div>{!studentMode && <ReportViewStatus report={report} view={view} />}<FileText size={25} /></header>
+    {expanded && <><WeeklyEvidence grade={grade} />
     <div className="published-report-fields">
       <section className="is-achievement"><CheckCircle2 size={19} /><div><strong>Un logro para reconocer</strong><p>{report.achievement}</p></div></section>
       <section className="is-support"><CircleHelp size={19} /><div><strong>Área de acompañamiento</strong><p>{report.supportArea}</p></div></section>
       <section className="is-next"><ArrowRight size={19} /><div><strong>Próximo paso</strong><p>{report.nextStep}</p></div></section>
-    </div>
-    <footer><span>{report.teacherName} · {groupLabel(report)}</span><span>Actualizado {new Intl.DateTimeFormat("es-MX", { dateStyle: "medium" }).format(new Date(report.updatedAt))}</span>{onEdit && <button type="button" onClick={() => onEdit(report)}><Pencil size={15} /> Editar</button>}{onDelete && <button type="button" className="danger-button" onClick={() => onDelete(report)}><Trash2 size={15} /> Eliminar reporte</button>}</footer>
+    </div></>}
+    <footer><span>{report.teacherName} · {groupLabel(report)}</span><span>Actualizado {new Intl.DateTimeFormat("es-MX", { dateStyle: "medium" }).format(new Date(report.updatedAt))}</span>{studentMode && onToggle && <button type="button" className="report-open-button" aria-expanded={expanded} onClick={() => onToggle(report)}>{expanded ? "Cerrar reporte" : <><Eye size={15} /> Abrir reporte</>}</button>}{onEdit && <button type="button" onClick={() => onEdit(report)}><Pencil size={15} /> Editar</button>}{onDelete && <button type="button" className="danger-button" onClick={() => onDelete(report)}><Trash2 size={15} /> Eliminar reporte</button>}</footer>
   </article>;
 }
 
@@ -174,6 +200,9 @@ export function AcademicReportsPage({
   const term = termForWeek(calendar, week?.id);
   const [grades, setGrades] = useState<DailyGradeRecord[]>([]);
   const [reports, setReports] = useState<StudentWeeklyReport[]>([]);
+  const [reportViews, setReportViews] = useState<StudentWeeklyReportView[]>([]);
+  const [openReportId, setOpenReportId] = useState<string | null>(null);
+  const recordedOpeningsRef = useRef(new Set<string>());
   const [loading, setLoading] = useState(firebaseReady);
   const subjects = useMemo(() => profile.role === "teacher"
     ? profile.subjects ?? []
@@ -187,6 +216,16 @@ export function AcademicReportsPage({
   const [reportToEdit, setReportToEdit] = useState<StudentWeeklyReport | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const recordStudentOpening = useCallback((report: StudentWeeklyReport) => {
+    if (profile.role !== "student" || !firebaseReady) return;
+    const openingKey = `${report.id}:${report.updatedAt}`;
+    if (recordedOpeningsRef.current.has(openingKey)) return;
+    recordedOpeningsRef.current.add(openingKey);
+    void markStudentWeeklyReportViewed(report, profile).catch(() => {
+      recordedOpeningsRef.current.delete(openingKey);
+    });
+  }, [firebaseReady, profile]);
+
   useEffect(() => {
     const openReportFromRoute = () => {
       const [section, reportId] = window.location.pathname.split("/").filter(Boolean);
@@ -198,6 +237,10 @@ export function AcademicReportsPage({
       setStatus("all");
       setSearch(profile.role === "teacher" ? report.studentName : "");
       setPage(1);
+      if (profile.role === "student") {
+        setOpenReportId(report.id);
+        recordStudentOpening(report);
+      }
       window.setTimeout(() => {
         document.getElementById(`report-${report.id}`)?.scrollIntoView({
           behavior: "smooth",
@@ -208,7 +251,7 @@ export function AcademicReportsPage({
     openReportFromRoute();
     window.addEventListener("popstate", openReportFromRoute);
     return () => window.removeEventListener("popstate", openReportFromRoute);
-  }, [profile.role, reports]);
+  }, [profile.role, recordStudentOpening, reports]);
 
   useEffect(() => {
     let gradesReady = false;
@@ -218,6 +261,26 @@ export function AcademicReportsPage({
     const stopReports = watchStudentWeeklyReports(profile, (next) => { setReports(next); reportsReady = true; done(); }, () => { reportsReady = true; done(); toast.error("No pudimos cargar los reportes semanales."); });
     return () => { stopGrades(); stopReports(); };
   }, [profile]);
+
+  useEffect(() => {
+    if (!firebaseReady) return;
+    return watchStudentWeeklyReportViews(
+      profile,
+      setReportViews,
+      () => {
+        if (profile.role !== "student") toast.error("No pudimos cargar las lecturas de reportes.");
+      },
+    );
+  }, [firebaseReady, profile]);
+
+  function toggleStudentReport(report: StudentWeeklyReport) {
+    if (openReportId === report.id) {
+      setOpenReportId(null);
+      return;
+    }
+    setOpenReportId(report.id);
+    recordStudentOpening(report);
+  }
 
   const weeklyGrades = aggregateDailyGradesByWeek(
     grades.filter((grade) => grade.schoolYearId === academicConfig.schoolYearId),
@@ -291,9 +354,9 @@ export function AcademicReportsPage({
       <div className="report-editor-list">{!pagedStudents.length ? <div className="report-empty"><Search size={27} /><h3>No encontramos alumnos</h3><p>Revisa la materia seleccionada o ajusta la búsqueda.</p></div> : pagedStudents.map((student) => {
         const grade = weekSubjectGrades.find((item) => item.studentId === student.uid && item.teacherId === profile.uid);
         const report = reports.find((item) => item.weekId === week?.id && subjectsMatch(item.subject, activeSubject) && item.studentId === student.uid && item.teacherId === profile.uid);
-        return <div id={report ? `report-${report.id}` : undefined} key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`}><ReportEditor student={student} grade={grade} report={report} onSave={persist} onDelete={setReportToDelete} /></div>;
+        return <div id={report ? `report-${report.id}` : undefined} key={`${week?.id}-${activeSubject}-${student.uid}-${report?.updatedAt ?? "new"}`}><ReportEditor student={student} grade={grade} report={report} view={report ? reportViews.find((item) => item.reportId === report.id) : undefined} onSave={persist} onDelete={setReportToDelete} /></div>;
       })}</div>
-    ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} student={accounts.find((account) => account.uid === report.studentId)} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} onEdit={profile.role === "director" ? setReportToEdit : undefined} onDelete={profile.role === "director" ? setReportToDelete : undefined} />)}</div>}
+    ) : <div className="published-report-list">{!pagedReports.length ? <div className="report-empty"><FileText size={27} /><h3>No hay reportes en esta selección</h3><p>Prueba otra semana, materia o búsqueda.</p></div> : pagedReports.map((report) => <PublishedReportCard key={report.id} report={report} student={accounts.find((account) => account.uid === report.studentId)} grade={weeklyGrades.find((grade) => grade.weekId === report.weekId && grade.subjectId === report.subjectId && grade.studentId === report.studentId && grade.teacherId === report.teacherId)} view={reportViews.find((item) => item.reportId === report.id)} studentMode={profile.role === "student"} expanded={profile.role !== "student" || openReportId === report.id} onToggle={profile.role === "student" ? toggleStudentReport : undefined} onEdit={profile.role === "director" ? setReportToEdit : undefined} onDelete={profile.role === "director" ? setReportToDelete : undefined} />)}</div>}
     <Pagination page={page} total={total} onChange={setPage} />
     <ConfirmDeleteDialog
       open={Boolean(reportToDelete)}
