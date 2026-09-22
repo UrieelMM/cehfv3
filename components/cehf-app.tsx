@@ -128,6 +128,7 @@ import {
   defaultAcademicCalendar,
   defaultAcademicConfig,
   isFirebaseTaskAssignment,
+  markTaskNotificationRead,
   markTaskNotificationsRead,
   resolveAcademicConfig,
   saveAcademicCalendar,
@@ -168,6 +169,7 @@ import type {
   AcademicCalendar,
   AcademicCalendarImage,
   AcademicCalendarInput,
+  AppNotification,
   ForumTopic,
   ForumTopicKind,
   ManagedAccount,
@@ -276,6 +278,62 @@ const taskIdFromPath = (path: string) => {
   const [section, taskId] = path.split("/").filter(Boolean);
   return section === "tasks" && taskId ? decodeURIComponent(taskId) : null;
 };
+
+const notificationSection: Record<AppNotification["category"], SectionKey> = {
+  task: "tasks",
+  review: "weekly-review",
+  progress: "my-week",
+  report: "reports",
+  material: "materials",
+  wall: "wall-newspaper",
+  forum: "forum",
+  workshop: "workshops",
+  workspace: "weekly-progress",
+  system: "dashboard",
+};
+
+function routeForNotification(notification: AppNotification) {
+  const encode = (value: string) => encodeURIComponent(value);
+  if (notification.category === "task" && notification.taskId) {
+    return `/tasks/${encode(notification.taskId)}`;
+  }
+  if (notification.category === "review" && notification.reviewId) {
+    return `/weekly-review/${encode(notification.reviewId)}`;
+  }
+  if (notification.category === "material" && notification.materialId) {
+    return `/weekly-materials/${encode(notification.materialId)}`;
+  }
+  if (notification.category === "report" && notification.reportId) {
+    return `/reports/${encode(notification.reportId)}`;
+  }
+  if (notification.category === "wall" && notification.storyId) {
+    return `/wall-newspaper/stories/${encode(notification.storyId)}`;
+  }
+  if (notification.category === "forum" && notification.topicId) {
+    const post = notification.postId
+      ? `?post=${encode(notification.postId)}`
+      : "";
+    return `/forum/topic/${encode(notification.topicId)}${post}`;
+  }
+  if (notification.category === "workshop" && notification.workshopId) {
+    const query = notification.resourceId
+      ? `?resource=${encode(notification.resourceId)}`
+      : notification.taskId
+        ? `?task=${encode(notification.taskId)}`
+        : "";
+    return `/workshops/${encode(notification.workshopId)}${query}`;
+  }
+  if (notification.category === "workspace" && notification.workspaceItemId) {
+    return `/my-space/${encode(notification.workspaceItemId)}`;
+  }
+  if (
+    notification.url?.startsWith("/") &&
+    !notification.url.startsWith("//")
+  ) {
+    return notification.url;
+  }
+  return routes[notificationSection[notification.category]];
+}
 
 function academicWeekRange(config: AcademicConfig) {
   if (!config.weekStartDate || !config.weekEndDate) return "";
@@ -943,14 +1001,35 @@ export function CEHFApp() {
     setDetailOpen(null);
   }
 
-  function openSearchResult(result: PortalSearchHit) {
-    window.history.pushState({}, "", result.route);
-    setActiveSection(sectionFromPath(new URL(result.route, window.location.origin).pathname));
-    setDetailOpen(taskIdFromPath(new URL(result.route, window.location.origin).pathname));
+  function openInternalRoute(route: string) {
+    const target = new URL(route, window.location.origin);
+    window.history.pushState({}, "", `${target.pathname}${target.search}${target.hash}`);
+    setActiveSection(sectionFromPath(target.pathname));
+    setDetailOpen(taskIdFromPath(target.pathname));
     setSidebarOpen(false);
     setMobileMore(false);
     window.dispatchEvent(new PopStateEvent("popstate"));
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openSearchResult(result: PortalSearchHit) {
+    openInternalRoute(result.route);
+  }
+
+  function openNotification(notification: AppNotification) {
+    setNotificationsOpen(false);
+    setState((previous) => ({
+      ...previous,
+      notifications: previous.notifications.map((item) =>
+        item.id === notification.id ? { ...item, read: true } : item,
+      ),
+    }));
+    if (firebaseUser && profile && !notification.read) {
+      void markTaskNotificationRead(profile.uid, notification.id).catch((error) =>
+        toast.error(friendlyFirebaseError(error)),
+      );
+    }
+    openInternalRoute(routeForNotification(notification));
   }
 
   function updateState(
@@ -1277,6 +1356,7 @@ export function CEHFApp() {
                   <NotificationPanel
                     state={state}
                     onClose={() => setNotificationsOpen(false)}
+                    onOpen={openNotification}
                     onMarkAll={() =>
                       firebaseUser && profile
                         ? void markTaskNotificationsRead(profile.uid)
@@ -2998,10 +3078,12 @@ function SettingsPage({
 function NotificationPanel({
   state,
   onClose,
+  onOpen,
   onMarkAll,
 }: {
   state: PortalState;
   onClose: () => void;
+  onOpen: (notification: AppNotification) => void;
   onMarkAll: () => void;
 }) {
   return (
@@ -3016,13 +3098,18 @@ function NotificationPanel({
           <span className="eyebrow">Centro de avisos</span>
           <h3>Notificaciones</h3>
         </div>
-        <button className="plain-icon" onClick={onClose} aria-label="Cerrar">
+        <button className="plain-icon" onClick={onClose} aria-label="Cerrar" type="button">
           <X size={19} />
         </button>
       </div>
       <div className="notification-list">
         {state.notifications.map((item) => (
-          <button className={!item.read ? "unread" : ""} key={item.id}>
+          <button
+            className={!item.read ? "unread" : ""}
+            key={item.id}
+            onClick={() => onOpen(item)}
+            type="button"
+          >
             <span className={`notification-type ${item.category}`}>
               <Bell size={16} />
             </span>
@@ -3034,7 +3121,11 @@ function NotificationPanel({
           </button>
         ))}
       </div>
-      <button className="text-button notification-mark" onClick={onMarkAll}>
+      <button
+        className="text-button notification-mark"
+        onClick={onMarkAll}
+        type="button"
+      >
         <Check size={16} /> Marcar todas como leídas
       </button>
     </motion.div>

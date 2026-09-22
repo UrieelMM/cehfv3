@@ -916,6 +916,16 @@ export type AppNotification = {
   createdAt: string;
   createdAtIso?: string;
   url?: string;
+  taskId?: string;
+  reviewId?: string;
+  materialId?: string;
+  reportId?: string;
+  storyId?: string;
+  topicId?: string;
+  postId?: string;
+  workshopId?: string;
+  resourceId?: string;
+  workspaceItemId?: string;
   read: boolean;
 };
 

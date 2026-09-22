@@ -1280,7 +1280,7 @@ export const onStaffWorkspaceChanged = onDocumentWritten(
           title: `${ownerName} te mencionó en Mi espacio`,
           detail: `${typeLabel} · ${itemTitle}`,
           workspaceItemId: itemId,
-          url: "/my-space",
+          url: `/my-space/${encodeURIComponent(itemId)}`,
           eventType: "workspace_mention",
         },
       ),
@@ -1292,7 +1292,7 @@ export const onStaffWorkspaceChanged = onDocumentWritten(
           title: `${ownerName} compartió un bloque contigo`,
           detail: `${typeLabel} · ${itemTitle}`,
           workspaceItemId: itemId,
-          url: "/my-space",
+          url: `/my-space/${encodeURIComponent(itemId)}`,
           eventType: "workspace_shared",
         },
       ),
@@ -2512,7 +2512,7 @@ export const createMaterial = onCall(async (request) => {
       title: `Nuevo material: ${title}`,
       detail: `${subject} · ${String(week?.label ?? "Semana")}${input.required === true ? " · Obligatorio" : ""}`,
       materialId: selectedMaterialId,
-      url: "/weekly-materials",
+      url: `/weekly-materials/${encodeURIComponent(selectedMaterialId)}`,
       eventType: "material_published",
     },
   );
@@ -2526,7 +2526,7 @@ export const createMaterial = onCall(async (request) => {
         title: "Nuevo material para tus alumnos",
         detail: `${title} · ${subject} · ${String(week?.label ?? "Semana")}`,
         materialId: selectedMaterialId,
-        url: "/weekly-materials",
+        url: `/weekly-materials/${encodeURIComponent(selectedMaterialId)}`,
         eventType: "material_assigned_to_students",
       },
     );
@@ -3154,7 +3154,7 @@ export const createWeeklyReview = onCall(async (request) => {
         title: `Nuevo repaso: ${title}`,
         detail: `${subject} · ${String(week?.label ?? "Semana")} · ${duration} min`,
         reviewId: selectedReviewId,
-        url: "/weekly-review",
+        url: `/weekly-review/${encodeURIComponent(selectedReviewId)}`,
         eventType: "review_published",
       },
     );
@@ -3221,7 +3221,7 @@ export const updateWeeklyReviewStatus = onCall(async (request) => {
         title: previousStatus === "closed" ? `Repaso reabierto: ${String(review?.title ?? "Repaso")}` : `Nuevo repaso: ${String(review?.title ?? "Repaso")}`,
         detail: `${String(review?.subject ?? "Materia")} · ${String(review?.weekLabel ?? "Semana")}`,
         reviewId,
-        url: "/weekly-review",
+        url: `/weekly-review/${encodeURIComponent(reviewId)}`,
         eventType: previousStatus === "closed" ? "review_reopened" : "review_published",
       },
     );
@@ -3469,7 +3469,7 @@ export const onWorkshopResourceCreated = onDocumentCreated(
         detail: String(resource.title ?? resource.fileName ?? "Material disponible"),
         workshopId,
         resourceId: event.params.resourceId,
-        url: `/workshops/${encodeURIComponent(workshopId)}`,
+        url: `/workshops/${encodeURIComponent(workshopId)}?resource=${encodeURIComponent(String(event.params.resourceId))}`,
         eventType: "workshop_resource_created",
       },
     );
@@ -3501,7 +3501,7 @@ export const onWorkshopTaskChanged = onDocumentWritten(
         detail: `${String(after.teacherName ?? "Tu maestro")} · revisa la fecha de entrega.`,
         workshopId,
         taskId: event.params.taskId,
-        url: `/workshops/${encodeURIComponent(workshopId)}`,
+        url: `/workshops/${encodeURIComponent(workshopId)}?task=${encodeURIComponent(String(event.params.taskId))}`,
         eventType: reopened
           ? "workshop_task_reopened"
           : "workshop_task_published",
@@ -3540,7 +3540,7 @@ export const onWorkshopSubmissionChanged = onDocumentWritten(
           workshopId,
           taskId: event.params.taskId,
           studentId: event.params.studentId,
-          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          url: `/workshops/${encodeURIComponent(workshopId)}?task=${encodeURIComponent(String(event.params.taskId))}`,
           eventType: version > 1
             ? "workshop_task_resubmitted"
             : "workshop_task_submitted",
@@ -3568,7 +3568,7 @@ export const onWorkshopSubmissionChanged = onDocumentWritten(
             : "Tu maestro dejó comentarios para tu siguiente versión.",
           workshopId,
           taskId: event.params.taskId,
-          url: `/workshops/${encodeURIComponent(workshopId)}`,
+          url: `/workshops/${encodeURIComponent(workshopId)}?task=${encodeURIComponent(String(event.params.taskId))}`,
           eventType: reviewed
             ? "workshop_task_reviewed"
             : "workshop_task_feedback",
@@ -4590,7 +4590,7 @@ export const onWallStoryCreated = onDocumentCreated(
       title: "Nueva historia por revisar",
       detail: `${String(story.author ?? "Un alumno")} envió “${String(story.title ?? "Nueva historia")}”.`,
       storyId: event.params.storyId,
-      url: "/wall-newspaper",
+      url: `/wall-newspaper/stories/${encodeURIComponent(String(event.params.storyId))}`,
       eventType: "wall_story_submitted",
     });
   },
@@ -4618,7 +4618,7 @@ export const onWallStoryChanged = onDocumentWritten(
         title: "Historia corregida por revisar",
         detail: `${String(after.author ?? "Un alumno")} envió una nueva versión de “${String(after.title ?? "su historia")}”.`,
         storyId,
-        url: "/wall-newspaper",
+        url: `/wall-newspaper/stories/${encodeURIComponent(String(storyId))}`,
         eventType: "wall_story_resubmitted",
       });
       return;
@@ -4637,7 +4637,7 @@ export const onWallStoryChanged = onDocumentWritten(
           ? `“${String(after.title ?? "Tu historia")}” ya está en el Periódico mural.`
           : String(after.reviewNote ?? "Revisa las observaciones de tu maestro."),
         storyId,
-        url: "/wall-newspaper",
+        url: `/wall-newspaper/stories/${encodeURIComponent(String(storyId))}`,
         eventType: published ? "wall_story_published" : "wall_story_changes_requested",
       },
     );
@@ -7082,7 +7082,7 @@ export const createForumPost = onCall(async (request) => {
       detail: `${topicTitle} · ${body.slice(0, 120)}`,
       topicId,
       postId,
-      url: `/forum/topic/${topicId}`,
+      url: `/forum/topic/${encodeURIComponent(topicId)}?post=${encodeURIComponent(postId)}`,
       eventType: "forum_reply",
     });
   }
@@ -7096,7 +7096,7 @@ export const createForumPost = onCall(async (request) => {
       detail: `${forumName} · ${body.slice(0, 120)}`,
       topicId,
       postId,
-      url: `/forum/topic/${topicId}`,
+      url: `/forum/topic/${encodeURIComponent(topicId)}?post=${encodeURIComponent(postId)}`,
       eventType: "forum_mention",
     });
   }

@@ -1233,6 +1233,8 @@ export function watchTaskNotifications(
         snapshot.docs.map((entry) => {
           const data = entry.data();
           const createdAtIso = asIso(data.createdAt);
+          const optionalId = (value: unknown) =>
+            typeof value === "string" && value.trim() ? value : undefined;
           return {
             id: entry.id,
             title: String(data.title ?? "Nueva notificación"),
@@ -1241,11 +1243,32 @@ export function watchTaskNotifications(
             createdAt: notificationDate(data.createdAt),
             createdAtIso,
             url: data.url ? String(data.url) : undefined,
+            taskId: optionalId(data.taskId),
+            reviewId: optionalId(data.reviewId),
+            materialId: optionalId(data.materialId),
+            reportId: optionalId(data.reportId),
+            storyId: optionalId(data.storyId),
+            topicId: optionalId(data.topicId),
+            postId: optionalId(data.postId),
+            workshopId: optionalId(data.workshopId),
+            resourceId: optionalId(data.resourceId),
+            workspaceItemId: optionalId(data.workspaceItemId),
             read: data.read === true,
           } satisfies AppNotification;
         }),
       ),
     (error) => onError?.(error),
+  );
+}
+
+export async function markTaskNotificationRead(
+  userId: string,
+  notificationId: string,
+) {
+  if (!firebase.db) return;
+  await updateDoc(
+    doc(firebase.db, "notifications", userId, "items", notificationId),
+    { read: true },
   );
 }
 
