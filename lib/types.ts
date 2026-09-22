@@ -1017,6 +1017,7 @@ export type WorkshopSubmission = {
   studentId: string;
   studentName: string;
   content: string;
+  link: string;
   attachments: WorkshopTaskAttachment[];
   version: number;
   status: WorkshopSubmissionStatus;

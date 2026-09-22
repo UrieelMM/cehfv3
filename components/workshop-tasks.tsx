@@ -474,6 +474,7 @@ function WorkshopTaskDetailDialog({
   const [submissions, setSubmissions] = useState<WorkshopSubmission[]>([]);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [content, setContent] = useState("");
+  const [link, setLink] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
@@ -555,15 +556,16 @@ function WorkshopTaskDetailDialog({
 
   async function submitStudentWork(event: FormEvent) {
     event.preventDefault();
-    if (!content.trim() && !files.length) {
-      toast.error("Escribe una respuesta o adjunta un archivo.");
+    if (!content.trim() && !link.trim() && !files.length) {
+      toast.error("Escribe una respuesta, agrega un enlace o adjunta un archivo.");
       return;
     }
     setBusy(true);
     try {
       if (!firebaseReady) throw new Error("Inicia sesión para entregar trabajos.");
-      await submitWorkshopTask(task, profile, { content, files });
+      await submitWorkshopTask(task, profile, { content, link, files });
       setContent("");
+      setLink("");
       setFiles([]);
       toast.success(mySubmission ? "Nueva versión enviada" : "Trabajo enviado");
     } catch (error) {
@@ -615,13 +617,27 @@ function WorkshopTaskDetailDialog({
             {role === "student" ? (
               <section className="workshop-student-delivery">
                 {mySubmission?.teacherFeedback && <div className={`workshop-feedback-card is-${mySubmission.status}`}><MessageSquareText size={20} /><div><span>{mySubmission.status === "reviewed" ? "Entrega finalizada" : "Retroalimentación de tu maestro"}</span><p>{mySubmission.teacherFeedback}</p></div></div>}
-                {mySubmission && <div className="workshop-previous-delivery"><CheckCircle2 size={18} /><span><strong>Versión {mySubmission.version} enviada</strong><small>{mySubmission.content || `${mySubmission.attachments.length} archivo(s)`}</small></span></div>}
-                {task.status === "published" ? <form onSubmit={submitStudentWork}><label><span>{mySubmission ? "Enviar una nueva versión" : "Tu respuesta"}</span><textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} maxLength={2000} placeholder="Explica tu trabajo o escribe tu respuesta…" /></label><label className="workshop-delivery-file"><input type="file" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /><Paperclip size={18} /><span>{files.length ? `${files.length} archivo(s) seleccionado(s)` : "Adjuntar archivos"}</span></label><button className="primary-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{mySubmission ? "Enviar nueva versión" : "Entregar trabajo"}</button></form> : <div className="workshop-task-closed"><Clock3 size={20} /> Este trabajo está cerrado para nuevas entregas.</div>}
+                {mySubmission && <div className="workshop-previous-delivery"><CheckCircle2 size={18} /><span><strong>Versión {mySubmission.version} enviada</strong><small>{mySubmission.content || (mySubmission.link ? "Enlace adjunto" : `${mySubmission.attachments.length} archivo(s)`)}</small></span></div>}
+                {mySubmission?.link && <a className="workshop-submission-link" href={mySubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace entregado</a>}
+                {task.status === "published" ? (
+                  <form onSubmit={submitStudentWork}>
+                    <label>
+                      <span>{mySubmission ? "Enviar una nueva versión" : "Tu respuesta"}</span>
+                      <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} maxLength={2000} placeholder="Explica tu trabajo o escribe tu respuesta…" />
+                    </label>
+                    <label className="workshop-delivery-link">
+                      <span>Enlace <small>Opcional</small></span>
+                      <input type="url" value={link} onChange={(event) => setLink(event.target.value)} maxLength={2000} placeholder="https://ejemplo.com/mi-trabajo" />
+                    </label>
+                    <label className="workshop-delivery-file"><input type="file" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /><Paperclip size={18} /><span>{files.length ? `${files.length} archivo(s) seleccionado(s)` : "Adjuntar archivos"}</span></label>
+                    <button className="primary-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{mySubmission ? "Enviar nueva versión" : "Entregar trabajo"}</button>
+                  </form>
+                ) : <div className="workshop-task-closed"><Clock3 size={20} /> Este trabajo está cerrado para nuevas entregas.</div>}
               </section>
             ) : (
               <section className="workshop-teacher-review">
                 <div className="workshop-submission-tabs"><span><Users size={16} /> Entregas ({submissions.length}/{task.audienceStudentIds.length})</span>{submissions.length ? submissions.map((submission) => <button className={selectedSubmission?.id === submission.id ? "active" : ""} key={submission.id} onClick={() => setSelectedSubmissionId(submission.id)}><i>{studentById.get(submission.studentId)?.initials ?? submission.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</i><span><strong>{submission.studentName}</strong><small>Versión {submission.version} · {submission.status === "reviewed" ? "Finalizada" : submission.status === "feedback" ? "Con comentarios" : "Por revisar"}</small></span></button>) : <p>Aún no hay entregas.</p>}</div>
-                {selectedSubmission && <div className="workshop-review-pane"><span className="eyebrow">Entrega de {selectedSubmission.studentName}</span><p>{selectedSubmission.content || "Entrega basada en archivos adjuntos."}</p>{selectedSubmission.attachments.map((attachment) => <button className="workshop-submission-file" key={attachment.id} onClick={() => void openAttachment(attachment, selectedSubmission.studentId)}><FileText size={17} /> {attachment.name} <Download size={15} /></button>)}<label><span>Retroalimentación</span><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={5} maxLength={1600} placeholder="Reconoce lo logrado e indica el siguiente paso…" /></label><div><button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button><button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button></div></div>}
+                {selectedSubmission && <div className="workshop-review-pane"><span className="eyebrow">Entrega de {selectedSubmission.studentName}</span><p>{selectedSubmission.content || (selectedSubmission.link ? "Entrega mediante enlace." : "Entrega basada en archivos adjuntos.")}</p>{selectedSubmission.link && <a className="workshop-submission-link" href={selectedSubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace del alumno</a>}{selectedSubmission.attachments.map((attachment) => <button className="workshop-submission-file" key={attachment.id} onClick={() => void openAttachment(attachment, selectedSubmission.studentId)}><FileText size={17} /> {attachment.name} <Download size={15} /></button>)}<label><span>Retroalimentación</span><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={5} maxLength={1600} placeholder="Reconoce lo logrado e indica el siguiente paso…" /></label><div><button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button><button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button></div></div>}
               </section>
             )}
           </main>

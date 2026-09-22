@@ -140,6 +140,24 @@ function normalizeWorkshopLinks(links: WorkshopLink[]): WorkshopLink[] {
   });
 }
 
+function normalizeWorkshopSubmissionLink(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error("Escribe un enlace válido para tu entrega.");
+  }
+  if (
+    !["http:", "https:"].includes(parsed.protocol) ||
+    trimmed.length > 2_000
+  ) {
+    throw new Error("El enlace de la entrega debe comenzar con http:// o https://.");
+  }
+  return parsed.toString();
+}
+
 function requirePersistedWorkshopLinks(
   result: { updated: boolean; links?: WorkshopLink[] },
   expected: WorkshopLink[],
@@ -383,53 +401,77 @@ function safeFileName(value: string) {
 export async function uploadWorkshopResource(
   workshop: Workshop,
   profile: UserProfile,
-  input: { title: string; description: string; file: File; links: WorkshopLink[] },
+  input: { title: string; description: string; files: File[]; links: WorkshopLink[] },
 ) {
   const { db, storage } = requireFirebase();
   const links = normalizeWorkshopLinks(input.links);
-  if (input.file.size <= 0 || input.file.size >= 20 * 1024 * 1024) {
-    throw new Error("El archivo debe pesar menos de 20 MB.");
+  if (!input.files.length || input.files.length > 10) {
+    throw new Error("Selecciona entre 1 y 10 archivos.");
   }
-  const resourceReference = doc(
-    collection(
-      db,
-      "institutions",
-      profile.institutionId,
-      "workshops",
-      workshop.id,
-      "resources",
-    ),
-  );
-  const storagePath = `institutions/${profile.institutionId}/workshops/${workshop.id}/resources/${resourceReference.id}/${safeFileName(input.file.name)}`;
-  const storageReference = ref(storage, storagePath);
-  await uploadBytes(storageReference, input.file, {
-    contentType: input.file.type || "application/octet-stream",
-    customMetadata: {
-      workshopId: workshop.id,
-      uploadedBy: profile.uid,
-    },
+  input.files.forEach((file) => {
+    if (file.size <= 0 || file.size >= 20 * 1024 * 1024) {
+      throw new Error(`“${file.name}” debe pesar menos de 20 MB.`);
+    }
   });
-  try {
-    await setDoc(resourceReference, {
-      institutionId: profile.institutionId,
-      workshopId: workshop.id,
-      title: input.title.trim(),
-      description: input.description.trim(),
-      links,
-      fileName: input.file.name,
+
+  const resourceCollection = collection(
+    db,
+    "institutions",
+    profile.institutionId,
+    "workshops",
+    workshop.id,
+    "resources",
+  );
+  const resources = input.files.map((file) => {
+    const reference = doc(resourceCollection);
+    const storagePath = `institutions/${profile.institutionId}/workshops/${workshop.id}/resources/${reference.id}/${safeFileName(file.name)}`;
+    return {
+      file,
+      reference,
       storagePath,
-      contentType: input.file.type || "application/octet-stream",
-      size: input.file.size,
-      uploadedBy: profile.uid,
-      uploadedByName: profile.name,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
+      storageReference: ref(storage, storagePath),
+    };
+  });
+  const uploaded: typeof resources = [];
+  try {
+    for (const resource of resources) {
+      await uploadBytes(resource.storageReference, resource.file, {
+        contentType: resource.file.type || "application/octet-stream",
+        customMetadata: {
+          workshopId: workshop.id,
+          uploadedBy: profile.uid,
+        },
+      });
+      uploaded.push(resource);
+    }
+    const batch = writeBatch(db);
+    resources.forEach(({ file, reference, storagePath }) => {
+      batch.set(reference, {
+        institutionId: profile.institutionId,
+        workshopId: workshop.id,
+        title: input.title.trim(),
+        description: input.description.trim(),
+        links,
+        fileName: file.name,
+        storagePath,
+        contentType: file.type || "application/octet-stream",
+        size: file.size,
+        uploadedBy: profile.uid,
+        uploadedByName: profile.name,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
     });
+    await batch.commit();
   } catch (error) {
-    await deleteObject(storageReference).catch(() => undefined);
+    await Promise.all(
+      uploaded.map(({ storageReference }) =>
+        deleteObject(storageReference).catch(() => undefined),
+      ),
+    );
     throw error;
   }
-  return resourceReference.id;
+  return resources.map(({ reference }) => reference.id);
 }
 
 export async function deleteWorkshopResource(resource: WorkshopResource) {
@@ -549,6 +591,7 @@ function submissionFromData(
     studentId: String(data.studentId ?? id),
     studentName: String(data.studentName ?? "Alumno CEHF"),
     content: String(data.content ?? ""),
+    link: String(data.link ?? ""),
     attachments: attachmentsFromData(data.attachments),
     version: Math.max(1, Number(data.version ?? 1)),
     status: ["feedback", "reviewed"].includes(String(data.status))
@@ -814,7 +857,7 @@ export function watchWorkshopSubmissions(
 export async function submitWorkshopTask(
   task: WorkshopTask,
   profile: UserProfile,
-  input: { content: string; files: File[] },
+  input: { content: string; link: string; files: File[] },
 ) {
   if (profile.role !== "student") {
     throw new Error("Sólo los alumnos pueden enviar este trabajo.");
@@ -833,6 +876,7 @@ export async function submitWorkshopTask(
   );
   const previous = await getDoc(submissionReference);
   const version = previous.exists() ? Number(previous.data().version ?? 1) + 1 : 1;
+  const link = normalizeWorkshopSubmissionLink(input.link);
   const prefix = `institutions/${task.institutionId}/workshops/${task.workshopId}/tasks/${task.id}/submissions/${profile.uid}/${version}`;
   const attachments = await uploadWorkshopFiles(prefix, input.files);
   const payload = {
@@ -844,6 +888,7 @@ export async function submitWorkshopTask(
       ? String(previous.data().studentName ?? profile.name)
       : profile.name,
     content: input.content.trim(),
+    link,
     attachments,
     version,
     status: "submitted",

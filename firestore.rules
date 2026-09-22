@@ -723,6 +723,18 @@ service cloud.firestore {
                 );
             }
 
+            function validSubmissionLink(data) {
+              return !data.keys().hasAny(["link"])
+                || (
+                  data.link is string
+                  && data.link.size() <= 2000
+                  && (
+                    data.link == ""
+                    || data.link.matches("^https?://.+$")
+                  )
+                );
+            }
+
             allow read: if canReadWorkshopSubmission();
             allow create: if studentCanSubmit()
               && request.resource.data.studentId == studentId
@@ -730,6 +742,7 @@ service cloud.firestore {
               && request.resource.data.workshopId == workshopId
               && request.resource.data.institutionId == institutionId
               && request.resource.data.status == "submitted"
+              && validSubmissionLink(request.resource.data)
               && request.resource.data.version == 1;
             allow update: if (
               studentCanSubmit()
@@ -742,10 +755,11 @@ service cloud.firestore {
               && request.resource.data.status == "submitted"
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly([
-                  "content", "attachments", "version", "status",
+                  "content", "link", "attachments", "version", "status",
                   "teacherFeedback", "submittedAt", "feedbackAt",
                   "reviewedAt", "updatedAt"
                 ])
+              && validSubmissionLink(request.resource.data)
             ) || (
               canManageWorkshopTask(parentTask())
               && request.resource.data.studentId == resource.data.studentId
@@ -772,7 +786,8 @@ service cloud.firestore {
               allow create: if studentCanSubmit()
                 && request.resource.data.studentId == studentId
                 && request.resource.data.taskId == taskId
-                && request.resource.data.status == "submitted";
+                && request.resource.data.status == "submitted"
+                && validSubmissionLink(request.resource.data);
               allow update, delete: if false;
             }
           }

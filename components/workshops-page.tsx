@@ -247,7 +247,7 @@ export function WorkshopsPage({
 
   async function uploadResource(
     workshop: Workshop,
-    input: { title: string; description: string; file: File; links: WorkshopLink[] },
+    input: { title: string; description: string; files: File[]; links: WorkshopLink[] },
   ) {
     if (!firebaseReady) throw new Error("Inicia sesión para subir recursos.");
     await uploadWorkshopResource(workshop, profile, input);
@@ -1134,30 +1134,50 @@ function WorkshopUploadDialog({
   onClose: () => void;
   onUpload: (
     workshop: Workshop,
-    input: { title: string; description: string; file: File; links: WorkshopLink[] },
+    input: { title: string; description: string; files: File[]; links: WorkshopLink[] },
   ) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [links, setLinks] = useState<WorkshopLink[]>([]);
   const [uploading, setUploading] = useState(false);
 
+  function addFiles(selectedFiles: File[]) {
+    const nextFiles = [...files];
+    selectedFiles.forEach((file) => {
+      const duplicate = nextFiles.some(
+        (current) =>
+          current.name === file.name &&
+          current.size === file.size &&
+          current.lastModified === file.lastModified,
+      );
+      if (!duplicate && nextFiles.length < 10) nextFiles.push(file);
+    });
+    if (selectedFiles.length && nextFiles.length === files.length) {
+      toast.error(files.length >= 10 ? "Puedes agregar hasta 10 archivos." : "Ese archivo ya está seleccionado.");
+    } else if (nextFiles.length === 10 && selectedFiles.some((file) => !nextFiles.includes(file))) {
+      toast.error("Puedes agregar hasta 10 archivos.");
+    }
+    setFiles(nextFiles);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!title.trim() || !file) {
-      toast.error("Agrega un título y selecciona un archivo.");
+    if (!title.trim() || !files.length) {
+      toast.error("Agrega un título y selecciona al menos un archivo.");
       return;
     }
-    if (file.size >= 20 * 1024 * 1024) {
-      toast.error("El archivo debe pesar menos de 20 MB.");
+    const oversizedFile = files.find((file) => file.size >= 20 * 1024 * 1024);
+    if (oversizedFile) {
+      toast.error(`“${oversizedFile.name}” debe pesar menos de 20 MB.`);
       return;
     }
     setUploading(true);
     try {
-      await onUpload(workshop, { title: title.trim(), description: description.trim(), file, links });
-      toast.success("Recurso publicado", {
-        description: "Los participantes recibirán una notificación.",
+      await onUpload(workshop, { title: title.trim(), description: description.trim(), files, links });
+      toast.success(files.length === 1 ? "Recurso publicado" : `${files.length} recursos publicados`, {
+        description: "Los participantes ya pueden consultar los archivos.",
       });
       onClose();
     } catch (error) {
@@ -1202,17 +1222,32 @@ function WorkshopUploadDialog({
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={280} rows={3} placeholder="Cuenta brevemente para qué sirve este material…" />
           </label>
           <WorkshopLinksEditor links={links} onChange={setLinks} />
-          <label className={`workshop-file-drop ${file ? "has-file" : ""}`}>
+          <label className={`workshop-file-drop ${files.length ? "has-file" : ""}`}>
             <input
               type="file"
+              multiple
               accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip,image/*,audio/*,video/*"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-              required
+              onChange={(event) => {
+                addFiles(Array.from(event.target.files ?? []));
+                event.target.value = "";
+              }}
             />
-            {file ? <Paperclip size={25} /> : <UploadCloud size={28} />}
-            <strong>{file ? file.name : "Selecciona o arrastra un archivo"}</strong>
-            <small>{file ? fileSize(file.size) : "Documentos, imágenes, audio o video · máximo 20 MB"}</small>
+            {files.length ? <Paperclip size={25} /> : <UploadCloud size={28} />}
+            <strong>{files.length ? `${files.length} archivo${files.length === 1 ? "" : "s"} seleccionado${files.length === 1 ? "" : "s"}` : "Selecciona archivos"}</strong>
+            <small>{files.length ? `Puedes agregar ${10 - files.length} más · máximo 20 MB cada uno` : "Hasta 10 documentos, imágenes, audios o videos"}</small>
           </label>
+          {files.length > 0 && (
+            <div className="workshop-selected-files" aria-label="Archivos seleccionados">
+              {files.map((file) => (
+                <span key={`${file.name}-${file.size}-${file.lastModified}`}>
+                  <FileText size={15} />
+                  <strong>{file.name}</strong>
+                  <small>{fileSize(file.size)}</small>
+                  <button type="button" onClick={() => setFiles((current) => current.filter((item) => item !== file))} aria-label={`Quitar ${file.name}`}><X size={14} /></button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <footer>
           <span><Wifi size={16} /> Guardado seguro en Storage</span>
