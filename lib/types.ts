@@ -814,6 +814,7 @@ export type ForumParticipant = {
   uid: string;
   name: string;
   initials: string;
+  photoURL?: string;
 };
 
 export type ForumReply = {

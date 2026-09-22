@@ -31,9 +31,11 @@ test("student photos fill and crop their avatar frames", async () => {
 });
 
 test("published reports and forum participation resolve profile photos", async () => {
-  const [reports, forum, globalCss] = await Promise.all([
+  const [reports, forum, forumData, functions, globalCss] = await Promise.all([
     readFile(new URL("components/academic-reports.tsx", root), "utf8"),
     readFile(new URL("components/forum-page.tsx", root), "utf8"),
+    readFile(new URL("lib/forum-firebase.ts", root), "utf8"),
+    readFile(new URL("functions/src/index.ts", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
   ]);
 
@@ -42,6 +44,12 @@ test("published reports and forum participation resolve profile photos", async (
   assert.match(forum, /resolvePhotoURL\(item\.authorId, item\.author\)/);
   assert.match(forum, /profile\.photoURL \? <Image src=\{profile\.photoURL\}/);
   assert.match(forum, /participant\.photoURL \? <Image src=\{participant\.photoURL\}/);
+  assert.match(forum, /listForumParticipantProfiles\(selectedTopicId\)/);
+  assert.match(forum, /forumParticipantById\.get\(uid\)\?\.photoURL/);
+  assert.match(forumData, /"listForumParticipantProfiles"/);
+  assert.match(functions, /export const listForumParticipantProfiles = onCall/);
+  assert.match(functions, /canParticipateInForumEntity\(viewer, topic\)/);
+  assert.match(functions, /profile\.institutionId !== viewer\.institutionId/);
   assert.match(globalCss, /\.forum-avatar-stack span img[\s\S]*?object-fit: cover/);
   assert.match(globalCss, /\.forum-mention-menu button span img[\s\S]*?object-fit: cover/);
 });

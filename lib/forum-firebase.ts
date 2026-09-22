@@ -108,6 +108,9 @@ function participantList(value: unknown): ForumParticipant[] {
         uid,
         name,
         initials: String(data.initials ?? "CE"),
+        ...(String(data.photoURL ?? "").startsWith("https://")
+          ? { photoURL: String(data.photoURL) }
+          : {}),
       };
     })
     .filter((item): item is ForumParticipant => Boolean(item));
@@ -444,6 +447,13 @@ export function deleteForumTopic(topicId: string) {
   return callForum<{ topicId: string }, { ok: true }>("deleteForumTopic", {
     topicId,
   });
+}
+
+export function listForumParticipantProfiles(topicId: string) {
+  return callForum<
+    { topicId: string },
+    { participants: ForumParticipant[] }
+  >("listForumParticipantProfiles", { topicId });
 }
 
 export async function publishForumReply(input: {

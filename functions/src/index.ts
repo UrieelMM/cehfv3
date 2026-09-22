@@ -6670,6 +6670,62 @@ async function forumAudience(institutionId: string, targetGroup: string) {
     });
 }
 
+export const listForumParticipantProfiles = onCall(async (request) => {
+  const viewer = await requireForumUser(request.auth, true);
+  const input = (request.data ?? {}) as Record<string, unknown>;
+  const topicId = forumId(input.topicId, "El tema");
+  const topicSnapshot = await db.doc(`forumTopics/${topicId}`).get();
+  const topic = topicSnapshot.data();
+  if (
+    !topicSnapshot.exists ||
+    !topic ||
+    topic.deletedAt ||
+    topic.institutionId !== viewer.institutionId
+  ) {
+    throw new HttpsError("not-found", "El tema ya no está disponible.");
+  }
+  if (!canParticipateInForumEntity(viewer, topic)) {
+    throw new HttpsError(
+      "permission-denied",
+      "No tienes acceso a los participantes de este tema.",
+    );
+  }
+
+  const participantIds = [
+    ...new Set(
+      (Array.isArray(topic.participantIds) ? topic.participantIds : [])
+        .map((value: unknown) => String(value).trim())
+        .filter((value: string) => /^[A-Za-z0-9_-]{1,128}$/.test(value)),
+    ),
+  ];
+  if (!participantIds.length) return { participants: [] };
+
+  const profiles = await db.getAll(
+    ...participantIds.map((userId) => db.doc(`users/${userId}`)),
+  );
+  const participants = profiles.flatMap((profileSnapshot) => {
+    const profile = profileSnapshot.data();
+    if (
+      !profileSnapshot.exists ||
+      !profile ||
+      profile.active !== true ||
+      profile.institutionId !== viewer.institutionId
+    ) {
+      return [];
+    }
+    const photoURL = String(profile.photoURL ?? "").trim();
+    return [{
+      uid: profileSnapshot.id,
+      name: String(profile.name ?? "Integrante CEHF"),
+      initials: String(profile.initials ?? "CE"),
+      ...(photoURL.startsWith("https://") && photoURL.length <= 2_000
+        ? { photoURL }
+        : {}),
+    }];
+  });
+  return { participants };
+});
+
 function forumTopicStatus(value: unknown) {
   const status = String(value ?? "");
   if (!FORUM_TOPIC_STATUSES.includes(status as typeof FORUM_TOPIC_STATUSES[number])) {

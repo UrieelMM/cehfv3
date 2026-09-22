@@ -56,6 +56,7 @@ import {
   deleteForumTopic,
   forumDateLabel,
   getForumAttachmentUrl,
+  listForumParticipantProfiles,
   moderateForumPost,
   publishForumReply,
   reactToForumPost,
@@ -70,6 +71,7 @@ import type {
   ForumAttachment,
   ForumBan,
   ForumModerationCase,
+  ForumParticipant,
   ForumReactionKind,
   ForumReply,
   ForumTopic,
@@ -204,6 +206,15 @@ export function ForumPage({
     () => new Map(managedAccounts.map((account) => [account.name.toLocaleLowerCase("es-MX"), account])),
     [managedAccounts],
   );
+  const [forumParticipantProfiles, setForumParticipantProfiles] = useState<ForumParticipant[]>([]);
+  const forumParticipantById = useMemo(
+    () => new Map(forumParticipantProfiles.map((participant) => [participant.uid, participant])),
+    [forumParticipantProfiles],
+  );
+  const forumParticipantByName = useMemo(
+    () => new Map(forumParticipantProfiles.map((participant) => [participant.name.toLocaleLowerCase("es-MX"), participant])),
+    [forumParticipantProfiles],
+  );
   const [selectedId, setSelectedId] = useState(() => topicFromPath(topics));
   const [selectedSpace, setSelectedSpace] = useState("all");
   const [query, setQuery] = useState("");
@@ -290,6 +301,7 @@ export function ForumPage({
     filteredTopics[0] ??
     topics.find((topic) => topic.id === selectedId) ??
     topics[0];
+  const selectedTopicId = selectedTopic?.id;
 
   const pageCount = Math.max(1, Math.ceil(filteredTopics.length / pageSize));
   const activePage = Math.min(currentPage, pageCount);
@@ -331,6 +343,34 @@ export function ForumPage({
       toast.error(friendlyFirebaseError(error)),
     );
   }, [firebaseReady, profile]);
+
+  useEffect(() => {
+    let active = true;
+    if (!firebaseReady || !selectedTopicId) {
+      queueMicrotask(() => {
+        if (active) setForumParticipantProfiles([]);
+      });
+      return () => {
+        active = false;
+      };
+    }
+    queueMicrotask(() => {
+      if (active) setForumParticipantProfiles([]);
+    });
+    void listForumParticipantProfiles(selectedTopicId)
+      .then(({ participants }) => {
+        if (active) setForumParticipantProfiles(participants);
+      })
+      .catch((error) => {
+        if (active) {
+          setForumParticipantProfiles([]);
+          console.error("[Campus CEHF] No se pudieron cargar las fotos del foro", error);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [firebaseReady, selectedTopicId]);
 
   async function changeForumBan(
     userId: string,
@@ -803,7 +843,9 @@ export function ForumPage({
   );
   const resolvePhotoURL = (uid?: string, name?: string) => {
     if ((uid && uid === profile.uid) || (name && name === profile.name)) return profile.photoURL;
-    return (uid ? accountById.get(uid)?.photoURL : undefined)
+    return (uid ? forumParticipantById.get(uid)?.photoURL : undefined)
+      ?? (name ? forumParticipantByName.get(name.toLocaleLowerCase("es-MX"))?.photoURL : undefined)
+      ?? (uid ? accountById.get(uid)?.photoURL : undefined)
       ?? (name ? accountByName.get(name.toLocaleLowerCase("es-MX"))?.photoURL : undefined);
   };
   const mentionCandidates = (selectedTopic.participantProfiles?.length
