@@ -38,3 +38,17 @@ test("Firestore rechaza una semana que no contiene la fecha de entrega", async (
   assert.match(rules, /data\.dueAt < get\(weekPath\)\.data\.endAt/);
   assert.match(rules, /&& validTaskDueDateScope\(/);
 });
+
+test("Tareas abre filtrando la semana académica actual", async () => {
+  const [workflow, app] = await Promise.all([
+    source("components/tasks-workflow.tsx"),
+    source("components/cehf-app.tsx"),
+  ]);
+
+  assert.match(workflow, /useState\(\(\) => currentWeekId \|\| "all"\)/);
+  assert.match(workflow, /setWeek\(currentWeekId \|\| "all"\)/);
+  assert.match(workflow, /id === currentWeekId \? " \(actual\)" : ""/);
+  assert.match(app, /key=\{academicConfig\.weekId \|\| "no-active-week"\}/);
+  assert.match(app, /currentWeekId=\{academicConfig\.weekId \|\| undefined\}/);
+  assert.match(app, /currentWeekLabel=\{academicConfig\.weekLabel \|\| undefined\}/);
+});

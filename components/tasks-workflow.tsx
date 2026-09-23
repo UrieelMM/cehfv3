@@ -163,27 +163,33 @@ export function TaskListPage({
   role,
   tasks,
   loading,
+  currentWeekId,
+  currentWeekLabel,
   openDetail,
 }: {
   role: Role;
   tasks: TaskAssignment[];
   loading: boolean;
+  currentWeekId?: string;
+  currentWeekLabel?: string;
   openDetail: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [subject, setSubject] = useState("all");
-  const [week, setWeek] = useState("all");
+  const [week, setWeek] = useState(() => currentWeekId || "all");
   const [page, setPage] = useState(1);
   const subjects = useMemo(
     () => [...new Set(tasks.map((task) => task.subject))].sort(),
     [tasks],
   );
-  const weeks = useMemo(
-    () =>
-      [...new Map(tasks.map((task) => [task.weekId, task.weekLabel])).entries()],
-    [tasks],
-  );
+  const weeks = useMemo(() => {
+    const options = new Map<string, string>();
+    if (currentWeekId) options.set(currentWeekId, currentWeekLabel || "Semana actual");
+    tasks.forEach((task) => options.set(task.weekId, task.weekLabel));
+    return [...options.entries()];
+  }, [currentWeekId, currentWeekLabel, tasks]);
+
   const filtered = useMemo(() => {
     const term = search.trim().toLocaleLowerCase("es-MX");
     return tasks.filter((task) => {
@@ -279,7 +285,7 @@ export function TaskListPage({
           <option value="all">Todas las semanas</option>
           {weeks.map(([id, label]) => (
             <option value={id} key={id}>
-              {label}
+              {label}{id === currentWeekId ? " (actual)" : ""}
             </option>
           ))}
         </select>
@@ -376,7 +382,7 @@ export function TaskListPage({
               setSearch("");
               setStatus("all");
               setSubject("all");
-              setWeek("all");
+              setWeek(currentWeekId || "all");
             }}
           >
             Limpiar filtros

@@ -2070,9 +2070,12 @@ function SectionContent({
     case "tasks":
       return (
         <TaskListPage
+          key={academicConfig.weekId || "no-active-week"}
           role={role}
           tasks={taskRecords}
           loading={taskRecordsLoading}
+          currentWeekId={academicConfig.weekId || undefined}
+          currentWeekLabel={academicConfig.weekLabel || undefined}
           openDetail={openDetail}
         />
       );
