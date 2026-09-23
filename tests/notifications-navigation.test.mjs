@@ -45,3 +45,21 @@ test("notification routes resolve to the concrete resource", async () => {
     /`\/workshops\/\$\{encode\(notification\.workshopId\)\}\$\{query\}`/,
   );
 });
+
+test("new realtime notifications play one optional sound without replaying history", async () => {
+  const [appSource, soundSource, defaultsSource, firebaseSource] = await Promise.all([
+    readFile(new URL("components/cehf-app.tsx", projectRoot), "utf8"),
+    readFile(new URL("lib/notification-sound.ts", projectRoot), "utf8"),
+    readFile(new URL("lib/portal-defaults.ts", projectRoot), "utf8"),
+    readFile(new URL("lib/firebase.ts", projectRoot), "utf8"),
+  ]);
+
+  assert.match(appSource, /let knownNotificationIds: Set<string> \| null = null/);
+  assert.match(appSource, /const hasNewUnread = previousNotificationIds !== null/);
+  assert.match(appSource, /hasNewUnread && state\.settings\.notificationSound/);
+  assert.match(appSource, /void playNotificationSound\(\)/);
+  assert.match(soundSource, /const notes = \[659\.25, 783\.99, 1046\.5\]/);
+  assert.match(soundSource, /context\.state !== "running"/);
+  assert.match(defaultsSource, /notificationSound: true/);
+  assert.match(firebaseSource, /typeof value\?\.notificationSound === "boolean"/);
+});

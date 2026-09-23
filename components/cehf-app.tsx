@@ -160,6 +160,10 @@ import {
 import { ForumRichText } from "@/components/forum-rich-text";
 import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
 import { isResizeObserverLoopError } from "@/lib/resize-observer-error";
+import {
+  playNotificationSound,
+  unlockNotificationSound,
+} from "@/lib/notification-sound";
 import logoCehf from "@/assets/img/logoCEHF.png";
 import {
   publishAcademicCalendarImage,
@@ -884,13 +888,34 @@ export function CEHFApp() {
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
+    let knownNotificationIds: Set<string> | null = null;
     return watchTaskNotifications(
       profile.uid,
-      (notifications) =>
-        setState((previous) => ({ ...previous, notifications })),
+      (notifications) => {
+        const previousNotificationIds = knownNotificationIds;
+        const hasNewUnread = previousNotificationIds !== null && notifications.some(
+          (notification) =>
+            !notification.read && !previousNotificationIds.has(notification.id),
+        );
+        knownNotificationIds = new Set(notifications.map((notification) => notification.id));
+        if (hasNewUnread && state.settings.notificationSound) {
+          void playNotificationSound();
+        }
+        setState((previous) => ({ ...previous, notifications }));
+      },
       (error) => reportFirebaseError("cargar notificaciones", error),
     );
-  }, [firebaseUser, profile]);
+  }, [firebaseUser, profile, state.settings.notificationSound]);
+
+  useEffect(() => {
+    const unlock = () => void unlockNotificationSound();
+    window.addEventListener("pointerdown", unlock, { capture: true, once: true });
+    window.addEventListener("keydown", unlock, { capture: true, once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlock, { capture: true });
+      window.removeEventListener("keydown", unlock, { capture: true });
+    };
+  }, []);
 
   useEffect(() => {
     if (!firebaseUser || !profile) return;
@@ -3003,10 +3028,20 @@ function SettingsPage({
             </div>
             <div className="setting-row">
               <div>
-                <strong>Avisos internos</strong>
-                <span>Tareas, recursos, repasos y reportes.</span>
+                <strong>Sonido de notificación</strong>
+                <span>Reproduce un tono breve cuando llegue un aviso nuevo.</span>
               </div>
-              <Toggle checked label="Avisos internos" onChange={() => undefined} />
+              <Toggle
+                checked={state.settings.notificationSound}
+                label="Sonido de notificación"
+                onChange={(checked) => {
+                  if (checked) void unlockNotificationSound();
+                  updateSettings(
+                    (previous) => ({ ...previous, notificationSound: checked }),
+                    checked ? "Sonido activado" : "Sonido desactivado",
+                  );
+                }}
+              />
             </div>
           </section>
         </div>

@@ -1130,6 +1130,7 @@ export type WhatsAppLogPage = {
 export type PortalSettings = {
   theme: "light" | "dark" | "system";
   reducedMotion: boolean;
+  notificationSound: boolean;
   whatsappEnabled: boolean;
   quietHours: string;
 };

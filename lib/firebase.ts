@@ -698,6 +698,10 @@ function portalSettingsFromData(
       typeof value?.reducedMotion === "boolean"
         ? value.reducedMotion
         : fallback.reducedMotion,
+    notificationSound:
+      typeof value?.notificationSound === "boolean"
+        ? value.notificationSound
+        : fallback.notificationSound,
     whatsappEnabled:
       typeof value?.whatsappEnabled === "boolean"
         ? value.whatsappEnabled

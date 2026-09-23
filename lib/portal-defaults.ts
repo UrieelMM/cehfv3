@@ -39,6 +39,7 @@ export const createInitialPortalState = (): PortalState => ({
   settings: {
     theme: "light",
     reducedMotion: false,
+    notificationSound: true,
     whatsappEnabled: true,
     quietHours: "20:00–07:00",
   },
