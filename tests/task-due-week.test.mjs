@@ -16,7 +16,7 @@ test("la fecha de entrega determina automáticamente semana y bimestre", async (
   assert.match(workflow, /resolveTaskAcademicScope\(calendar, dueAt\)/);
   assert.match(workflow, /Esta tarea corresponde a \$\{academicScope\.week\.label\}/);
   assert.match(workflow, /Esta fecha no pertenece al calendario académico/);
-  assert.match(workflow, /Entrega: \{task\.weekLabel\}/);
+  assert.doesNotMatch(workflow, /Entrega: \{task\.weekLabel\}/);
   assert.doesNotMatch(workflow, /weekId: config\.weekId/);
   assert.match(app, /createTaskAssignment\([\s\S]*academicCalendar/);
   assert.match(data, /const academicScope = resolveTaskAcademicScope\(calendar, dueAt\)/);

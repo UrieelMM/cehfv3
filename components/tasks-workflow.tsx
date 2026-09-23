@@ -330,7 +330,7 @@ export function TaskListPage({
                   </span>
                 </span>
                 <span className="task-card-context">
-                  {task.subject} <i>•</i> Entrega: {task.weekLabel}
+                  {task.subject}
                 </span>
                 <strong>{task.title}</strong>
                 <p>{task.description}</p>
@@ -702,7 +702,6 @@ export function TaskCreateModal({
               <span>03</span>
               <div>
                 <strong>Fechas y publicación</strong>
-                <small>El cierre se aplica en Firebase con la hora de Ciudad de México.</small>
               </div>
             </div>
             <div className="task-form-grid">
