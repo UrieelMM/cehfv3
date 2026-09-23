@@ -545,8 +545,6 @@ export type TaskCreateInput = {
   description: string;
   subject: string;
   subjectId: string;
-  weekId: string;
-  weekLabel: string;
   dueAt: string;
   targetGroup: string;
   links: Array<{ label: string; url: string }>;

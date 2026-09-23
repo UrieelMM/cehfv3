@@ -1617,10 +1617,16 @@ export function CEHFApp() {
         ) : createOpen && activeSection === "tasks" ? (
           <TaskCreateModal
             config={academicConfig}
+            calendar={academicCalendar}
             accounts={managedAccounts}
             onClose={() => setCreateOpen(false)}
             onCreate={async (input: TaskCreateInput) => {
-              await createTaskAssignment(input, currentProfile, academicConfig);
+              await createTaskAssignment(
+                input,
+                currentProfile,
+                academicConfig,
+                academicCalendar,
+              );
               toast.success(
                 input.publicationMode === "now"
                   ? "Tarea publicada y notificación preparada"

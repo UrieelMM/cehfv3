@@ -185,7 +185,7 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
     firestoreRules,
     /allow create: if taskBelongsToInstitution\(request\.resource\.data\)/,
   );
-  assert.match(firestoreRules, /function validCurrentTaskScope/);
+  assert.match(firestoreRules, /function validTaskDueDateScope/);
   assert.match(firestoreRules, /function validCalendarScope/);
   assert.match(firestoreRules, /match \/semanas\/\{weekId\}/);
   assert.match(firestoreRules, /match \/calendarioHistorial\/\{eventId\}/);

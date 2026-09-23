@@ -144,6 +144,24 @@ function academicTaskCollection(config: AcademicConfig, subjectId: string) {
   );
 }
 
+export function resolveTaskAcademicScope(
+  calendar: AcademicCalendar,
+  dueAt: string | Date,
+) {
+  const dueTime = dueAt instanceof Date ? dueAt.getTime() : new Date(dueAt).getTime();
+  if (!Number.isFinite(dueTime)) return null;
+  const week = calendar.weeks.find((candidate) => {
+    const starts = new Date(candidate.startAt).getTime();
+    const ends = new Date(candidate.endAt).getTime();
+    return candidate.active && dueTime >= starts && dueTime < ends;
+  });
+  if (!week) return null;
+  const term = calendar.terms.find(
+    (candidate) => candidate.active && candidate.weekIds.includes(week.id),
+  );
+  return term ? { week, term } : null;
+}
+
 export function isFirebaseTaskAssignment(task: TaskAssignment) {
   const segments = task.firestorePath.split("/").filter(Boolean);
   return (
@@ -539,29 +557,49 @@ export async function createTaskAssignment(
   input: TaskCreateInput,
   profile: UserProfile,
   config: AcademicConfig,
+  calendar: AcademicCalendar,
 ) {
-  if (config.calendarStatus !== "active" || !config.weekId || !config.termId) {
+  const dueAt = new Date(input.dueAt);
+  if (!Number.isFinite(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
+    throw new Error("La fecha de entrega debe ser válida y estar en el futuro.");
+  }
+  if (!calendar.configured || calendar.schoolYearId !== config.schoolYearId) {
     throw new Error(
-      "No hay una semana activa configurada. Dirección debe revisar el calendario académico.",
+      "El calendario académico no está listo. Dirección debe revisar su configuración.",
     );
   }
+  const academicScope = resolveTaskAcademicScope(calendar, dueAt);
+  if (!academicScope) {
+    throw new Error(
+      "La fecha de entrega no pertenece a ninguna semana del calendario académico.",
+    );
+  }
+  const taskConfig: AcademicConfig = {
+    ...config,
+    termId: academicScope.term.id,
+    termLabel: academicScope.term.label,
+    weekId: academicScope.week.id,
+    weekLabel: academicScope.week.label,
+    weekStartDate: academicScope.week.startDate,
+    weekEndDate: academicScope.week.endDate,
+  };
   const { db, storage } = requireFirebase();
   const subjectId = input.subjectId || slugify(input.subject);
-  const reference = doc(academicTaskCollection(config, subjectId));
+  const reference = doc(academicTaskCollection(taskConfig, subjectId));
   const initialBatch = writeBatch(db);
   initialBatch.set(reference, {
-    institutionId: config.institutionId,
-    schoolYearId: config.schoolYearId,
-    schoolYearLabel: config.schoolYearLabel,
-    termId: config.termId,
-    termLabel: config.termLabel,
-    weekId: config.weekId,
-    weekLabel: config.weekLabel,
+    institutionId: taskConfig.institutionId,
+    schoolYearId: taskConfig.schoolYearId,
+    schoolYearLabel: taskConfig.schoolYearLabel,
+    termId: taskConfig.termId,
+    termLabel: taskConfig.termLabel,
+    weekId: taskConfig.weekId,
+    weekLabel: taskConfig.weekLabel,
     subjectId,
     subject: input.subject,
     title: input.title.trim(),
     description: input.description.trim(),
-    dueAt: Timestamp.fromDate(new Date(input.dueAt)),
+    dueAt: Timestamp.fromDate(dueAt),
     publishAt:
       input.publicationMode === "scheduled" && input.publishAt
         ? Timestamp.fromDate(new Date(input.publishAt))
@@ -604,13 +642,13 @@ export async function createTaskAssignment(
       const assetId = crypto.randomUUID();
       const storagePath = [
         "institutions",
-        config.institutionId,
+        taskConfig.institutionId,
         "ciclosEscolares",
-        config.schoolYearId,
+        taskConfig.schoolYearId,
         "bimestres",
-        config.termId,
+        taskConfig.termId,
         "semanas",
-        config.weekId,
+        taskConfig.weekId,
         "materias",
         subjectId,
         "tareas",

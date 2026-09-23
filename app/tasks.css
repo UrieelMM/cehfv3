@@ -129,6 +129,12 @@
 .task-form-section-title small { margin-top: 2px; color: var(--muted); font-size: calc(.6rem + 0.125rem); font-weight: 500; }
 .task-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .task-form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.task-week-resolution { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border: 1px solid color-mix(in srgb, var(--mint) 30%, var(--border)); border-radius: 11px; background: color-mix(in srgb, var(--mint) 8%, var(--surface)); color: var(--mint); }
+.task-week-resolution > svg { flex: 0 0 auto; margin-top: 1px; }
+.task-week-resolution > div { display: grid; gap: 3px; }
+.task-week-resolution strong { color: var(--foreground); font-size: calc(.66rem + 0.125rem); line-height: 1.4; }
+.task-week-resolution span { color: var(--muted); font-size: calc(.57rem + 0.125rem); line-height: 1.45; }
+.task-week-resolution.has-error { border-color: color-mix(in srgb, var(--coral) 32%, var(--border)); background: color-mix(in srgb, var(--coral) 7%, var(--surface)); color: var(--coral); }
 .task-repeatable-heading { justify-content: space-between; margin-top: 3px; }
 .task-repeatable-heading > strong, .task-repeatable-heading > button { gap: 6px; }
 .task-repeatable-heading > strong { font-size: calc(.67rem + 0.125rem); }

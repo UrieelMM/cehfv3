@@ -52,6 +52,7 @@ import {
   loadViewedTaskResourceIds,
   markTaskSubmissionReviewed,
   publishTaskNow,
+  resolveTaskAcademicScope,
   sendTaskFeedback,
   submitTaskResponse,
   updateTaskAssignment,
@@ -102,6 +103,36 @@ function formatDate(value: string, includeYear = false) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function formatAcademicWeekRange(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T12:00:00`);
+  const end = new Date(`${endDate}T12:00:00`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    return `${startDate}–${endDate}`;
+  }
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const startMonth = new Intl.DateTimeFormat("es-MX", { month: "long" }).format(start);
+  const endMonth = new Intl.DateTimeFormat("es-MX", { month: "long" }).format(end);
+  return startMonth === endMonth
+    ? `${startDay}–${endDay} de ${endMonth}`
+    : `${startDay} de ${startMonth}–${endDay} de ${endMonth}`;
+}
+
+function initialTaskDueAt(calendar: AcademicCalendar) {
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  tomorrow.setHours(20, 0, 0, 0);
+  if (resolveTaskAcademicScope(calendar, tomorrow)) return toLocalDateTime(tomorrow);
+  const now = Date.now();
+  for (const week of calendar.weeks) {
+    if (!week.active || new Date(week.endAt).getTime() <= now) continue;
+    const target = new Date(new Date(week.startAt).getTime() + 20 * 60 * 60 * 1000);
+    if (target.getTime() > now && target.getTime() < new Date(week.endAt).getTime()) {
+      return toLocalDateTime(target);
+    }
+  }
+  return toLocalDateTime(tomorrow);
 }
 
 function formatBytes(bytes: number) {
@@ -299,7 +330,7 @@ export function TaskListPage({
                   </span>
                 </span>
                 <span className="task-card-context">
-                  {task.subject} <i>•</i> {task.weekLabel}
+                  {task.subject} <i>•</i> Entrega: {task.weekLabel}
                 </span>
                 <strong>{task.title}</strong>
                 <p>{task.description}</p>
@@ -382,11 +413,13 @@ export function TaskListPage({
 
 export function TaskCreateModal({
   config,
+  calendar,
   accounts,
   onClose,
   onCreate,
 }: {
   config: AcademicConfig;
+  calendar: AcademicCalendar;
   accounts: ManagedAccount[];
   onClose: () => void;
   onCreate: (input: TaskCreateInput) => Promise<void>;
@@ -394,11 +427,7 @@ export function TaskCreateModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [subject, setSubject] = useState("Ciencias");
-  const [dueAt, setDueAt] = useState(() => {
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    tomorrow.setHours(20, 0, 0, 0);
-    return toLocalDateTime(tomorrow);
-  });
+  const [dueAt, setDueAt] = useState(() => initialTaskDueAt(calendar));
   const [targetGroup, setTargetGroup] = useState("");
   const [links, setLinks] = useState([{ label: "", url: "" }]);
   const [files, setFiles] = useState<Array<File | null>>([null]);
@@ -408,8 +437,10 @@ export function TaskCreateModal({
     toLocalDateTime(new Date(Date.now() + 60 * 60 * 1000)),
   );
   const [busy, setBusy] = useState(false);
-  const hasActiveWeek =
-    config.calendarStatus === "active" && Boolean(config.weekId && config.termId);
+  const academicScope = useMemo(
+    () => resolveTaskAcademicScope(calendar, dueAt),
+    [calendar, dueAt],
+  );
   const groups = useMemo(() => {
     const fromAccounts = accounts
       .filter((account) => account.role === "student" && account.grade && account.group)
@@ -431,8 +462,10 @@ export function TaskCreateModal({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!hasActiveWeek) {
-      toast.error("Dirección debe configurar una semana activa antes de crear tareas.");
+    if (!academicScope) {
+      toast.error(
+        "La fecha de entrega no pertenece a ninguna semana del calendario académico.",
+      );
       return;
     }
     if (new Date(dueAt).getTime() <= Date.now()) {
@@ -458,8 +491,6 @@ export function TaskCreateModal({
           .replace(/[\u0300-\u036f]/g, "")
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-"),
-        weekId: config.weekId,
-        weekLabel: config.weekLabel,
         dueAt: new Date(dueAt).toISOString(),
         targetGroup: selectedGroup,
         links,
@@ -505,12 +536,12 @@ export function TaskCreateModal({
         </header>
 
         <div className="task-create-body">
-          {!hasActiveWeek && (
+          {!calendar.configured && (
             <div className="task-calendar-warning" role="alert">
               <CircleAlert size={19} />
               <div>
-                <strong>No hay una semana activa</strong>
-                <span>Revisa las fechas del calendario académico desde Configuración.</span>
+                <strong>Calendario académico pendiente</strong>
+                <span>Dirección debe configurar las semanas antes de crear tareas.</span>
               </div>
             </div>
           )}
@@ -542,16 +573,7 @@ export function TaskCreateModal({
                 placeholder="Explica qué debe hacer el alumno y qué esperas recibir…"
               />
             </label>
-            <div className="task-form-grid three">
-              <label>
-                Semana
-                <input value={config.weekLabel} readOnly />
-                {config.weekStartDate && config.weekEndDate && (
-                  <small>
-                    {config.weekStartDate} a {config.weekEndDate} · {config.termLabel}
-                  </small>
-                )}
-              </label>
+            <div className="task-form-grid">
               <label>
                 Materia
                 <select value={subject} onChange={(event) => setSubject(event.target.value)}>
@@ -707,6 +729,24 @@ export function TaskCreateModal({
                 </label>
               )}
             </div>
+            <div
+              className={`task-week-resolution ${academicScope ? "is-valid" : "has-error"}`}
+              role={academicScope ? "status" : "alert"}
+            >
+              {academicScope ? <CheckCircle2 size={20} /> : <CircleAlert size={20} />}
+              <div>
+                <strong>
+                  {academicScope
+                    ? `Esta tarea corresponde a ${academicScope.week.label} · ${formatAcademicWeekRange(academicScope.week.startDate, academicScope.week.endDate)}`
+                    : "Esta fecha no pertenece al calendario académico"}
+                </strong>
+                <span>
+                  {academicScope
+                    ? `${academicScope.term.label}. La semana se asigna automáticamente según la fecha de entrega.`
+                    : "Elige una fecha dentro de una semana configurada o solicita a Dirección que revise el calendario."}
+                </span>
+              </div>
+            </div>
             <fieldset className="task-publication-options">
               <legend>¿Cuándo podrán verla los alumnos?</legend>
               {[
@@ -734,7 +774,8 @@ export function TaskCreateModal({
 
         <footer className="task-create-footer">
           <span>
-            <ShieldCheck size={16} /> Ciclo {config.schoolYearLabel} · {config.termLabel}
+            <ShieldCheck size={16} /> Ciclo {config.schoolYearLabel}
+            {academicScope ? ` · ${academicScope.term.label}` : " · Fecha pendiente"}
           </span>
           <div>
             <button className="secondary-button" type="button" onClick={onClose}>
@@ -743,7 +784,7 @@ export function TaskCreateModal({
             <button
               className="primary-button"
               disabled={
-                busy || !hasActiveWeek || !title.trim() || !description.trim()
+                busy || !academicScope || !title.trim() || !description.trim()
               }
             >
               {busy ? <span className="button-spinner" /> : <Sparkles size={17} />}

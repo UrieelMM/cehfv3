@@ -173,7 +173,7 @@ service cloud.firestore {
         && after.weekLabel == before.weekLabel;
     }
 
-    function validCurrentTaskScope(
+    function validTaskDueDateScope(
       data, institutionId, schoolYearId, termId, weekId
     ) {
       let weekPath = calendarWeekPath(institutionId, schoolYearId, weekId);
@@ -184,8 +184,10 @@ service cloud.firestore {
         && get(termPath).data.active == true
         && get(termPath).data.weekIds is list
         && get(termPath).data.weekIds.hasAny([weekId])
-        && request.time >= get(weekPath).data.startAt
-        && request.time < get(weekPath).data.endAt
+        && data.dueAt is timestamp
+        && data.dueAt > request.time
+        && data.dueAt >= get(weekPath).data.startAt
+        && data.dueAt < get(weekPath).data.endAt
         && data.institutionId == institutionId
         && data.schoolYearId == schoolYearId
         && data.termId == termId
@@ -1438,7 +1440,7 @@ service cloud.firestore {
         allow create: if taskBelongsToInstitution(request.resource.data)
           && isStaff()
           && request.resource.data.createdBy == request.auth.uid
-          && validCurrentTaskScope(
+          && validTaskDueDateScope(
             request.resource.data,
             institutionId,
             schoolYearId,
