@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Clock3,
   Download,
+  Eye,
   ExternalLink,
   FileText,
   LoaderCircle,
@@ -31,12 +32,15 @@ import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
+import { ForumRichText } from "@/components/forum-rich-text";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
 import { friendlyFirebaseError } from "@/lib/firebase";
+import { normalizeForumRichText } from "@/lib/forum-rich-text";
 import {
   createWorkshopTask,
   deleteWorkshopTask,
+  getWorkshopTaskAttachmentAccess,
   getWorkshopTaskAttachmentUrl,
   saveWorkshopFeedback,
   setWorkshopTaskStatus,
@@ -96,6 +100,53 @@ function fileSize(value: number) {
   return value < 1_000_000
     ? `${Math.max(1, Math.round(value / 1_000))} KB`
     : `${(value / 1_000_000).toFixed(1)} MB`;
+}
+
+function isPdfAttachment(attachment: WorkshopTaskAttachment) {
+  return attachment.contentType.toLowerCase() === "application/pdf" ||
+    attachment.name.toLowerCase().endsWith(".pdf");
+}
+
+function WorkshopAttachmentRow({
+  attachment,
+  downloading,
+  onPreview,
+  onDownload,
+}: {
+  attachment: WorkshopTaskAttachment;
+  downloading: boolean;
+  onPreview: () => void;
+  onDownload: () => void;
+}) {
+  return (
+    <div className="workshop-attachment-row">
+      <button
+        type="button"
+        className="workshop-attachment-preview"
+        onClick={onPreview}
+        aria-label={`Previsualizar ${attachment.name}`}
+      >
+        <FileText size={17} />
+        <span>
+          <strong>{attachment.name}</strong>
+          <small>{fileSize(attachment.size)} · Vista previa</small>
+        </span>
+        <Eye size={16} />
+      </button>
+      <button
+        type="button"
+        className="workshop-attachment-download"
+        disabled={downloading}
+        onClick={onDownload}
+        aria-label={`Descargar ${attachment.name}`}
+        title={`Descargar ${attachment.name}`}
+      >
+        {downloading
+          ? <LoaderCircle className="spin" size={16} />
+          : <Download size={16} />}
+      </button>
+    </div>
+  );
 }
 
 export function WorkshopTasks({
@@ -302,6 +353,9 @@ export function WorkshopTasks({
 function WorkshopTaskEditDialog({ task, onCancel }: { task: WorkshopTask; onCancel: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
+  const [descriptionRich, setDescriptionRich] = useState(() =>
+    task.descriptionRich || normalizeForumRichText(task.description),
+  );
   const [links, setLinks] = useState<WorkshopLink[]>(task.links);
   const [dueAt, setDueAt] = useState(() => {
     const date = new Date(task.dueAt);
@@ -313,7 +367,13 @@ function WorkshopTaskEditDialog({ task, onCancel }: { task: WorkshopTask; onCanc
     event.preventDefault();
     setBusy(true);
     try {
-      await updateWorkshopTask(task, { title: title.trim(), description: description.trim(), dueAt: new Date(dueAt).toISOString(), links });
+      await updateWorkshopTask(task, {
+        title: title.trim(),
+        description: description.trim(),
+        descriptionRich,
+        dueAt: new Date(dueAt).toISOString(),
+        links,
+      });
       toast.success("Actividad actualizada");
       onCancel();
     } catch (error) {
@@ -325,7 +385,18 @@ function WorkshopTaskEditDialog({ task, onCancel }: { task: WorkshopTask; onCanc
 
   return <ContentEditDialog open eyebrow="Actividad de taller" title="Editar actividad" description="Corrige las indicaciones o la fecha de entrega." note="El taller, alumnos asignados, archivos y entregas existentes permanecen vinculados." busy={busy} onCancel={onCancel} onSubmit={save}>
     <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
-    <label>Indicaciones<textarea value={description} minLength={3} maxLength={2000} required onChange={(event) => setDescription(event.target.value)} /></label>
+    <div className="workshop-rich-field">
+      <label>Indicaciones</label>
+      <ForumRichText
+        content={descriptionRich}
+        editorKey={`workshop-task-edit-${task.id}`}
+        maxLength={2_000}
+        onChange={(richText, plainText) => {
+          setDescriptionRich(richText);
+          setDescription(plainText);
+        }}
+      />
+    </div>
     <label>Fecha límite<input type="datetime-local" value={dueAt} required onChange={(event) => setDueAt(event.target.value)} /></label>
     <WorkshopLinksEditor links={links} onChange={setLinks} />
   </ContentEditDialog>;
@@ -350,6 +421,9 @@ function WorkshopTaskCreateDialog({
       : workshop.teacherStudentIds[profile.uid] ?? [];
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [descriptionRich, setDescriptionRich] = useState(() =>
+    normalizeForumRichText(""),
+  );
   const [dueAt, setDueAt] = useState(dateTimeLocal());
   const [status, setStatus] = useState<"draft" | "published">("published");
   const [selectedStudents, setSelectedStudents] = useState<string[]>(rosterIds);
@@ -387,6 +461,7 @@ function WorkshopTaskCreateDialog({
       await onCreate({
         title: title.trim(),
         description: description.trim(),
+        descriptionRich,
         dueAt: new Date(dueAt).toISOString(),
         status,
         audienceStudentIds: selectedStudents,
@@ -413,7 +488,18 @@ function WorkshopTaskCreateDialog({
         <div className="workshop-task-create-body">
           <div className="workshop-task-form-fields">
             <label><span>Título</span><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} required placeholder="Ej. Mi primera historia interactiva" /></label>
-            <label><span>Indicaciones</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1800} rows={5} required placeholder="Explica qué deben hacer y cómo entregar…" /></label>
+            <div className="workshop-rich-field">
+              <label>Indicaciones</label>
+              <ForumRichText
+                content={descriptionRich}
+                editorKey={`workshop-task-create-${workshop.id}`}
+                maxLength={2_000}
+                onChange={(richText, plainText) => {
+                  setDescriptionRich(richText);
+                  setDescription(plainText);
+                }}
+              />
+            </div>
             <label><span>Fecha límite</span><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} required /></label>
             <label className="workshop-task-files">
               <input type="file" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} />
@@ -474,13 +560,18 @@ function WorkshopTaskDetailDialog({
   const [submissions, setSubmissions] = useState<WorkshopSubmission[]>([]);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [content, setContent] = useState("");
+  const [contentRich, setContentRich] = useState(() => normalizeForumRichText(""));
+  const [contentRevision, setContentRevision] = useState(0);
   const [link, setLink] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [feedback, setFeedback] = useState("");
+  const [feedbackRich, setFeedbackRich] = useState(() => normalizeForumRichText(""));
   const [busy, setBusy] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<WorkshopTaskAttachment | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [previewSource, setPreviewSource] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const previewRequest = useRef(0);
   const staff = canManage;
   const selectedSubmission =
@@ -502,7 +593,13 @@ function WorkshopTaskDetailDialog({
   }, [firebaseReady, profile, task]);
 
   useEffect(() => {
-    queueMicrotask(() => setFeedback(selectedSubmission?.teacherFeedback ?? ""));
+    queueMicrotask(() => {
+      const plainText = selectedSubmission?.teacherFeedback ?? "";
+      setFeedback(plainText);
+      setFeedbackRich(
+        selectedSubmission?.teacherFeedbackRich || normalizeForumRichText(plainText),
+      );
+    });
   }, [selectedSubmission]);
 
   useEffect(() => {
@@ -529,14 +626,19 @@ function WorkshopTaskDetailDialog({
     const requestId = ++previewRequest.current;
     setPreviewAttachment(attachment);
     setPreviewUrl("");
+    setPreviewSource("");
     setPreviewLoading(true);
     try {
-      const url = await getWorkshopTaskAttachmentUrl(
+      const access = await getWorkshopTaskAttachmentAccess(
         task,
         attachment,
         submissionStudentId,
+        isPdfAttachment(attachment),
       );
-      if (previewRequest.current === requestId) setPreviewUrl(url);
+      if (previewRequest.current === requestId) {
+        setPreviewUrl(access.url);
+        setPreviewSource(access.previewSource);
+      }
     } catch (error) {
       if (previewRequest.current === requestId) {
         setPreviewAttachment(null);
@@ -551,7 +653,42 @@ function WorkshopTaskDetailDialog({
     previewRequest.current += 1;
     setPreviewAttachment(null);
     setPreviewUrl("");
+    setPreviewSource("");
     setPreviewLoading(false);
+  }
+
+  async function downloadAttachment(
+    attachment: WorkshopTaskAttachment,
+    submissionStudentId?: string,
+  ) {
+    if (!firebaseReady || !attachment.storagePath) {
+      toast.error("El archivo no está disponible en Firebase Storage.");
+      return;
+    }
+    setDownloadingPath(attachment.storagePath);
+    try {
+      const url = await getWorkshopTaskAttachmentUrl(
+        task,
+        attachment,
+        submissionStudentId,
+      );
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("No pudimos descargar el archivo.");
+      const objectUrl = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = attachment.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      setDownloadingPath((current) =>
+        current === attachment.storagePath ? null : current,
+      );
+    }
   }
 
   async function submitStudentWork(event: FormEvent) {
@@ -563,8 +700,10 @@ function WorkshopTaskDetailDialog({
     setBusy(true);
     try {
       if (!firebaseReady) throw new Error("Inicia sesión para entregar trabajos.");
-      await submitWorkshopTask(task, profile, { content, link, files });
+      await submitWorkshopTask(task, profile, { content, contentRich, link, files });
       setContent("");
+      setContentRich(normalizeForumRichText(""));
+      setContentRevision((current) => current + 1);
       setLink("");
       setFiles([]);
       toast.success(mySubmission ? "Nueva versión enviada" : "Trabajo enviado");
@@ -583,7 +722,13 @@ function WorkshopTaskDetailDialog({
     setBusy(true);
     try {
       if (!firebaseReady) throw new Error("Inicia sesión para enviar retroalimentación.");
-      await saveWorkshopFeedback(task, selectedSubmission, feedback, reviewed);
+      await saveWorkshopFeedback(
+        task,
+        selectedSubmission,
+        feedback,
+        feedbackRich,
+        reviewed,
+      );
       toast.success(reviewed ? "Entrega finalizada" : "Retroalimentación enviada");
     } catch (error) {
       toast.error(messageFor(error));
@@ -613,18 +758,62 @@ function WorkshopTaskDetailDialog({
         </header>
         <div className="workshop-task-detail-body">
           <main>
-            <section className="workshop-task-instructions"><span className="eyebrow">Indicaciones</span><p>{task.description}</p>{task.attachments.length > 0 && <div className="workshop-task-attachments">{task.attachments.map((attachment) => <button key={attachment.id} onClick={() => void openAttachment(attachment)}><FileText size={17} /><span><strong>{attachment.name}</strong><small>{fileSize(attachment.size)}</small></span><Download size={15} /></button>)}</div>}{task.links.length > 0 && <div className="workshop-task-links">{task.links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> {link.label}</a>)}</div>}</section>
+            <section className="workshop-task-instructions">
+              <span className="eyebrow">Indicaciones</span>
+              <ForumRichText
+                content={task.descriptionRich || normalizeForumRichText(task.description)}
+                editorKey={`workshop-task-reader-${task.id}`}
+                editable={false}
+              />
+              {task.attachments.length > 0 && (
+                <div className="workshop-task-attachments">
+                  {task.attachments.map((attachment) => (
+                    <WorkshopAttachmentRow
+                      key={attachment.id}
+                      attachment={attachment}
+                      downloading={downloadingPath === attachment.storagePath}
+                      onPreview={() => void openAttachment(attachment)}
+                      onDownload={() => void downloadAttachment(attachment)}
+                    />
+                  ))}
+                </div>
+              )}
+              {task.links.length > 0 && <div className="workshop-task-links">{task.links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> {link.label}</a>)}</div>}
+            </section>
             {role === "student" ? (
               <section className="workshop-student-delivery">
-                {mySubmission?.teacherFeedback && <div className={`workshop-feedback-card is-${mySubmission.status}`}><MessageSquareText size={20} /><div><span>{mySubmission.status === "reviewed" ? "Entrega finalizada" : "Retroalimentación de tu maestro"}</span><p>{mySubmission.teacherFeedback}</p></div></div>}
+                {mySubmission?.teacherFeedback && <div className={`workshop-feedback-card is-${mySubmission.status}`}><MessageSquareText size={20} /><div><span>{mySubmission.status === "reviewed" ? "Entrega finalizada" : "Retroalimentación de tu maestro"}</span><ForumRichText content={mySubmission.teacherFeedbackRich || normalizeForumRichText(mySubmission.teacherFeedback)} editorKey={`workshop-feedback-reader-${task.id}-${mySubmission.version}`} editable={false} /></div></div>}
                 {mySubmission && <div className="workshop-previous-delivery"><CheckCircle2 size={18} /><span><strong>Versión {mySubmission.version} enviada</strong><small>{mySubmission.content || (mySubmission.link ? "Enlace adjunto" : `${mySubmission.attachments.length} archivo(s)`)}</small></span></div>}
+                {mySubmission?.content && <div className="workshop-submission-rich"><ForumRichText content={mySubmission.contentRich || normalizeForumRichText(mySubmission.content)} editorKey={`workshop-own-submission-${task.id}-${mySubmission.version}`} editable={false} /></div>}
                 {mySubmission?.link && <a className="workshop-submission-link" href={mySubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace entregado</a>}
+                {mySubmission && mySubmission.attachments.length > 0 && (
+                  <div className="workshop-submission-files">
+                    <span>Archivos de tu entrega</span>
+                    {mySubmission.attachments.map((attachment) => (
+                      <WorkshopAttachmentRow
+                        key={attachment.id}
+                        attachment={attachment}
+                        downloading={downloadingPath === attachment.storagePath}
+                        onPreview={() => void openAttachment(attachment, mySubmission.studentId)}
+                        onDownload={() => void downloadAttachment(attachment, mySubmission.studentId)}
+                      />
+                    ))}
+                  </div>
+                )}
                 {task.status === "published" ? (
                   <form onSubmit={submitStudentWork}>
-                    <label>
-                      <span>{mySubmission ? "Enviar una nueva versión" : "Tu respuesta"}</span>
-                      <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={5} maxLength={2000} placeholder="Explica tu trabajo o escribe tu respuesta…" />
-                    </label>
+                    <div className="workshop-rich-field">
+                      <label>{mySubmission ? "Enviar una nueva versión" : "Tu respuesta"}</label>
+                      <ForumRichText
+                        content={contentRich}
+                        editorKey={`workshop-submission-${task.id}-${contentRevision}`}
+                        maxLength={2_000}
+                        onChange={(richText, plainText) => {
+                          setContentRich(richText);
+                          setContent(plainText);
+                        }}
+                      />
+                    </div>
                     <label className="workshop-delivery-link">
                       <span>Enlace <small>Opcional</small></span>
                       <input type="url" value={link} onChange={(event) => setLink(event.target.value)} maxLength={2000} placeholder="https://ejemplo.com/mi-trabajo" />
@@ -637,7 +826,53 @@ function WorkshopTaskDetailDialog({
             ) : (
               <section className="workshop-teacher-review">
                 <div className="workshop-submission-tabs"><span><Users size={16} /> Entregas ({submissions.length}/{task.audienceStudentIds.length})</span>{submissions.length ? submissions.map((submission) => <button className={selectedSubmission?.id === submission.id ? "active" : ""} key={submission.id} onClick={() => setSelectedSubmissionId(submission.id)}><i>{studentById.get(submission.studentId)?.initials ?? submission.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</i><span><strong>{submission.studentName}</strong><small>Versión {submission.version} · {submission.status === "reviewed" ? "Finalizada" : submission.status === "feedback" ? "Con comentarios" : "Por revisar"}</small></span></button>) : <p>Aún no hay entregas.</p>}</div>
-                {selectedSubmission && <div className="workshop-review-pane"><span className="eyebrow">Entrega de {selectedSubmission.studentName}</span><p>{selectedSubmission.content || (selectedSubmission.link ? "Entrega mediante enlace." : "Entrega basada en archivos adjuntos.")}</p>{selectedSubmission.link && <a className="workshop-submission-link" href={selectedSubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace del alumno</a>}{selectedSubmission.attachments.map((attachment) => <button className="workshop-submission-file" key={attachment.id} onClick={() => void openAttachment(attachment, selectedSubmission.studentId)}><FileText size={17} /> {attachment.name} <Download size={15} /></button>)}<label><span>Retroalimentación</span><textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={5} maxLength={1600} placeholder="Reconoce lo logrado e indica el siguiente paso…" /></label><div><button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button><button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button></div></div>}
+                {selectedSubmission && (
+                  <div className="workshop-review-pane">
+                    <span className="eyebrow">Entrega de {selectedSubmission.studentName}</span>
+                    {selectedSubmission.content ? (
+                      <div className="workshop-submission-rich">
+                        <ForumRichText
+                          content={selectedSubmission.contentRich || normalizeForumRichText(selectedSubmission.content)}
+                          editorKey={`workshop-submission-reader-${task.id}-${selectedSubmission.studentId}-${selectedSubmission.version}`}
+                          editable={false}
+                        />
+                      </div>
+                    ) : (
+                      <p>{selectedSubmission.link ? "Entrega mediante enlace." : "Entrega basada en archivos adjuntos."}</p>
+                    )}
+                    {selectedSubmission.link && <a className="workshop-submission-link" href={selectedSubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace del alumno</a>}
+                    {selectedSubmission.attachments.length > 0 && (
+                      <div className="workshop-submission-files">
+                        <span>Archivos enviados</span>
+                        {selectedSubmission.attachments.map((attachment) => (
+                          <WorkshopAttachmentRow
+                            key={attachment.id}
+                            attachment={attachment}
+                            downloading={downloadingPath === attachment.storagePath}
+                            onPreview={() => void openAttachment(attachment, selectedSubmission.studentId)}
+                            onDownload={() => void downloadAttachment(attachment, selectedSubmission.studentId)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <div className="workshop-rich-field">
+                      <label>Retroalimentación</label>
+                      <ForumRichText
+                        content={feedbackRich}
+                        editorKey={`workshop-feedback-${task.id}-${selectedSubmission.studentId}`}
+                        maxLength={1_600}
+                        onChange={(richText, plainText) => {
+                          setFeedbackRich(richText);
+                          setFeedback(plainText);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button>
+                      <button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button>
+                    </div>
+                  </div>
+                )}
               </section>
             )}
           </main>
@@ -651,6 +886,7 @@ function WorkshopTaskDetailDialog({
           <WorkshopFileViewer
             file={previewAttachment}
             url={previewUrl}
+            previewSource={previewSource}
             loading={previewLoading}
             onClose={closeAttachmentPreview}
           />

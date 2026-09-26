@@ -243,6 +243,9 @@ function taskFromData(
     subject: String(data.subject ?? "General"),
     title: String(data.title ?? "Actividad sin nombre"),
     description: String(data.description ?? ""),
+    descriptionRich: data.descriptionRich
+      ? String(data.descriptionRich)
+      : undefined,
     dueAt: asIso(data.dueAt),
     publishAt: data.publishAt ? asIso(data.publishAt) : undefined,
     publishedAt: data.publishedAt ? asIso(data.publishedAt) : undefined,
@@ -599,6 +602,9 @@ export async function createTaskAssignment(
     subject: input.subject,
     title: input.title.trim(),
     description: input.description.trim(),
+    descriptionRich: normalizeForumRichText(
+      input.descriptionRich || input.description,
+    ),
     dueAt: Timestamp.fromDate(dueAt),
     publishAt:
       input.publicationMode === "scheduled" && input.publishAt
@@ -714,7 +720,7 @@ export async function deleteTaskAssignment(task: TaskAssignment) {
 
 export async function updateTaskAssignment(
   task: TaskAssignment,
-  input: Pick<TaskAssignment, "title" | "description" | "dueAt" | "links" | "attachments"> & { files: File[] },
+  input: Pick<TaskAssignment, "title" | "description" | "descriptionRich" | "dueAt" | "links" | "attachments"> & { files: File[] },
 ) {
   if (!firebase.functions || !isFirebaseTaskAssignment(task)) {
     throw new Error("Esta tarea no se puede editar porque no está sincronizada con Firebase.");
@@ -752,6 +758,7 @@ export async function updateTaskAssignment(
       firestorePath: string;
       title: string;
       description: string;
+      descriptionRich: string;
       dueAt: string;
       links: TaskAssignment["links"];
       attachments: TaskAttachment[];
@@ -764,6 +771,9 @@ export async function updateTaskAssignment(
       firestorePath: task.firestorePath,
       title: input.title,
       description: input.description,
+      descriptionRich: normalizeForumRichText(
+        input.descriptionRich || input.description,
+      ),
       dueAt: input.dueAt,
       links: input.links,
       attachments,

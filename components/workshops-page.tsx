@@ -41,10 +41,12 @@ import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
+import { ForumRichText } from "@/components/forum-rich-text";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { WorkshopTasks } from "@/components/workshop-tasks";
 import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
 import { friendlyFirebaseError } from "@/lib/firebase";
+import { normalizeForumRichText } from "@/lib/forum-rich-text";
 import {
   deleteWorkshopResource,
   ensureDefaultWorkshops,
@@ -268,7 +270,7 @@ export function WorkshopsPage({
 
   async function uploadResource(
     workshop: Workshop,
-    input: { title: string; description: string; files: File[]; links: WorkshopLink[] },
+    input: { title: string; description: string; descriptionRich: string; files: File[]; links: WorkshopLink[] },
   ) {
     if (!firebaseReady) throw new Error("Inicia sesión para subir recursos.");
     await uploadWorkshopResource(workshop, profile, input);
@@ -806,7 +808,17 @@ function WorkshopDetail({
                           : resource.fileName}
                       </small>
                       <strong>{resource.title}</strong>
-                      <p>{resource.description || "Material disponible para el taller."}</p>
+                      {resource.description ? (
+                        <div className="workshop-rich-summary">
+                          <ForumRichText
+                            content={resource.descriptionRich || normalizeForumRichText(resource.description)}
+                            editorKey={`workshop-resource-reader-${resource.id}`}
+                            editable={false}
+                          />
+                        </div>
+                      ) : (
+                        <p>Material disponible para el taller.</p>
+                      )}
                     </span>
                     {!multipleFiles && <ChevronRight size={18} />}
                   </div>
@@ -910,6 +922,9 @@ function WorkshopDetail({
 function WorkshopResourceEditDialog({ resource, onCancel }: { resource: WorkshopResource; onCancel: () => void }) {
   const [title, setTitle] = useState(resource.title);
   const [description, setDescription] = useState(resource.description);
+  const [descriptionRich, setDescriptionRich] = useState(() =>
+    resource.descriptionRich || normalizeForumRichText(resource.description),
+  );
   const [links, setLinks] = useState<WorkshopLink[]>(resource.links);
   const [busy, setBusy] = useState(false);
 
@@ -917,7 +932,12 @@ function WorkshopResourceEditDialog({ resource, onCancel }: { resource: Workshop
     event.preventDefault();
     setBusy(true);
     try {
-      await updateWorkshopResource(resource, { title: title.trim(), description: description.trim(), links });
+      await updateWorkshopResource(resource, {
+        title: title.trim(),
+        description: description.trim(),
+        descriptionRich,
+        links,
+      });
       toast.success("Recurso actualizado");
       onCancel();
     } catch (error) {
@@ -929,7 +949,18 @@ function WorkshopResourceEditDialog({ resource, onCancel }: { resource: Workshop
 
   return <ContentEditDialog open eyebrow="Recurso de taller" title="Editar recurso" description="Cambia el nombre o la descripción que ve el grupo." note="Los archivos originales y su historial permanecen intactos." busy={busy} onCancel={onCancel} onSubmit={save}>
     <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
-    <label>Descripción<textarea value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} /></label>
+    <div className="workshop-rich-field">
+      <label>Descripción</label>
+      <ForumRichText
+        content={descriptionRich}
+        editorKey={`workshop-resource-edit-${resource.id}`}
+        maxLength={1_000}
+        onChange={(richText, plainText) => {
+          setDescriptionRich(richText);
+          setDescription(plainText);
+        }}
+      />
+    </div>
     <WorkshopLinksEditor links={links} onChange={setLinks} />
   </ContentEditDialog>;
 }
@@ -1219,11 +1250,14 @@ function WorkshopUploadDialog({
   onClose: () => void;
   onUpload: (
     workshop: Workshop,
-    input: { title: string; description: string; files: File[]; links: WorkshopLink[] },
+    input: { title: string; description: string; descriptionRich: string; files: File[]; links: WorkshopLink[] },
   ) => Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [descriptionRich, setDescriptionRich] = useState(() =>
+    normalizeForumRichText(""),
+  );
   const [files, setFiles] = useState<File[]>([]);
   const [links, setLinks] = useState<WorkshopLink[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -1260,7 +1294,13 @@ function WorkshopUploadDialog({
     }
     setUploading(true);
     try {
-      await onUpload(workshop, { title: title.trim(), description: description.trim(), files, links });
+      await onUpload(workshop, {
+        title: title.trim(),
+        description: description.trim(),
+        descriptionRich,
+        files,
+        links,
+      });
       toast.success(files.length === 1 ? "Recurso publicado" : `Recurso con ${files.length} archivos publicado`, {
         description: "Los participantes ya pueden consultar los archivos.",
       });
@@ -1302,10 +1342,18 @@ function WorkshopUploadDialog({
             <span>Título del recurso</span>
             <input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={100} placeholder="Ej. Reto de programación creativa" required />
           </label>
-          <label>
-            <span>Descripción <small>Opcional</small></span>
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={280} rows={3} placeholder="Cuenta brevemente para qué sirve este material…" />
-          </label>
+          <div className="workshop-rich-field">
+            <label>Descripción <small>Opcional</small></label>
+            <ForumRichText
+              content={descriptionRich}
+              editorKey={`workshop-resource-create-${workshop.id}`}
+              maxLength={1_000}
+              onChange={(richText, plainText) => {
+                setDescriptionRich(richText);
+                setDescription(plainText);
+              }}
+            />
+          </div>
           <WorkshopLinksEditor links={links} onChange={setLinks} />
           <label className={`workshop-file-drop ${files.length ? "has-file" : ""}`}>
             <input

@@ -22,6 +22,7 @@ import {
   uploadBytes,
 } from "firebase/storage";
 import { firebase } from "./firebase";
+import { normalizeForumRichText } from "./forum-rich-text";
 import type {
   UserProfile,
   Workshop,
@@ -208,6 +209,9 @@ function resourceFromSnapshot(
     institutionId: String(data.institutionId ?? ""),
     title: String(data.title ?? "Recurso del taller"),
     description: String(data.description ?? ""),
+    descriptionRich: data.descriptionRich
+      ? String(data.descriptionRich)
+      : undefined,
     links: workshopLinksFromData(data.links),
     attachments,
     fileName: firstAttachment?.name ?? "archivo",
@@ -420,7 +424,7 @@ function safeFileName(value: string) {
 export async function uploadWorkshopResource(
   workshop: Workshop,
   profile: UserProfile,
-  input: { title: string; description: string; files: File[]; links: WorkshopLink[] },
+  input: { title: string; description: string; descriptionRich: string; files: File[]; links: WorkshopLink[] },
 ) {
   const { db, storage } = requireFirebase();
   const links = normalizeWorkshopLinks(input.links);
@@ -478,6 +482,9 @@ export async function uploadWorkshopResource(
       workshopId: workshop.id,
       title: input.title.trim(),
       description: input.description.trim(),
+      descriptionRich: normalizeForumRichText(
+        input.descriptionRich || input.description,
+      ),
       links,
       attachments,
       fileName: firstAttachment.name,
@@ -512,7 +519,7 @@ export async function deleteWorkshopResource(resource: WorkshopResource) {
 
 export async function updateWorkshopResource(
   resource: WorkshopResource,
-  input: Pick<WorkshopResource, "title" | "description" | "links">,
+  input: Pick<WorkshopResource, "title" | "description" | "descriptionRich" | "links">,
 ) {
   if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
   const links = normalizeWorkshopLinks(input.links);
@@ -552,6 +559,7 @@ export async function getWorkshopResourceUrl(
 export type WorkshopTaskCreateInput = {
   title: string;
   description: string;
+  descriptionRich: string;
   dueAt: string;
   status: "draft" | "published";
   audienceStudentIds: string[];
@@ -589,6 +597,9 @@ function taskFromData(id: string, data: DocumentData): WorkshopTask {
     institutionId: String(data.institutionId ?? ""),
     title: String(data.title ?? "Trabajo del taller"),
     description: String(data.description ?? ""),
+    descriptionRich: data.descriptionRich
+      ? String(data.descriptionRich)
+      : undefined,
     dueAt: asIso(data.dueAt),
     status: ["draft", "closed"].includes(String(data.status))
       ? (String(data.status) as WorkshopTask["status"])
@@ -621,6 +632,7 @@ function submissionFromData(
     studentId: String(data.studentId ?? id),
     studentName: String(data.studentName ?? "Alumno CEHF"),
     content: String(data.content ?? ""),
+    contentRich: data.contentRich ? String(data.contentRich) : undefined,
     link: String(data.link ?? ""),
     attachments: attachmentsFromData(data.attachments),
     version: Math.max(1, Number(data.version ?? 1)),
@@ -628,6 +640,9 @@ function submissionFromData(
       ? (String(data.status) as WorkshopSubmission["status"])
       : "submitted",
     teacherFeedback: String(data.teacherFeedback ?? ""),
+    teacherFeedbackRich: data.teacherFeedbackRich
+      ? String(data.teacherFeedbackRich)
+      : undefined,
     submittedAt: asIso(data.submittedAt),
     feedbackAt: data.feedbackAt ? asIso(data.feedbackAt) : undefined,
     reviewedAt: data.reviewedAt ? asIso(data.reviewedAt) : undefined,
@@ -781,6 +796,9 @@ export async function createWorkshopTask(
       workshopId: workshop.id,
       title: input.title.trim(),
       description: input.description.trim(),
+      descriptionRich: normalizeForumRichText(
+        input.descriptionRich || input.description,
+      ),
       dueAt: new Date(input.dueAt),
       status: input.status,
       audienceStudentIds,
@@ -832,7 +850,7 @@ export async function deleteWorkshopTask(task: WorkshopTask) {
 
 export async function updateWorkshopTask(
   task: WorkshopTask,
-  input: Pick<WorkshopTask, "title" | "description" | "dueAt" | "links">,
+  input: Pick<WorkshopTask, "title" | "description" | "descriptionRich" | "dueAt" | "links">,
 ) {
   if (!firebase.functions) throw new Error("Firebase no está configurado para Talleres.");
   const links = normalizeWorkshopLinks(input.links);
@@ -887,7 +905,7 @@ export function watchWorkshopSubmissions(
 export async function submitWorkshopTask(
   task: WorkshopTask,
   profile: UserProfile,
-  input: { content: string; link: string; files: File[] },
+  input: { content: string; contentRich: string; link: string; files: File[] },
 ) {
   if (profile.role !== "student") {
     throw new Error("Sólo los alumnos pueden enviar este trabajo.");
@@ -918,6 +936,7 @@ export async function submitWorkshopTask(
       ? String(previous.data().studentName ?? profile.name)
       : profile.name,
     content: input.content.trim(),
+    contentRich: normalizeForumRichText(input.contentRich || input.content),
     link,
     attachments,
     version,
@@ -945,6 +964,7 @@ export async function saveWorkshopFeedback(
   task: WorkshopTask,
   submission: WorkshopSubmission,
   feedback: string,
+  feedbackRich: string,
   reviewed: boolean,
 ) {
   const { db } = requireFirebase();
@@ -962,6 +982,7 @@ export async function saveWorkshopFeedback(
     ),
     {
       teacherFeedback: feedback.trim(),
+      teacherFeedbackRich: normalizeForumRichText(feedbackRich || feedback),
       status: reviewed ? "reviewed" : "feedback",
       feedbackAt: serverTimestamp(),
       reviewedAt: reviewed ? serverTimestamp() : null,
@@ -975,6 +996,19 @@ export async function getWorkshopTaskAttachmentUrl(
   attachment: WorkshopTaskAttachment,
   submissionStudentId?: string,
 ) {
+  return (await getWorkshopTaskAttachmentAccess(
+    task,
+    attachment,
+    submissionStudentId,
+  )).url;
+}
+
+export async function getWorkshopTaskAttachmentAccess(
+  task: WorkshopTask,
+  attachment: WorkshopTaskAttachment,
+  submissionStudentId?: string,
+  includePreviewData = false,
+) {
   if (!attachment.storagePath) {
     throw new Error("Este archivo no está disponible.");
   }
@@ -987,13 +1021,21 @@ export async function getWorkshopTaskAttachmentUrl(
       taskId: string;
       storagePath: string;
       submissionStudentId?: string;
+      includePreviewData?: boolean;
     },
-    { url: string }
+    { url: string; previewBase64?: string }
   >(firebase.functions, "getWorkshopFileUrl");
-  return (await callable({
+  const result = (await callable({
     workshopId: task.workshopId,
     taskId: task.id,
     storagePath: attachment.storagePath,
     ...(submissionStudentId ? { submissionStudentId } : {}),
-  })).data.url;
+    ...(includePreviewData ? { includePreviewData: true } : {}),
+  })).data;
+  return {
+    url: result.url,
+    previewSource: result.previewBase64
+      ? `data:${attachment.contentType || "application/pdf"};base64,${result.previewBase64}`
+      : "",
+  };
 }

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { AnimatedOrb } from "@/components/animated-orb";
+import { WorkshopPdfPreview } from "@/components/workshop-pdf-preview";
 
 export type WorkshopViewableFile = {
   name: string;
@@ -25,7 +26,7 @@ function previewKind(file: WorkshopViewableFile) {
   if (contentType.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(extension ?? "")) return "image";
   if (contentType.startsWith("video/") || ["mp4", "webm", "mov"].includes(extension ?? "")) return "video";
   if (contentType.startsWith("audio/") || ["mp3", "wav", "ogg", "m4a"].includes(extension ?? "")) return "audio";
-  if (contentType === "application/pdf" || extension === "pdf") return "document";
+  if (contentType === "application/pdf" || extension === "pdf") return "pdf";
   if (contentType.startsWith("text/") || ["txt", "md", "csv"].includes(extension ?? "")) return "document";
   return "download";
 }
@@ -33,11 +34,13 @@ function previewKind(file: WorkshopViewableFile) {
 export function WorkshopFileViewer({
   file,
   url,
+  previewSource = "",
   loading,
   onClose,
 }: {
   file: WorkshopViewableFile;
   url: string;
+  previewSource?: string;
   loading: boolean;
   onClose: () => void;
 }) {
@@ -108,6 +111,10 @@ export function WorkshopFileViewer({
               <strong>{file.name}</strong>
               <audio src={url} controls autoPlay />
             </div>
+          ) : kind === "pdf" && previewSource ? (
+            <WorkshopPdfPreview key={url} url={previewSource} name={file.name} />
+          ) : kind === "pdf" ? (
+            <iframe src={url} title={`Vista previa de ${file.name}`} />
           ) : kind === "document" ? (
             <iframe src={url} title={`Vista previa de ${file.name}`} />
           ) : (

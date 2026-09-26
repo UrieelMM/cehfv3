@@ -461,6 +461,7 @@ export type TaskAssignment = {
   subject: string;
   title: string;
   description: string;
+  descriptionRich?: string;
   dueAt: string;
   publishAt?: string;
   publishedAt?: string;
@@ -543,6 +544,7 @@ export type TaskExtension = {
 export type TaskCreateInput = {
   title: string;
   description: string;
+  descriptionRich: string;
   subject: string;
   subjectId: string;
   dueAt: string;
@@ -953,6 +955,7 @@ export type WorkshopResource = {
   institutionId: string;
   title: string;
   description: string;
+  descriptionRich?: string;
   links: WorkshopLink[];
   attachments: WorkshopResourceFile[];
   /** Legacy first-file fields kept while historical resources are migrated. */
@@ -1006,6 +1009,7 @@ export type WorkshopTask = {
   institutionId: string;
   title: string;
   description: string;
+  descriptionRich?: string;
   dueAt: string;
   status: WorkshopTaskStatus;
   audienceStudentIds: string[];
@@ -1030,11 +1034,13 @@ export type WorkshopSubmission = {
   studentId: string;
   studentName: string;
   content: string;
+  contentRich?: string;
   link: string;
   attachments: WorkshopTaskAttachment[];
   version: number;
   status: WorkshopSubmissionStatus;
   teacherFeedback: string;
+  teacherFeedbackRich?: string;
   submittedAt: string;
   feedbackAt?: string;
   reviewedAt?: string;

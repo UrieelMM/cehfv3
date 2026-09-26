@@ -35,3 +35,20 @@ test("las entregas conservan texto plano y contenido enriquecido compatible", as
   assert.match(rules, /"teacherFeedback", "teacherFeedbackRich"/);
   assert.match(rules, /function validHistoryRichText\(data\)/);
 });
+
+test("las consignas de Tareas conservan formato tras recargar", async () => {
+  const [workflow, data, types, rules, functions] = await Promise.all([
+    source("components/tasks-workflow.tsx"),
+    source("lib/tasks-firebase.ts"),
+    source("lib/types.ts"),
+    source("firestore.rules"),
+    source("functions/src/index.ts"),
+  ]);
+
+  assert.match(workflow, /editorKey="task-description-create"/);
+  assert.match(workflow, /task\.descriptionRich \|\| normalizeForumRichText\(task\.description\)/);
+  assert.match(data, /descriptionRich: normalizeForumRichText/);
+  assert.match(types, /export type TaskAssignment = \{[\s\S]*?descriptionRich\?: string;/);
+  assert.match(rules, /function validTaskRichText\(data\)/);
+  assert.match(functions, /descriptionRich: forumRichText\([\s\S]*?4_000/);
+});

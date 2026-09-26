@@ -518,6 +518,14 @@ service cloud.firestore {
       }
 
       match /workshops/{workshopId} {
+        function validRichTextField(data, field) {
+          return !data.keys().hasAny([field])
+            || (
+              data[field] is string
+              && data[field].size() <= 50000
+            );
+        }
+
         function validWorkshopAccess(data) {
           return (
               !data.keys().hasAny(["zoomUrl"])
@@ -608,6 +616,7 @@ service cloud.firestore {
             && request.resource.data.workshopId == workshopId
             && request.resource.data.uploadedBy == request.auth.uid
             && request.resource.data.title is string
+            && validRichTextField(request.resource.data, "descriptionRich")
             && request.resource.data.storagePath is string
             && (
               !("attachments" in request.resource.data)
@@ -686,6 +695,7 @@ service cloud.firestore {
             && request.resource.data.createdBy == request.auth.uid
             && request.resource.data.title is string
             && request.resource.data.description is string
+            && validRichTextField(request.resource.data, "descriptionRich")
             && request.resource.data.dueAt is timestamp
             && request.resource.data.status in ["draft", "published"]
             && request.resource.data.attachments is list
@@ -703,6 +713,11 @@ service cloud.firestore {
           allow delete: if false;
 
           match /submissions/{studentId} {
+            function validWorkshopSubmissionRichText(data) {
+              return validRichTextField(data, "contentRich")
+                && validRichTextField(data, "teacherFeedbackRich");
+            }
+
             function parentTask() {
               return taskData();
             }
@@ -753,6 +768,7 @@ service cloud.firestore {
               && request.resource.data.institutionId == institutionId
               && request.resource.data.status == "submitted"
               && validSubmissionLink(request.resource.data)
+              && validWorkshopSubmissionRichText(request.resource.data)
               && request.resource.data.version == 1;
             allow update: if (
               studentCanSubmit()
@@ -766,20 +782,23 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly([
                   "content", "link", "attachments", "version", "status",
-                  "teacherFeedback", "submittedAt", "feedbackAt",
+                  "contentRich", "teacherFeedback", "teacherFeedbackRich",
+                  "submittedAt", "feedbackAt",
                   "reviewedAt", "updatedAt"
                 ])
               && validSubmissionLink(request.resource.data)
+              && validWorkshopSubmissionRichText(request.resource.data)
             ) || (
               canManageWorkshopTask(parentTask())
               && request.resource.data.studentId == resource.data.studentId
               && request.resource.data.version == resource.data.version
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly([
-                  "teacherFeedback", "status", "feedbackAt",
+                  "teacherFeedback", "teacherFeedbackRich", "status", "feedbackAt",
                   "reviewedAt", "updatedAt"
                 ])
               && request.resource.data.status in ["feedback", "reviewed"]
+              && validWorkshopSubmissionRichText(request.resource.data)
             );
             allow delete: if false;
 
@@ -797,6 +816,7 @@ service cloud.firestore {
                 && request.resource.data.studentId == studentId
                 && request.resource.data.taskId == taskId
                 && request.resource.data.status == "submitted"
+                && validWorkshopSubmissionRichText(request.resource.data)
                 && validSubmissionLink(request.resource.data);
               allow update, delete: if false;
             }
@@ -1380,6 +1400,14 @@ service cloud.firestore {
       }
 
       match /ciclosEscolares/{schoolYearId}/bimestres/{termId}/semanas/{weekId}/materias/{subjectId}/tareas/{taskId} {
+        function validTaskRichText(data) {
+          return !data.keys().hasAny(["descriptionRich"])
+            || (
+              data.descriptionRich is string
+              && data.descriptionRich.size() <= 50000
+            );
+        }
+
         function taskBelongsToInstitution(data) {
           return isActive()
             && profile().institutionId == institutionId
@@ -1456,6 +1484,7 @@ service cloud.firestore {
             weekId
           )
           && request.resource.data.subjectId == subjectId
+          && validTaskRichText(request.resource.data)
           && request.resource.data.status in ["draft", "scheduled", "published"];
         allow update: if taskBelongsToInstitution(resource.data)
           && taskBelongsToInstitution(request.resource.data)
@@ -1466,6 +1495,7 @@ service cloud.firestore {
           && request.resource.data.termId == resource.data.termId
           && request.resource.data.weekId == resource.data.weekId
           && request.resource.data.subjectId == resource.data.subjectId
+          && validTaskRichText(request.resource.data)
           && request.resource.data.status in [
             "draft", "scheduled", "published", "closed", "archived"
           ];
@@ -1557,14 +1587,14 @@ service cloud.firestore {
                 !data.keys().hasAny(["contentRich"])
                 || (
                   data.contentRich is string
-                  && data.contentRich.size() <= 100000
+                  && data.contentRich.size() <= 50000
                 )
               )
               && (
                 !data.keys().hasAny(["teacherFeedbackRich"])
                 || (
                   data.teacherFeedbackRich is string
-                  && data.teacherFeedbackRich.size() <= 100000
+                  && data.teacherFeedbackRich.size() <= 50000
                 )
               );
           }
@@ -1573,7 +1603,7 @@ service cloud.firestore {
             return !data.keys().hasAny(["messageRich"])
               || (
                 data.messageRich is string
-                && data.messageRich.size() <= 100000
+                && data.messageRich.size() <= 50000
               );
           }
 

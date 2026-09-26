@@ -1814,6 +1814,7 @@ export const getWorkshopFileUrl = onCall(async (request) => {
   const input = (request.data ?? {}) as Record<string, unknown>;
   const workshopId = deletionId(input.workshopId, "taller");
   const storagePath = String(input.storagePath ?? "").trim();
+  const includePreviewData = input.includePreviewData === true;
   if (!storagePath || storagePath.length > 2_000 || storagePath.includes("\u0000")) {
     throw new HttpsError("invalid-argument", "La ruta del archivo no es válida.");
   }
@@ -1908,7 +1909,16 @@ export const getWorkshopFileUrl = onCall(async (request) => {
   }
 
   try {
-    return { url: await authorizedWorkshopDownloadUrl(storagePath) };
+    const url = await authorizedWorkshopDownloadUrl(storagePath);
+    if (!includePreviewData) return { url };
+    const [contents] = await getStorage().bucket().file(storagePath).download();
+    if (contents.byteLength >= 20 * 1024 * 1024) {
+      throw new HttpsError(
+        "failed-precondition",
+        "El archivo es demasiado grande para previsualizarlo. Puedes descargarlo.",
+      );
+    }
+    return { url, previewBase64: contents.toString("base64") };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
     logger.error("Could not create workshop file URL", {
@@ -2053,9 +2063,16 @@ export const updateManagedContent = onCall(async (request) => {
       .filter((attachment) => !retainedStoragePaths.has(String(attachment.storagePath ?? "")))
       .map((attachment) => String(attachment.storagePath ?? ""))
       .filter((path) => path.startsWith(`${firestorePath}/recursos/`));
+    const description = materialText(input.description, "La descripción", 3, 4_000);
     updates = {
       title,
-      description: materialText(input.description, "La descripción", 3, 4_000),
+      description,
+      descriptionRich: forumRichText(
+        input.descriptionRich,
+        "La descripción",
+        description,
+        4_000,
+      ),
       dueAt: editableDate(input.dueAt, "La fecha límite"),
       links: materialLinks(input.links),
       attachments,
@@ -2135,9 +2152,17 @@ export const updateManagedContent = onCall(async (request) => {
       throw new HttpsError("not-found", "El archivo del taller ya no existe.");
     }
     title = materialText(input.title, "El título", 3, 140);
+    const description = optionalMaterialText(input.description, "La descripción", 1_000);
     updates = {
       title,
-      description: optionalMaterialText(input.description, "La descripción", 1_000),
+      description,
+      descriptionRich: forumRichText(
+        input.descriptionRich,
+        "La descripción",
+        description,
+        1_000,
+        0,
+      ),
       links: workshopLinks(input.links),
       updatedAt: Timestamp.now(),
     };
@@ -2153,9 +2178,16 @@ export const updateManagedContent = onCall(async (request) => {
       throw new HttpsError("permission-denied", "No puedes editar esta actividad del taller.");
     }
     title = materialText(input.title, "El título", 3, 140);
+    const description = materialText(input.description, "La descripción", 3, 2_000);
     updates = {
       title,
-      description: materialText(input.description, "La descripción", 3, 2_000),
+      description,
+      descriptionRich: forumRichText(
+        input.descriptionRich,
+        "La descripción",
+        description,
+        2_000,
+      ),
       dueAt: editableDate(input.dueAt, "La fecha límite"),
       links: workshopLinks(input.links),
       updatedAt: Timestamp.now(),
@@ -6508,6 +6540,7 @@ function forumRichText(
   label: string,
   expectedPlainText: string,
   maximumPlainText: number,
+  minimumPlainText = 1,
 ) {
   const serialized = String(value ?? "").trim();
   if (!serialized || serialized.length > 50_000) {
@@ -6551,7 +6584,12 @@ function forumRichText(
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  const normalizedExpected = forumText(expectedPlainText, label, 1, maximumPlainText);
+  const normalizedExpected = forumText(
+    expectedPlainText,
+    label,
+    minimumPlainText,
+    maximumPlainText,
+  );
   if (plainText !== normalizedExpected) {
     throw new HttpsError(
       "invalid-argument",

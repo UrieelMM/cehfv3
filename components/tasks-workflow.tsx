@@ -432,6 +432,9 @@ export function TaskCreateModal({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [descriptionRich, setDescriptionRich] = useState(() =>
+    normalizeForumRichText(""),
+  );
   const [subject, setSubject] = useState("Ciencias");
   const [dueAt, setDueAt] = useState(() => initialTaskDueAt(calendar));
   const [targetGroup, setTargetGroup] = useState("");
@@ -491,6 +494,7 @@ export function TaskCreateModal({
       await onCreate({
         title: title.trim(),
         description: description.trim(),
+        descriptionRich,
         subject,
         subjectId: subject
           .normalize("NFD")
@@ -569,16 +573,18 @@ export function TaskCreateModal({
                 placeholder="Ej. Bitácora de un cambio"
               />
             </label>
-            <label>
-              Descripción e indicaciones
-              <textarea
-                required
-                rows={5}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder="Explica qué debe hacer el alumno y qué esperas recibir…"
+            <div className="task-rich-field task-description-editor">
+              <label>Descripción e indicaciones</label>
+              <ForumRichText
+                content={descriptionRich}
+                editorKey="task-description-create"
+                maxLength={4_000}
+                onChange={(richText, plainText) => {
+                  setDescriptionRich(richText);
+                  setDescription(plainText);
+                }}
               />
-            </label>
+            </div>
             <div className="task-form-grid">
               <label>
                 Materia
@@ -1055,7 +1061,11 @@ export function TaskDetailModal({
                 <FileText size={16} /> Actividad para {task.targetGroup}
               </span>
               <h2>{task.title}</h2>
-              <p>{task.description}</p>
+              <ForumRichText
+                content={task.descriptionRich || normalizeForumRichText(task.description)}
+                editorKey={`task-description-reader-${task.id}`}
+                editable={false}
+              />
               <span className="task-teacher-line">
                 <UserRound size={15} /> {task.teacherName}
               </span>
@@ -1222,6 +1232,9 @@ export function TaskDetailModal({
 function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAssignment; onCancel: () => void }) {
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description);
+  const [descriptionRich, setDescriptionRich] = useState(() =>
+    task.descriptionRich || normalizeForumRichText(task.description),
+  );
   const [dueAt, setDueAt] = useState(() => toLocalDateTime(new Date(task.dueAt)));
   const [links, setLinks] = useState(task.links);
   const [attachments, setAttachments] = useState(task.attachments);
@@ -1251,6 +1264,7 @@ function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAss
       await updateTaskAssignment(task, {
         title: title.trim(),
         description: description.trim(),
+        descriptionRich,
         dueAt: new Date(dueAt).toISOString(),
         links: links.filter((link) => link.url.trim()).map((link) => ({ ...link, label: link.label.trim() || "Enlace", url: link.url.trim() })),
         attachments,
@@ -1268,7 +1282,18 @@ function TaskEditDialog({ open, task, onCancel }: { open: boolean; task: TaskAss
   return (
     <ContentEditDialog open={open} eyebrow="Tarea académica" title="Editar tarea" description="Corrige la información y administra los recursos de apoyo." note="La materia, semana, grupo, entregas e historial permanecen vinculados a la misma tarea." busy={busy} onCancel={onCancel} onSubmit={save}>
       <label>Título<input value={title} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
-      <label>Descripción<textarea value={description} maxLength={4000} required onChange={(event) => setDescription(event.target.value)} /></label>
+      <div className="task-rich-field task-description-editor">
+        <label>Descripción</label>
+        <ForumRichText
+          content={descriptionRich}
+          editorKey={`task-description-edit-${task.id}`}
+          maxLength={4_000}
+          onChange={(richText, plainText) => {
+            setDescriptionRich(richText);
+            setDescription(plainText);
+          }}
+        />
+      </div>
       <label>Fecha límite<input type="datetime-local" value={dueAt} required onChange={(event) => setDueAt(event.target.value)} /></label>
       <div className="content-edit-section">
         <label>Enlaces de apoyo</label>

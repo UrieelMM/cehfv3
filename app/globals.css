@@ -126,6 +126,8 @@
   font-size: 0.82rem;
   font-weight: 750;
 }
+.content-edit-fields .workshop-rich-field,
+.content-edit-fields .task-rich-field { display: grid; gap: 7px; }
 
 .content-edit-fields input,
 .content-edit-fields textarea,
