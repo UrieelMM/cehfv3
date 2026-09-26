@@ -1839,12 +1839,20 @@ export const getWorkshopFileUrl = onCall(async (request) => {
       .doc(resourceId)
       .get();
     const resource = resourceSnapshot.data();
+    const resourceAttachments = Array.isArray(resource?.attachments)
+      ? resource.attachments
+      : [];
+    const resourceContainsFile = resource?.storagePath === storagePath ||
+      resourceAttachments.some((attachment: unknown) => {
+        if (!attachment || typeof attachment !== "object") return false;
+        return String((attachment as Record<string, unknown>).storagePath ?? "") === storagePath;
+      });
     if (
       !resourceSnapshot.exists ||
       !resource ||
       resource.institutionId !== viewer.institutionId ||
       resource.workshopId !== workshopId ||
-      resource.storagePath !== storagePath ||
+      !resourceContainsFile ||
       !workshopIncludesViewer(workshop, viewer)
     ) {
       throw new HttpsError("permission-denied", "No puedes abrir este recurso del taller.");

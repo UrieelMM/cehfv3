@@ -63,6 +63,7 @@ import type {
   WorkshopAccessInput,
   WorkshopLink,
   WorkshopResource,
+  WorkshopResourceFile,
 } from "@/lib/types";
 
 type WorkshopsPageProps = {
@@ -85,12 +86,23 @@ function workshopResourceFromRoute() {
   return new URLSearchParams(window.location.search).get("resource");
 }
 
-function resourceIcon(resource: WorkshopResource) {
-  if (resource.contentType.startsWith("image/")) return FileImage;
-  if (resource.contentType.startsWith("audio/")) return Headphones;
-  if (resource.contentType.startsWith("video/")) return Video;
-  if (resource.contentType.includes("zip")) return FileArchive;
+function workshopResourceFileFromRoute() {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("file");
+}
+
+function resourceFileIcon(file: Pick<WorkshopResourceFile, "contentType">) {
+  if (file.contentType.startsWith("image/")) return FileImage;
+  if (file.contentType.startsWith("audio/")) return Headphones;
+  if (file.contentType.startsWith("video/")) return Video;
+  if (file.contentType.includes("zip")) return FileArchive;
   return FileText;
+}
+
+function resourceIcon(resource: WorkshopResource) {
+  return resource.attachments.length > 1
+    ? FolderOpen
+    : resourceFileIcon(resource.attachments[0] ?? resource);
 }
 
 function fileSize(value: number) {
@@ -133,6 +145,7 @@ export function WorkshopsPage({
   const [accessWorkshop, setAccessWorkshop] = useState<Workshop | null>(null);
   const [uploadWorkshop, setUploadWorkshop] = useState<Workshop | null>(null);
   const [previewResource, setPreviewResource] = useState<WorkshopResource | null>(null);
+  const [previewFile, setPreviewFile] = useState<WorkshopResourceFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const initializedRef = useRef(false);
@@ -211,13 +224,20 @@ export function WorkshopsPage({
 
   useEffect(() => {
     const resourceId = workshopResourceFromRoute();
-    if (!selected || !resourceId || previewResource?.id === resourceId) return;
+    const fileId = workshopResourceFileFromRoute();
+    if (
+      !selected ||
+      !resourceId ||
+      (previewResource?.id === resourceId && (!fileId || previewFile?.id === fileId))
+    ) return;
     const resource = selected.resources.find((candidate) => candidate.id === resourceId);
-    if (resource) void openResource(resource, false);
+    const attachment = resource?.attachments.find((candidate) => candidate.id === fileId)
+      ?? resource?.attachments[0];
+    if (resource && attachment) void openResource(resource, attachment, false);
   // openResource changes with the selected workshop; these values are the
   // complete synchronization boundary for a deep-linked resource.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewResource?.id, selected]);
+  }, [previewFile?.id, previewResource?.id, selected]);
 
   useEffect(() => {
     if (selectedId && !loading && !workshops.some((item) => item.id === selectedId)) {
@@ -235,6 +255,7 @@ export function WorkshopsPage({
   function closeWorkshop() {
     previewRequest.current += 1;
     setPreviewResource(null);
+    setPreviewFile(null);
     window.history.pushState({}, "", "/workshops");
     setSelectedId(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -258,7 +279,15 @@ export function WorkshopsPage({
     await deleteWorkshopResource(resource);
   }
 
-  async function openResource(resource: WorkshopResource, syncRoute = true) {
+  async function openResource(
+    resource: WorkshopResource,
+    attachment: WorkshopResourceFile = resource.attachments[0],
+    syncRoute = true,
+  ) {
+    if (!attachment) {
+      toast.error("Este recurso no contiene archivos disponibles.");
+      return;
+    }
     if (!firebaseReady) {
       toast.error("Inicia sesión para abrir este recurso.");
       return;
@@ -268,18 +297,20 @@ export function WorkshopsPage({
       window.history.pushState(
         {},
         "",
-        `/workshops/${encodeURIComponent(resource.workshopId)}?resource=${encodeURIComponent(resource.id)}`,
+        `/workshops/${encodeURIComponent(resource.workshopId)}?resource=${encodeURIComponent(resource.id)}&file=${encodeURIComponent(attachment.id)}`,
       );
     }
     setPreviewResource(resource);
+    setPreviewFile(attachment);
     setPreviewUrl("");
     setPreviewLoading(true);
     try {
-      const url = await getWorkshopResourceUrl(resource);
+      const url = await getWorkshopResourceUrl(resource, attachment);
       if (previewRequest.current === requestId) setPreviewUrl(url);
     } catch (error) {
       if (previewRequest.current === requestId) {
         setPreviewResource(null);
+        setPreviewFile(null);
         toast.error(errorMessage(error));
       }
     } finally {
@@ -290,6 +321,7 @@ export function WorkshopsPage({
   function closeResourcePreview() {
     previewRequest.current += 1;
     setPreviewResource(null);
+    setPreviewFile(null);
     setPreviewUrl("");
     setPreviewLoading(false);
     if (selectedId) {
@@ -357,12 +389,12 @@ export function WorkshopsPage({
             />
           )}
         </AnimatePresence>
-        {previewResource && (
+        {previewResource && previewFile && (
           <WorkshopFileViewer
             file={{
-              name: previewResource.fileName,
-              size: previewResource.size,
-              contentType: previewResource.contentType,
+              name: previewFile.name,
+              size: previewFile.size,
+              contentType: previewFile.contentType,
             }}
             url={previewUrl}
             loading={previewLoading}
@@ -535,7 +567,10 @@ function WorkshopDetail({
   onBack: () => void;
   onManageAccess: () => void;
   onUpload: () => void;
-  onOpenResource: (resource: WorkshopResource) => void;
+  onOpenResource: (
+    resource: WorkshopResource,
+    attachment?: WorkshopResourceFile,
+  ) => void;
   onDeleteResource: (resource: WorkshopResource) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
@@ -544,7 +579,12 @@ function WorkshopDetail({
   const [resourceToEdit, setResourceToEdit] = useState<WorkshopResource | null>(null);
   const reading = workshop.kind === "reading";
   const filteredResources = workshop.resources.filter((resource) =>
-    [resource.title, resource.description, resource.fileName, ...resource.links.map((link) => link.label)]
+    [
+      resource.title,
+      resource.description,
+      ...resource.attachments.map((attachment) => attachment.name),
+      ...resource.links.map((link) => link.label),
+    ]
       .join(" ")
       .toLocaleLowerCase("es-MX")
       .includes(query.trim().toLocaleLowerCase("es-MX")),
@@ -739,28 +779,73 @@ function WorkshopDetail({
           <div className="workshop-resource-grid">
             {filteredResources.map((resource) => {
               const Icon = resourceIcon(resource);
+              const totalSize = resource.attachments.reduce(
+                (sum, attachment) => sum + attachment.size,
+                0,
+              );
+              const multipleFiles = resource.attachments.length > 1;
               return (
                 <article className="workshop-resource-card" key={resource.id}>
-                  <button
-                    className="workshop-resource-main"
-                    onClick={() => onOpenResource(resource)}
+                  <div
+                    className={`workshop-resource-main${multipleFiles ? " is-bundle" : " is-single"}`}
+                    role={multipleFiles ? undefined : "button"}
+                    tabIndex={multipleFiles ? undefined : 0}
+                    onClick={multipleFiles ? undefined : () => onOpenResource(resource, resource.attachments[0])}
+                    onKeyDown={multipleFiles ? undefined : (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenResource(resource, resource.attachments[0]);
+                      }
+                    }}
                   >
                     <span className="workshop-resource-icon"><Icon size={22} /></span>
                     <span className="workshop-resource-copy">
-                      <small>{resource.fileName}</small>
+                      <small>
+                        {multipleFiles
+                          ? `${resource.attachments.length} archivos · ${fileSize(totalSize)}`
+                          : resource.fileName}
+                      </small>
                       <strong>{resource.title}</strong>
                       <p>{resource.description || "Material disponible para el taller."}</p>
                     </span>
-                    <ChevronRight size={18} />
-                  </button>
+                    {!multipleFiles && <ChevronRight size={18} />}
+                  </div>
+                  {multipleFiles && (
+                    <div
+                      className="workshop-resource-files"
+                      role="list"
+                      aria-label={`Archivos de ${resource.title}`}
+                    >
+                      {resource.attachments.map((attachment, index) => {
+                        const FileIcon = resourceFileIcon(attachment);
+                        return (
+                          <button
+                            type="button"
+                            key={attachment.id}
+                            onClick={() => onOpenResource(resource, attachment)}
+                          >
+                            <span><FileIcon size={15} /></span>
+                            <span>
+                              <strong>{attachment.name}</strong>
+                              <small>Archivo {index + 1} de {resource.attachments.length}</small>
+                            </span>
+                            <em>{fileSize(attachment.size)}</em>
+                            <ChevronRight size={15} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                   {resource.links.length > 0 && <div className="workshop-resource-links">{resource.links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> {link.label}</a>)}</div>}
                   <footer>
-                    <span>{fileSize(resource.size)} · {resourceDate(resource.createdAt)}</span>
+                    <span>{fileSize(totalSize)} · {resourceDate(resource.createdAt)}</span>
                     <span>Por {resource.uploadedByName}</span>
                     <div>
-                      <button onClick={() => onOpenResource(resource)} aria-label="Abrir recurso">
-                        <Download size={15} />
-                      </button>
+                      {!multipleFiles && (
+                        <button onClick={() => onOpenResource(resource, resource.attachments[0])} aria-label="Abrir recurso">
+                          <Download size={15} />
+                        </button>
+                      )}
                       {canManage && (
                         <>
                           <button onClick={() => setResourceToEdit(resource)} aria-label="Editar recurso"><Pencil size={15} /></button>
@@ -810,9 +895,9 @@ function WorkshopDetail({
     </motion.section>
     <ConfirmDeleteDialog
       open={Boolean(resourceToDelete)}
-      title={`¿Eliminar “${resourceToDelete?.title ?? "este archivo"}”?`}
-      description="Se eliminarán el archivo y su registro dentro del taller. Esta acción no se puede deshacer."
-      confirmLabel="Eliminar archivo"
+      title={`¿Eliminar “${resourceToDelete?.title ?? "este recurso"}”?`}
+      description={`Se eliminarán ${resourceToDelete?.attachments.length === 1 ? "el archivo" : `los ${resourceToDelete?.attachments.length ?? 0} archivos`} y el recurso dentro del taller. Esta acción no se puede deshacer.`}
+      confirmLabel="Eliminar recurso"
       busy={Boolean(deletingId)}
       onCancel={() => setResourceToDelete(null)}
       onConfirm={() => resourceToDelete && void remove(resourceToDelete)}
@@ -842,7 +927,7 @@ function WorkshopResourceEditDialog({ resource, onCancel }: { resource: Workshop
     }
   }
 
-  return <ContentEditDialog open eyebrow="Recurso de taller" title="Editar recurso" description="Cambia el nombre o la descripción que ve el grupo." note="El archivo original y su historial permanecen intactos." busy={busy} onCancel={onCancel} onSubmit={save}>
+  return <ContentEditDialog open eyebrow="Recurso de taller" title="Editar recurso" description="Cambia el nombre o la descripción que ve el grupo." note="Los archivos originales y su historial permanecen intactos." busy={busy} onCancel={onCancel} onSubmit={save}>
     <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
     <label>Descripción<textarea value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} /></label>
     <WorkshopLinksEditor links={links} onChange={setLinks} />
@@ -1176,7 +1261,7 @@ function WorkshopUploadDialog({
     setUploading(true);
     try {
       await onUpload(workshop, { title: title.trim(), description: description.trim(), files, links });
-      toast.success(files.length === 1 ? "Recurso publicado" : `${files.length} recursos publicados`, {
+      toast.success(files.length === 1 ? "Recurso publicado" : `Recurso con ${files.length} archivos publicado`, {
         description: "Los participantes ya pueden consultar los archivos.",
       });
       onClose();

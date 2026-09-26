@@ -31,18 +31,35 @@ test("los formularios permiten agregar enlaces y éstos se muestran a los alumno
   assert.match(tasks, /task\.links\.map\(\(link, index\) => <a/);
 });
 
-test("Talleres permite publicar hasta 10 archivos desde una sola captura", async () => {
-  const [resources, firebase] = await Promise.all([
+test("Talleres agrupa hasta 10 archivos de una captura en un solo recurso", async () => {
+  const [resources, firebase, types, rules, functions, styles] = await Promise.all([
     source("components/workshops-page.tsx"),
     source("lib/workshops-firebase.ts"),
+    source("lib/types.ts"),
+    source("firestore.rules"),
+    source("functions/src/index.ts"),
+    source("app/workshops.css"),
   ]);
   assert.match(resources, /type="file"\s+multiple/);
   assert.match(resources, /nextFiles\.length < 10/);
   assert.match(resources, /Puedes agregar hasta 10 archivos/);
+  assert.match(resources, /className="workshop-resource-files"/);
+  assert.match(resources, /resource\.attachments\.map/);
   assert.match(firebase, /input: \{ title: string; description: string; files: File\[\]/);
   assert.match(firebase, /input\.files\.length > 10/);
-  assert.match(firebase, /resources\.forEach\(\(\{ file, reference, storagePath \}\)/);
+  assert.match(firebase, /const reference = doc\(resourceCollection\)/);
+  assert.match(firebase, /const attachments = resources\.map/);
+  assert.match(firebase, /batch\.set\(reference, \{/);
+  assert.match(firebase, /attachments,/);
   assert.match(firebase, /await batch\.commit\(\)/);
+  assert.match(types, /export type WorkshopResourceFile/);
+  assert.match(types, /attachments: WorkshopResourceFile\[\]/);
+  assert.match(rules, /request\.resource\.data\.attachments\.size\(\) <= 10/);
+  assert.match(rules, /!\("attachments" in request\.resource\.data\)/);
+  assert.match(functions, /resourceContainsFile/);
+  assert.match(styles, /\.workshop-resource-files\s*\{[\s\S]*?max-height:\s*156px/);
+  assert.match(styles, /\.workshop-resource-card\s*\{[\s\S]*?flex-direction:\s*column/);
+  assert.match(styles, /\.workshop-resource-card footer\s*\{[\s\S]*?margin-top:\s*auto/);
 });
 
 test("las entregas de Talleres aceptan y muestran un enlace del alumno", async () => {

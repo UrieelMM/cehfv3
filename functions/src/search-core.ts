@@ -284,13 +284,20 @@ export function workshopResourceSearchRecord(
   workshop: SearchData,
 ) {
   const institutionId = text(data.institutionId ?? workshop.institutionId);
+  const attachments = Array.isArray(data.attachments) ? data.attachments : [];
   const visibleBy = [roleToken(institutionId, "director")];
   list(workshop.memberIds).forEach((uid) => visibleBy.push(userToken(institutionId, uid)));
   const record = baseRecord("workshop_resource", entityId, institutionId, data, {
     parentId: workshopId,
     title: text(data.title) || text(data.fileName) || "Recurso del taller",
     excerpt: text(data.description),
-    searchableText: [data.description, data.fileName, data.uploadedByName, workshop.title].join(" "),
+    searchableText: [
+      data.description,
+      data.fileName,
+      ...attachments.map((item) => text((item as SearchData)?.name)),
+      data.uploadedByName,
+      workshop.title,
+    ].join(" "),
     subject: text(workshop.title),
     context: "Recurso de taller",
     status: "resource",

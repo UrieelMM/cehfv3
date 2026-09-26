@@ -609,6 +609,14 @@ service cloud.firestore {
             && request.resource.data.uploadedBy == request.auth.uid
             && request.resource.data.title is string
             && request.resource.data.storagePath is string
+            && (
+              !("attachments" in request.resource.data)
+              || (
+                request.resource.data.attachments is list
+                && request.resource.data.attachments.size() > 0
+                && request.resource.data.attachments.size() <= 10
+              )
+            )
             && request.resource.data.links is list
             && request.resource.data.links.size() <= 10
             && request.resource.data.size is number

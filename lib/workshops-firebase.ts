@@ -29,6 +29,7 @@ import type {
   WorkshopKind,
   WorkshopLink,
   WorkshopResource,
+  WorkshopResourceFile,
   WorkshopSubmission,
   WorkshopTask,
   WorkshopTaskAttachment,
@@ -184,6 +185,23 @@ function resourceFromSnapshot(
   snapshot: QueryDocumentSnapshot<DocumentData>,
 ): WorkshopResource {
   const data = snapshot.data();
+  const storedAttachments = attachmentsFromData(data.attachments);
+  const legacyStoragePath = String(data.storagePath ?? "");
+  const legacyAttachment: WorkshopResourceFile | null = legacyStoragePath
+    ? {
+        id: snapshot.id,
+        name: String(data.fileName ?? "archivo"),
+        storagePath: legacyStoragePath,
+        contentType: String(data.contentType ?? "application/octet-stream"),
+        size: Number(data.size ?? 0),
+      }
+    : null;
+  const attachments = storedAttachments.length
+    ? storedAttachments
+    : legacyAttachment
+      ? [legacyAttachment]
+      : [];
+  const firstAttachment = attachments[0] ?? legacyAttachment;
   return {
     id: snapshot.id,
     workshopId: String(data.workshopId ?? ""),
@@ -191,10 +209,11 @@ function resourceFromSnapshot(
     title: String(data.title ?? "Recurso del taller"),
     description: String(data.description ?? ""),
     links: workshopLinksFromData(data.links),
-    fileName: String(data.fileName ?? "archivo"),
-    storagePath: String(data.storagePath ?? ""),
-    contentType: String(data.contentType ?? "application/octet-stream"),
-    size: Number(data.size ?? 0),
+    attachments,
+    fileName: firstAttachment?.name ?? "archivo",
+    storagePath: firstAttachment?.storagePath ?? "",
+    contentType: firstAttachment?.contentType ?? "application/octet-stream",
+    size: firstAttachment?.size ?? 0,
     uploadedBy: String(data.uploadedBy ?? ""),
     uploadedByName: String(data.uploadedByName ?? "Equipo docente"),
     createdAt: asIso(data.createdAt),
@@ -422,12 +441,13 @@ export async function uploadWorkshopResource(
     workshop.id,
     "resources",
   );
+  const reference = doc(resourceCollection);
   const resources = input.files.map((file) => {
-    const reference = doc(resourceCollection);
-    const storagePath = `institutions/${profile.institutionId}/workshops/${workshop.id}/resources/${reference.id}/${safeFileName(file.name)}`;
+    const attachmentId = doc(resourceCollection).id;
+    const storagePath = `institutions/${profile.institutionId}/workshops/${workshop.id}/resources/${reference.id}/${attachmentId}-${safeFileName(file.name)}`;
     return {
+      attachmentId,
       file,
-      reference,
       storagePath,
       storageReference: ref(storage, storagePath),
     };
@@ -444,23 +464,30 @@ export async function uploadWorkshopResource(
       });
       uploaded.push(resource);
     }
+    const attachments = resources.map(({ attachmentId, file, storagePath }) => ({
+      id: attachmentId,
+      name: file.name,
+      storagePath,
+      contentType: file.type || "application/octet-stream",
+      size: file.size,
+    }));
+    const firstAttachment = attachments[0]!;
     const batch = writeBatch(db);
-    resources.forEach(({ file, reference, storagePath }) => {
-      batch.set(reference, {
-        institutionId: profile.institutionId,
-        workshopId: workshop.id,
-        title: input.title.trim(),
-        description: input.description.trim(),
-        links,
-        fileName: file.name,
-        storagePath,
-        contentType: file.type || "application/octet-stream",
-        size: file.size,
-        uploadedBy: profile.uid,
-        uploadedByName: profile.name,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
+    batch.set(reference, {
+      institutionId: profile.institutionId,
+      workshopId: workshop.id,
+      title: input.title.trim(),
+      description: input.description.trim(),
+      links,
+      attachments,
+      fileName: firstAttachment.name,
+      storagePath: firstAttachment.storagePath,
+      contentType: firstAttachment.contentType,
+      size: firstAttachment.size,
+      uploadedBy: profile.uid,
+      uploadedByName: profile.name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
     await batch.commit();
   } catch (error) {
@@ -471,7 +498,7 @@ export async function uploadWorkshopResource(
     );
     throw error;
   }
-  return resources.map(({ reference }) => reference.id);
+  return reference.id;
 }
 
 export async function deleteWorkshopResource(resource: WorkshopResource) {
@@ -497,8 +524,11 @@ export async function updateWorkshopResource(
   return requirePersistedWorkshopLinks(result, links);
 }
 
-export async function getWorkshopResourceUrl(resource: WorkshopResource) {
-  if (!resource.storagePath) {
+export async function getWorkshopResourceUrl(
+  resource: WorkshopResource,
+  attachment: WorkshopResourceFile,
+) {
+  if (!attachment.storagePath) {
     throw new Error("Este recurso no tiene un archivo disponible.");
   }
   if (!firebase.functions) {
@@ -515,7 +545,7 @@ export async function getWorkshopResourceUrl(resource: WorkshopResource) {
   return (await callable({
     workshopId: resource.workshopId,
     resourceId: resource.id,
-    storagePath: resource.storagePath,
+    storagePath: attachment.storagePath,
   })).data.url;
 }
 

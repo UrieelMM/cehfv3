@@ -823,6 +823,9 @@
 }
 
 .workshop-resource-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 17px;
@@ -848,6 +851,11 @@
   text-align: left;
 }
 
+.workshop-resource-main.is-single { cursor: pointer; }
+.workshop-resource-main.is-single:hover { background: color-mix(in srgb, var(--workshop-accent) 4%, transparent); }
+.workshop-resource-main.is-single:focus-visible { outline: 3px solid color-mix(in srgb, var(--workshop-accent) 28%, transparent); outline-offset: -3px; }
+.workshop-resource-main.is-bundle { padding-bottom: 13px; }
+
 .workshop-resource-icon {
   display: grid;
   width: 45px;
@@ -870,10 +878,49 @@
 .workshop-resource-copy p { display: -webkit-box; margin: 0; overflow: hidden; color: var(--muted); font-size: calc(0.66rem + 0.125rem); line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .workshop-resource-main > svg { color: var(--muted); }
 
+.workshop-resource-files {
+  display: grid;
+  max-height: 156px;
+  margin: 0 14px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-soft);
+  scrollbar-color: color-mix(in srgb, var(--workshop-accent) 30%, var(--border)) transparent;
+  scrollbar-width: thin;
+}
+
+.workshop-resource-files > button {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+}
+
+.workshop-resource-files > button:last-child { border-bottom: 0; }
+.workshop-resource-files > button:hover { background: var(--surface); }
+.workshop-resource-files > button:focus-visible { outline: 2px solid color-mix(in srgb, var(--workshop-accent) 34%, transparent); outline-offset: -2px; }
+.workshop-resource-files > button > span:first-child { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 8px; background: var(--surface); color: var(--workshop-accent); }
+.workshop-resource-files > button > span:nth-child(2) { min-width: 0; }
+.workshop-resource-files strong,
+.workshop-resource-files small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workshop-resource-files strong { font-size: calc(0.62rem + 0.125rem); }
+.workshop-resource-files small { margin-top: 2px; color: var(--muted); font-size: calc(0.5rem + 0.125rem); }
+.workshop-resource-files em { color: var(--muted); font-size: calc(0.53rem + 0.125rem); font-style: normal; white-space: nowrap; }
+.workshop-resource-files > button > svg { color: var(--muted); }
+
 .workshop-resource-card footer {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-top: auto;
   padding: 10px 14px;
   border-top: 1px solid var(--border);
   background: var(--surface-soft);

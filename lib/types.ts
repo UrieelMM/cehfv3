@@ -939,6 +939,14 @@ export type WorkshopLink = {
   url: string;
 };
 
+export type WorkshopResourceFile = {
+  id: string;
+  name: string;
+  storagePath: string;
+  contentType: string;
+  size: number;
+};
+
 export type WorkshopResource = {
   id: string;
   workshopId: string;
@@ -946,6 +954,8 @@ export type WorkshopResource = {
   title: string;
   description: string;
   links: WorkshopLink[];
+  attachments: WorkshopResourceFile[];
+  /** Legacy first-file fields kept while historical resources are migrated. */
   fileName: string;
   storagePath: string;
   contentType: string;

@@ -71,7 +71,9 @@ test("workshops expose a configurable Zoom link and authorized file reads", asyn
   assert.doesNotMatch(dataSource, /getDownloadURL\(ref\(storage, (resource|attachment)\.storagePath\)\)/);
   assert.match(functionsSource, /export const listStudentWorkshopTasks = onCall/);
   assert.match(functionsSource, /export const getWorkshopFileUrl = onCall/);
-  assert.match(functionsSource, /resource\.storagePath !== storagePath/);
+  assert.match(functionsSource, /const resourceContainsFile =/);
+  assert.match(functionsSource, /resourceAttachments\.some/);
+  assert.match(functionsSource, /\.storagePath \?\? ""\) === storagePath/);
   assert.match(functionsSource, /hasWorkshopAttachment\(submission, storagePath\)/);
   assert.match(taskSource, /getWorkshopTaskAttachmentUrl\(\s*task,\s*attachment,\s*submissionStudentId/);
   assert.match(taskSource, /openAttachment\(attachment, selectedSubmission\.studentId\)/);
