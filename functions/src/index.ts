@@ -6466,6 +6466,7 @@ const FORUM_TOPIC_KINDS = [
 
 const FORUM_TOPIC_STATUSES = ["open", "scheduled", "closed", "archived"] as const;
 const FORUM_REACTIONS = ["helpful", "interesting", "celebrate"] as const;
+const FORUM_RICH_TEXT_VERSION = 1 as const;
 
 function forumId(value: unknown, label: string) {
   const normalized = String(value ?? "").trim();
@@ -6875,7 +6876,7 @@ export const createForumTopic = onCall(async (request) => {
     targetGroup,
     recipients: audience.length,
   });
-  return { topicId: reference.id };
+  return { topicId: reference.id, richTextVersion: FORUM_RICH_TEXT_VERSION };
 });
 
 export const updateForumTopic = onCall(async (request) => {
@@ -6938,7 +6939,10 @@ export const updateForumTopic = onCall(async (request) => {
       createdAt: FieldValue.serverTimestamp(),
     });
   });
-  return { ok: true as const };
+  return {
+    ok: true as const,
+    richTextVersion: FORUM_RICH_TEXT_VERSION,
+  };
 });
 
 export const deleteForumTopic = onCall(async (request) => {
@@ -7156,7 +7160,7 @@ export const createForumPost = onCall(async (request) => {
       eventType: "forum_mention",
     });
   }
-  return { postId };
+  return { postId, richTextVersion: FORUM_RICH_TEXT_VERSION };
 });
 
 export const reactToForumPost = onCall(async (request) => {

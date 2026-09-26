@@ -1226,7 +1226,7 @@ export function ForumPage({
               <h2>{selectedTopic.title}</h2>
               <ForumRichText
                 content={selectedTopic.promptRich ?? selectedTopic.prompt}
-                editorKey={`forum-topic-${selectedTopic.id}-${selectedTopic.lastActivityAt ?? "content"}`}
+                editorKey={`forum-topic-${selectedTopic.id}-${selectedTopic.updatedAt ?? selectedTopic.lastActivityAt ?? "content"}`}
                 editable={false}
               />
               <div className="forum-post-meta">

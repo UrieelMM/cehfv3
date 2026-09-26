@@ -871,6 +871,7 @@ export type ForumTopic = {
   unreadCount?: number;
   lastActivity: string;
   lastActivityAt?: string;
+  updatedAt?: string;
   replies: ForumReply[];
 };
 

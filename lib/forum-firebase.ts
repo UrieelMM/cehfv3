@@ -65,6 +65,19 @@ export type ForumTopicUpdate = Pick<
   | "allowAttachments"
 >;
 
+const FORUM_RICH_TEXT_VERSION = 1;
+
+type ForumRichTextWriteResult = {
+  richTextVersion?: number;
+};
+
+function assertForumRichTextStored(result: ForumRichTextWriteResult) {
+  if (result.richTextVersion === FORUM_RICH_TEXT_VERSION) return;
+  throw new Error(
+    "El servidor del foro no confirmó el formato del texto. Actualiza las funciones del backend antes de volver a publicar.",
+  );
+}
+
 function isoDate(value: unknown) {
   if (
     value &&
@@ -208,6 +221,7 @@ function topicFromSnapshot(
     ? (String(data.kind) as ForumTopicKind)
     : "subject";
   const lastActivityAt = isoDate(data.lastActivityAt ?? data.updatedAt);
+  const updatedAt = isoDate(data.updatedAt);
   return {
     id: snapshot.id,
     creatorId: String(data.creatorId ?? ""),
@@ -233,6 +247,7 @@ function topicFromSnapshot(
     unreadCount: 0,
     lastActivity: forumDateLabel(lastActivityAt, "Reciente"),
     lastActivityAt,
+    updatedAt,
     replies: [],
   };
 }
@@ -429,18 +444,25 @@ async function callForum<Input, Output>(name: string, input: Input) {
   return result.data;
 }
 
-export function createForumTopic(input: ForumTopicInput) {
-  return callForum<ForumTopicInput, { topicId: string }>(
+export async function createForumTopic(input: ForumTopicInput) {
+  const result = await callForum<
+    ForumTopicInput,
+    { topicId: string; richTextVersion?: number }
+  >(
     "createForumTopic",
     input,
   );
+  assertForumRichTextStored(result);
+  return result;
 }
 
-export function updateForumTopic(topicId: string, values: ForumTopicUpdate) {
-  return callForum<{ topicId: string; values: ForumTopicUpdate }, { ok: true }>(
-    "updateForumTopic",
-    { topicId, values },
-  );
+export async function updateForumTopic(topicId: string, values: ForumTopicUpdate) {
+  const result = await callForum<
+    { topicId: string; values: ForumTopicUpdate },
+    { ok: true; richTextVersion?: number }
+  >("updateForumTopic", { topicId, values });
+  assertForumRichTextStored(result);
+  return result;
 }
 
 export function deleteForumTopic(topicId: string) {
@@ -493,8 +515,9 @@ export async function publishForumReply(input: {
       sizeLabel: `${file.type.startsWith("image/") ? "Imagen" : "Documento"} · ${Math.max(0.1, file.size / 1_000_000).toFixed(1)} MB`,
     };
   }
+  let result: { postId: string; richTextVersion?: number };
   try {
-    return await callForum<
+    result = await callForum<
       {
         postId: string;
         topicId: string;
@@ -504,7 +527,7 @@ export async function publishForumReply(input: {
         mentionedUserIds: string[];
         attachment?: ForumAttachment;
       },
-      { postId: string }
+      { postId: string; richTextVersion?: number }
     >("createForumPost", {
       postId,
       topicId: input.topicId,
@@ -520,6 +543,8 @@ export async function publishForumReply(input: {
     }
     throw error;
   }
+  assertForumRichTextStored(result);
+  return result;
 }
 
 export function reactToForumPost(

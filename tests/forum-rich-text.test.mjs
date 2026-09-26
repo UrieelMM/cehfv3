@@ -38,9 +38,50 @@ test("legacy forum text is normalized into an editable BlockNote document", () =
   assert.equal(normalized[0].content, "Texto anterior");
 });
 
+test("normalizing forum rich text preserves headings, colors and inline styles", () => {
+  const document = [
+    {
+      type: "heading",
+      props: { level: 2, textColor: "blue", backgroundColor: "yellow" },
+      content: [
+        {
+          type: "text",
+          text: "Respeto",
+          styles: { bold: true, italic: true, underline: true, textColor: "red" },
+        },
+      ],
+    },
+  ];
+
+  assert.deepEqual(
+    JSON.parse(normalizeForumRichText(JSON.stringify(document))),
+    document,
+  );
+});
+
+test("normalizing forum rich text preserves paragraphs, blank lines and manual breaks", () => {
+  const document = [
+    {
+      type: "paragraph",
+      content: [{ type: "text", text: "Primera línea", styles: {} }],
+    },
+    { type: "paragraph", content: [] },
+    {
+      type: "paragraph",
+      content: [{ type: "text", text: "Segunda línea\nTercera línea", styles: {} }],
+    },
+  ];
+
+  assert.deepEqual(
+    JSON.parse(normalizeForumRichText(JSON.stringify(document))),
+    document,
+  );
+});
+
 test("forum and report screens wire rich content and explicit report openings", async () => {
-  const [forumPage, app, reports, reportsData, rules, functions] = await Promise.all([
+  const [forumPage, forumData, app, reports, reportsData, rules, functions] = await Promise.all([
     readFile(new URL("components/forum-page.tsx", projectRoot), "utf8"),
+    readFile(new URL("lib/forum-firebase.ts", projectRoot), "utf8"),
     readFile(new URL("components/cehf-app.tsx", projectRoot), "utf8"),
     readFile(new URL("components/academic-reports.tsx", projectRoot), "utf8"),
     readFile(new URL("lib/reports-firebase.ts", projectRoot), "utf8"),
@@ -50,9 +91,12 @@ test("forum and report screens wire rich content and explicit report openings", 
 
   assert.match(forumPage, /<ForumRichText/);
   assert.match(forumPage, /bodyRich: replyRich/);
+  assert.match(forumPage, /selectedTopic\.updatedAt \?\? selectedTopic\.lastActivityAt/);
   assert.match(app, /promptRich/);
   assert.match(functions, /forumRichText\(input\.bodyRich/);
   assert.match(functions, /forumRichText\(input\.promptRich/);
+  assert.match(functions, /richTextVersion: FORUM_RICH_TEXT_VERSION/);
+  assert.match(forumData, /assertForumRichTextStored\(result\)/);
 
   assert.match(reports, /Abrir reporte/);
   assert.match(reports, /recordStudentOpening\(report\)/);
