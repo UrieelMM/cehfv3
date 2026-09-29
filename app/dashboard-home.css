@@ -1,7 +1,7 @@
 .dashboard-stack {
-  --home-glow-strength: 72%;
+  --home-glow-strength: 56%;
   --home-edge-strength: 26%;
-  --home-card-accent: #8670dc;
+  --home-card-accent: var(--violet);
 }
 
 :root[data-theme="dark"] .dashboard-stack {
@@ -24,11 +24,11 @@
   isolation: isolate;
   border: 1px solid rgb(255 255 255 / 0.25);
   background:
-    radial-gradient(ellipse at 92% 12%, rgb(242 202 255 / 0.42), transparent 47%),
-    radial-gradient(ellipse at 70% 88%, rgb(119 142 255 / 0.55), transparent 55%),
-    radial-gradient(ellipse at 14% 0%, rgb(219 180 255 / 0.22), transparent 54%),
-    linear-gradient(125deg, #353184, #6451b3 67%, #8666bd);
-  box-shadow: 0 18px 44px rgb(72 53 131 / 0.17), inset 0 1px 0 rgb(255 255 255 / 0.28);
+    radial-gradient(ellipse at 92% 12%, color-mix(in srgb, var(--coral) 32%, transparent), transparent 47%),
+    radial-gradient(ellipse at 70% 88%, color-mix(in srgb, var(--blue) 55%, transparent), transparent 55%),
+    radial-gradient(ellipse at 14% 0%, color-mix(in srgb, var(--blue) 25%, transparent), transparent 54%),
+    linear-gradient(125deg, color-mix(in srgb, var(--brand-primary) 76%, black), var(--brand-primary) 67%, color-mix(in srgb, var(--brand-primary) 65%, var(--blue)));
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--brand-primary) 17%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.28);
 }
 
 .dashboard-stack .hero-card::after {
@@ -55,7 +55,7 @@
 .dashboard-stack .hero-metric > span {
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgb(35 28 77 / 0.24);
+  background: color-mix(in srgb, var(--brand-primary) 24%, transparent);
   color: white;
 }
 
@@ -71,7 +71,7 @@
 .dashboard-stack .hero-card .light-button {
   border-radius: 999px;
   background: rgb(255 255 255 / 0.78);
-  color: #302660;
+  color: var(--brand-primary);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15);
 }
 
@@ -80,8 +80,8 @@
 }
 
 .dashboard-stack .progress-ring:not(.small)::after {
-  background: linear-gradient(145deg, #6253ac, #4b438f);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 6px 22px rgb(47 33 96 / 0.14);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--brand-primary) 65%, var(--blue)), var(--brand-primary));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 6px 22px color-mix(in srgb, var(--brand-primary) 14%, transparent);
 }
 
 .dashboard-stack .weekly-verse {
@@ -99,24 +99,21 @@
 
 .dashboard-stack .metric-card[data-tone="violet"],
 .dashboard-stack .focus-card.violet-card {
-  --home-card-accent: #9971e7;
+  --home-card-accent: var(--violet);
 }
 
 .dashboard-stack .metric-card[data-tone="coral"],
 .dashboard-stack .focus-card.coral-card {
-  --home-card-accent: #f272a1;
+  --home-card-accent: var(--coral);
 }
 
-.dashboard-stack .metric-card[data-tone="mint"] {
-  --home-card-accent: #56c7b0;
+.dashboard-stack .metric-card[data-tone="mint"],
+.dashboard-stack .focus-card.mint-card {
+  --home-card-accent: var(--mint);
 }
 
 .dashboard-stack .metric-card[data-tone="gold"] {
-  --home-card-accent: #efbb68;
-}
-
-.dashboard-stack .focus-card.mint-card {
-  --home-card-accent: #7194ee;
+  --home-card-accent: var(--gold);
 }
 
 .dashboard-stack :is(.metric-card, .focus-card) {
