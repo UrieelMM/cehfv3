@@ -1,18 +1,18 @@
 .dashboard-stack {
-  --home-glow-strength: 56%;
-  --home-edge-strength: 26%;
+  --home-glow-strength: 26%;
+  --home-edge-strength: 12%;
   --home-card-accent: var(--violet);
 }
 
 :root[data-theme="dark"] .dashboard-stack {
-  --home-glow-strength: 34%;
-  --home-edge-strength: 14%;
+  --home-glow-strength: 20%;
+  --home-edge-strength: 8%;
 }
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] .dashboard-stack {
-    --home-glow-strength: 34%;
-    --home-edge-strength: 14%;
+    --home-glow-strength: 20%;
+    --home-edge-strength: 8%;
   }
 }
 
@@ -87,8 +87,8 @@
 .dashboard-stack .weekly-verse {
   border-color: color-mix(in srgb, var(--gold) 18%, var(--surface));
   background:
-    radial-gradient(ellipse at 90% 80%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 58%),
-    linear-gradient(120deg, var(--surface), var(--gold-soft));
+    radial-gradient(ellipse at 90% 80%, color-mix(in srgb, var(--gold) 10%, transparent), transparent 58%),
+    linear-gradient(120deg, var(--surface), color-mix(in srgb, var(--gold-soft) 50%, var(--surface)));
   box-shadow: 0 8px 24px color-mix(in srgb, var(--gold) 6%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 85%, transparent);
 }
 
@@ -120,12 +120,12 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  border-color: color-mix(in srgb, var(--surface-raised) 78%, var(--home-card-accent));
+  border-color: color-mix(in srgb, var(--surface-raised) 86%, var(--home-card-accent));
   background:
     radial-gradient(ellipse at 78% 72%, color-mix(in srgb, var(--home-card-accent) var(--home-glow-strength), transparent) 0 12%, transparent 76%),
     radial-gradient(ellipse at 12% 8%, color-mix(in srgb, var(--home-card-accent) var(--home-edge-strength), transparent), transparent 64%),
     linear-gradient(145deg, var(--surface-raised), var(--surface-soft));
-  box-shadow: 0 10px 30px color-mix(in srgb, var(--home-card-accent) 10%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 85%, transparent);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--home-card-accent) 6%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 85%, transparent);
 }
 
 .dashboard-stack :is(.metric-card, .focus-card)::after {
@@ -136,9 +136,9 @@
   bottom: -92px;
   width: 180px;
   height: 180px;
-  border: 1px solid color-mix(in srgb, var(--home-card-accent) 24%, transparent);
+  border: 1px solid color-mix(in srgb, var(--home-card-accent) 14%, transparent);
   border-radius: 50%;
-  box-shadow: 0 0 0 16px color-mix(in srgb, var(--home-card-accent) 6%, transparent), 0 0 0 33px color-mix(in srgb, var(--home-card-accent) 4%, transparent);
+  box-shadow: 0 0 0 16px color-mix(in srgb, var(--home-card-accent) 4%, transparent), 0 0 0 33px color-mix(in srgb, var(--home-card-accent) 2%, transparent);
   content: "";
   pointer-events: none;
 }
@@ -222,7 +222,7 @@
 .dashboard-stack .panel {
   border-color: color-mix(in srgb, var(--surface-raised) 75%, var(--border));
   background:
-    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--violet-soft) 72%, transparent), transparent 52%),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--violet-soft) 40%, transparent), transparent 52%),
     var(--surface);
   box-shadow: 0 10px 28px color-mix(in srgb, var(--violet) 5%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 85%, transparent);
 }
