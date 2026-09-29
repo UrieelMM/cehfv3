@@ -1450,7 +1450,7 @@
 .workshop-task-detail-modal > header { grid-template-columns: minmax(0, 1fr) auto; }
 .workshop-task-detail-modal > header .workshop-task-status { margin-bottom: 5px; }
 .workshop-task-detail-body { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) 235px; flex: 1; overflow: hidden; }
-.workshop-task-detail-body > main { overflow-y: auto; padding: 24px; }
+.workshop-task-detail-body > main { min-width: 0; overflow-y: auto; padding: 24px; }
 .workshop-task-detail-body > aside { padding: 20px; border-left: 1px solid var(--border); background: var(--surface-soft); }
 .workshop-task-detail-body > aside > div { margin-bottom: 9px; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
 .workshop-task-detail-body > aside span,
@@ -1480,6 +1480,7 @@
 .workshop-teacher-review { margin-top: 14px; }
 .workshop-feedback-card { display: flex; gap: 10px; margin-bottom: 10px; padding: 14px; border: 1px solid color-mix(in srgb, var(--violet) 24%, var(--border)); border-radius: 13px; background: color-mix(in srgb, var(--violet-soft) 28%, var(--surface)); }
 .workshop-feedback-card > svg { flex: 0 0 auto; color: var(--violet); }
+.workshop-feedback-card > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .workshop-feedback-card > div > span { font-size: calc(0.66rem + 0.125rem); font-weight: 780; }
 .workshop-feedback-card p { margin: 4px 0 0; color: var(--muted-strong); font-size: calc(0.68rem + 0.125rem); line-height: 1.5; }
 .workshop-feedback-card .forum-rich-text.is-reader { margin-top: 4px; }
@@ -1505,16 +1506,18 @@
 .workshop-task-closed { display: flex; align-items: center; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; color: var(--muted); font-size: calc(0.68rem + 0.125rem); }
 
 .workshop-teacher-review { display: grid; grid-template-columns: 245px minmax(0, 1fr); border: 1px solid var(--border); border-radius: 15px; overflow: hidden; }
-.workshop-submission-tabs { padding: 12px; background: var(--surface-soft); }
+.workshop-submission-tabs { min-width: 0; padding: 12px; background: var(--surface-soft); }
 .workshop-submission-tabs > span { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; font-size: calc(0.65rem + 0.125rem); font-weight: 780; }
-.workshop-submission-tabs > button { display: grid; width: 100%; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; margin-bottom: 6px; padding: 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; text-align: left; }
-.workshop-submission-tabs > button.active { border-color: var(--tab-active-border); background: var(--tab-active-gradient); color: var(--violet); box-shadow: var(--tab-active-shadow); }
+.workshop-submission-list { display: grid; min-width: 0; gap: 6px; }
+.workshop-submission-list > button { display: grid; min-width: 0; width: 100%; grid-template-columns: 31px minmax(0, 1fr); align-items: center; gap: 8px; padding: 8px; border: 1px solid transparent; border-radius: 10px; background: transparent; text-align: left; }
+.workshop-submission-list > button.active { border-color: var(--tab-active-border); background: var(--tab-active-gradient); color: var(--violet); box-shadow: var(--tab-active-shadow); }
+.workshop-submission-list > button:disabled { cursor: wait; opacity: .65; }
 .workshop-submission-tabs i { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 9px; background: var(--violet-soft); color: var(--violet); font-size: calc(0.55rem + 0.125rem); font-style: normal; font-weight: 820; }
 .workshop-submission-tabs span,
 .workshop-submission-tabs strong,
 .workshop-submission-tabs small { display: block; min-width: 0; }
-.workshop-submission-tabs strong { font-size: calc(0.62rem + 0.125rem); }
-.workshop-submission-tabs small { margin-top: 2px; color: var(--muted); font-size: calc(0.53rem + 0.125rem); }
+.workshop-submission-tabs strong { overflow-wrap: anywhere; font-size: calc(0.62rem + 0.125rem); }
+.workshop-submission-tabs small { margin-top: 2px; overflow-wrap: anywhere; color: var(--muted); font-size: calc(0.53rem + 0.125rem); }
 .workshop-submission-tabs > p { padding: 25px 8px; color: var(--muted); font-size: calc(0.62rem + 0.125rem); text-align: center; }
 
 .workshop-review-pane { min-width: 0; padding: 17px; }
@@ -1526,9 +1529,10 @@
 .workshop-review-pane > label { display: block; margin-top: 8px; }
 .workshop-review-pane > label > span { display: block; margin-bottom: 5px; font-size: calc(0.64rem + 0.125rem); font-weight: 760; }
 .workshop-review-pane textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); font-size: calc(0.68rem + 0.125rem); resize: vertical; }
-.workshop-review-pane > div:last-child { display: flex; justify-content: flex-end; gap: 7px; margin-top: 9px; }
-.workshop-review-pane > div:last-child button { display: inline-flex; min-height: 37px; align-items: center; gap: 6px; padding: 0 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); font-size: calc(0.61rem + 0.125rem); font-weight: 740; }
-.workshop-review-pane > div:last-child .primary-button { border-color: var(--violet); background: var(--violet); color: var(--on-primary); }
+.workshop-feedback-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; margin-top: 9px; }
+.workshop-feedback-actions button { display: inline-flex; min-height: 37px; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); font-size: calc(0.61rem + 0.125rem); font-weight: 740; }
+.workshop-feedback-actions .primary-button { border-color: var(--violet); background: var(--violet); color: var(--on-primary); }
+.workshop-feedback-actions button:disabled { cursor: not-allowed; opacity: .65; }
 
 .workshop-task-control { margin-top: 17px !important; }
 .workshop-task-control > span { margin-bottom: 8px; font-weight: 740; }
@@ -1566,9 +1570,8 @@
   .workshop-task-form-fields { overflow: visible; }
   .workshop-roster-picker { overflow: visible; border-top: 1px solid var(--border); border-left: 0; }
   .workshop-teacher-review { grid-template-columns: 1fr; }
-  .workshop-submission-tabs { display: flex; overflow-x: auto; }
-  .workshop-submission-tabs > span { flex: 0 0 100%; }
-  .workshop-submission-tabs > button { min-width: 200px; }
+  .workshop-submission-list { display: flex; overflow-x: auto; }
+  .workshop-submission-list > button { flex: 0 0 200px; }
 }
 
 @media (max-width: 620px) {
@@ -1615,8 +1618,8 @@
   .workshop-task-create-modal > footer > div:last-child { width: 100%; }
   .workshop-task-create-modal > footer > div:last-child button { flex: 1; justify-content: center; }
   .workshop-task-attachments { grid-template-columns: 1fr; }
-  .workshop-review-pane > div:last-child { flex-direction: column; }
-  .workshop-review-pane > div:last-child button { justify-content: center; }
+  .workshop-feedback-actions { flex-direction: column; }
+  .workshop-feedback-actions button { justify-content: center; }
 }
 
 @media (max-width: 420px) {

@@ -5,6 +5,7 @@ import {
   doc,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   Timestamp,
@@ -464,6 +465,29 @@ export async function saveDailyGrade(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+}
+
+export async function deleteDailyGrade(profile: UserProfile, record: DailyGradeRecord) {
+  if (profile.role !== "teacher" || !profile.active || record.teacherId !== profile.uid
+    || record.institutionId !== profile.institutionId) {
+    throw new Error("Sólo puedes eliminar calificaciones diarias que tú capturaste.");
+  }
+  const db = requireFirestore();
+  const reference = doc(db, "institutions", profile.institutionId, "dailyGrades", record.id);
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("Esta calificación ya fue eliminada. Actualiza la lista.");
+    const current = snapshot.data();
+    if (current.institutionId !== profile.institutionId || current.teacherId !== profile.uid) {
+      throw new Error("Sólo puedes eliminar calificaciones diarias que tú capturaste.");
+    }
+    if (current.studentId !== record.studentId || current.subjectId !== record.subjectId
+      || current.schoolYearId !== record.schoolYearId || current.weekId !== record.weekId
+      || current.gradeDate !== record.gradeDate || asIso(current.updatedAt, "") !== record.updatedAt) {
+      throw new Error("La calificación cambió. Revisa los datos y confirma la eliminación nuevamente.");
+    }
+    transaction.delete(reference);
+  });
 }
 
 // Compatibilidad temporal: cualquier consumidor semanal recibe el promedio

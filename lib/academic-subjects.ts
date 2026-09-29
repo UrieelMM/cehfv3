@@ -64,6 +64,7 @@ const primarySixthSubjects = [
   "Historia",
   "Geografía",
   "Inglés",
+  "Cívica",
 ] as const satisfies readonly AcademicSubject[];
 
 const secondaryFirstSubjects = [
@@ -184,6 +185,20 @@ export function sanitizeSubjects(
     }
   }
   return sanitized;
+}
+
+export function resolveStudentSubjects(
+  values: readonly string[],
+  schoolLevel: SchoolLevel,
+  grade: string,
+) {
+  const subjects = sanitizeSubjects(values, subjectsForGrade(schoolLevel, grade));
+  // Los perfiles de sexto creados con el catálogo anterior no podían incluir
+  // Cívica. Recuperamos esa materia al leerlos, sin alterar otras asignaciones.
+  if (schoolLevel === "primary" && grade === "6.º" && !subjects.includes("Cívica")) {
+    subjects.push("Cívica");
+  }
+  return subjects;
 }
 
 export function subjectsBelongToCatalog(

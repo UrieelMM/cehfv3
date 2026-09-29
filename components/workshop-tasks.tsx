@@ -534,6 +534,103 @@ function WorkshopTaskCreateDialog({
   );
 }
 
+function WorkshopFeedbackCard({ submission, studentView = false }: {
+  submission: WorkshopSubmission;
+  studentView?: boolean;
+}) {
+  if (!submission.teacherFeedback) return null;
+  return (
+    <div className={`workshop-feedback-card is-${submission.status}`}>
+      <MessageSquareText size={20} />
+      <div>
+        <span>{submission.status === "reviewed" ? "Entrega finalizada"
+          : studentView ? "Retroalimentación de tu maestro" : "Retroalimentación publicada"}</span>
+        <ForumRichText
+          content={submission.teacherFeedbackRich || normalizeForumRichText(submission.teacherFeedback)}
+          editorKey={`workshop-feedback-reader-${submission.taskId}-${submission.studentId}-${submission.version}-${submission.updatedAt}`}
+          editable={false}
+        />
+      </div>
+    </div>
+  );
+}
+
+function WorkshopFeedbackPanel({ task, submission, firebaseReady, canManage, busy, onBusyChange }: {
+  task: WorkshopTask;
+  submission: WorkshopSubmission;
+  firebaseReady: boolean;
+  canManage: boolean;
+  busy: boolean;
+  onBusyChange: (busy: boolean) => void;
+}) {
+  const [editing, setEditing] = useState(!submission.teacherFeedback);
+  const [feedback, setFeedback] = useState("");
+  const [feedbackRich, setFeedbackRich] = useState(() => normalizeForumRichText(""));
+  const [feedbackBase, setFeedbackBase] = useState(submission);
+  const [revision, setRevision] = useState(0);
+
+  function editFeedback() {
+    setFeedbackBase(submission);
+    setFeedback(submission.teacherFeedback);
+    setFeedbackRich(submission.teacherFeedbackRich || normalizeForumRichText(submission.teacherFeedback));
+    setRevision((current) => current + 1);
+    setEditing(true);
+  }
+
+  async function publishFeedback(reviewed: boolean) {
+    if (busy) return;
+    const plainText = editing ? feedback : submission.teacherFeedback;
+    const richText = editing ? feedbackRich : submission.teacherFeedbackRich ?? "";
+    if (!plainText.trim()) {
+      toast.error("Escribe una retroalimentación.");
+      return;
+    }
+    onBusyChange(true);
+    try {
+      if (!firebaseReady) throw new Error("Inicia sesión para enviar retroalimentación.");
+      await saveWorkshopFeedback(task, editing ? feedbackBase : submission, plainText, richText, reviewed);
+      setFeedback("");
+      setFeedbackRich(normalizeForumRichText(""));
+      setRevision((current) => current + 1);
+      setEditing(false);
+      toast.success(reviewed ? "Entrega finalizada" : "Retroalimentación publicada");
+    } catch (error) {
+      toast.error(messageFor(error));
+    } finally {
+      onBusyChange(false);
+    }
+  }
+
+  return (
+    <section className="workshop-feedback-panel">
+      <WorkshopFeedbackCard submission={submission} />
+      {canManage && (editing ? <>
+        <div className="workshop-rich-field">
+          <label>{submission.teacherFeedback ? "Editar retroalimentación" : "Retroalimentación"}</label>
+          <ForumRichText
+            content={feedbackRich}
+            editorKey={`workshop-feedback-${task.id}-${submission.studentId}-${submission.version}-${revision}`}
+            editable={!busy}
+            maxLength={1_600}
+            onChange={(richText, plainText) => {
+              setFeedbackRich(richText);
+              setFeedback(plainText);
+            }}
+          />
+        </div>
+        <div className="workshop-feedback-actions">
+          {submission.teacherFeedback && <button type="button" disabled={busy} onClick={() => setEditing(false)}>Cancelar edición</button>}
+          <button type="button" disabled={busy || !feedback.trim()} onClick={() => void publishFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button>
+          <button type="button" className="primary-button" disabled={busy || !feedback.trim()} onClick={() => void publishFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button>
+        </div>
+      </> : <div className="workshop-feedback-actions">
+        <button type="button" disabled={busy} onClick={editFeedback}><Pencil size={16} /> Editar comentarios</button>
+        {submission.status !== "reviewed" && <button type="button" className="primary-button" disabled={busy || !submission.teacherFeedback} onClick={() => void publishFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button>}
+      </div>)}
+    </section>
+  );
+}
+
 function WorkshopTaskDetailDialog({
   task,
   profile,
@@ -564,8 +661,6 @@ function WorkshopTaskDetailDialog({
   const [contentRevision, setContentRevision] = useState(0);
   const [link, setLink] = useState("");
   const [files, setFiles] = useState<File[]>([]);
-  const [feedback, setFeedback] = useState("");
-  const [feedbackRich, setFeedbackRich] = useState(() => normalizeForumRichText(""));
   const [busy, setBusy] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<WorkshopTaskAttachment | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -575,7 +670,7 @@ function WorkshopTaskDetailDialog({
   const previewRequest = useRef(0);
   const staff = canManage;
   const selectedSubmission =
-    submissions.find((item) => item.id === selectedSubmissionId) ?? submissions[0];
+    submissions.find((item) => item.id === selectedSubmissionId);
   const mySubmission = role === "student" ? submissions[0] : undefined;
   const studentById = useMemo(
     () => new Map(accounts.map((account) => [account.uid, account])),
@@ -587,25 +682,19 @@ function WorkshopTaskDetailDialog({
       queueMicrotask(() => setSubmissions([]));
       return;
     }
-    return watchWorkshopSubmissions(task, profile, setSubmissions, (error) =>
-      toast.error(messageFor(error)),
-    );
+    return watchWorkshopSubmissions(task, profile, (next) => {
+      const sorted = [...next].sort((first, second) => first.studentName.localeCompare(second.studentName, "es") || first.id.localeCompare(second.id));
+      setSubmissions(sorted);
+      setSelectedSubmissionId((current) => sorted.some((item) => item.id === current)
+        ? current : sorted[0]?.id ?? null);
+    }, (error) => toast.error(messageFor(error)));
   }, [firebaseReady, profile, task]);
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      const plainText = selectedSubmission?.teacherFeedback ?? "";
-      setFeedback(plainText);
-      setFeedbackRich(
-        selectedSubmission?.teacherFeedbackRich || normalizeForumRichText(plainText),
-      );
-    });
-  }, [selectedSubmission]);
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (
         event.key === "Escape" &&
+        !busy &&
         !document.querySelector(".workshop-attachment-viewer-backdrop, .delete-confirm-backdrop")
       ) {
         onClose();
@@ -613,7 +702,7 @@ function WorkshopTaskDetailDialog({
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  }, [busy, onClose]);
 
   async function openAttachment(
     attachment: WorkshopTaskAttachment,
@@ -714,29 +803,6 @@ function WorkshopTaskDetailDialog({
     }
   }
 
-  async function saveFeedback(reviewed: boolean) {
-    if (!selectedSubmission || !feedback.trim()) {
-      toast.error("Escribe una retroalimentación.");
-      return;
-    }
-    setBusy(true);
-    try {
-      if (!firebaseReady) throw new Error("Inicia sesión para enviar retroalimentación.");
-      await saveWorkshopFeedback(
-        task,
-        selectedSubmission,
-        feedback,
-        feedbackRich,
-        reviewed,
-      );
-      toast.success(reviewed ? "Entrega finalizada" : "Retroalimentación enviada");
-    } catch (error) {
-      toast.error(messageFor(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function changeStatus(status: WorkshopTask["status"]) {
     setBusy(true);
     try {
@@ -750,11 +816,11 @@ function WorkshopTaskDetailDialog({
   }
 
   return (
-    <motion.div className="modal-backdrop workshop-modal-backdrop workshop-task-detail-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
+    <motion.div className="modal-backdrop workshop-modal-backdrop workshop-task-detail-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { if (!busy) onClose(); }}>
       <motion.section className="workshop-task-detail-modal" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
         <header>
           <div><span className={`workshop-task-status is-${task.status}`}>{task.status === "draft" ? "Borrador" : task.status === "closed" ? "Cerrado" : "Publicado"}</span><h2>{task.title}</h2><p><CalendarClock size={15} /> Entrega: {dueLabel(task.dueAt)} · {task.teacherName}</p></div>
-          <button onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+          <button disabled={busy} onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
         </header>
         <div className="workshop-task-detail-body">
           <main>
@@ -782,7 +848,7 @@ function WorkshopTaskDetailDialog({
             </section>
             {role === "student" ? (
               <section className="workshop-student-delivery">
-                {mySubmission?.teacherFeedback && <div className={`workshop-feedback-card is-${mySubmission.status}`}><MessageSquareText size={20} /><div><span>{mySubmission.status === "reviewed" ? "Entrega finalizada" : "Retroalimentación de tu maestro"}</span><ForumRichText content={mySubmission.teacherFeedbackRich || normalizeForumRichText(mySubmission.teacherFeedback)} editorKey={`workshop-feedback-reader-${task.id}-${mySubmission.version}`} editable={false} /></div></div>}
+                {mySubmission && <WorkshopFeedbackCard submission={mySubmission} studentView />}
                 {mySubmission && <div className="workshop-previous-delivery"><CheckCircle2 size={18} /><span><strong>Versión {mySubmission.version} enviada</strong><small>{mySubmission.content || (mySubmission.link ? "Enlace adjunto" : `${mySubmission.attachments.length} archivo(s)`)}</small></span></div>}
                 {mySubmission?.content && <div className="workshop-submission-rich"><ForumRichText content={mySubmission.contentRich || normalizeForumRichText(mySubmission.content)} editorKey={`workshop-own-submission-${task.id}-${mySubmission.version}`} editable={false} /></div>}
                 {mySubmission?.link && <a className="workshop-submission-link" href={mySubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace entregado</a>}
@@ -825,7 +891,21 @@ function WorkshopTaskDetailDialog({
               </section>
             ) : (
               <section className="workshop-teacher-review">
-                <div className="workshop-submission-tabs"><span><Users size={16} /> Entregas ({submissions.length}/{task.audienceStudentIds.length})</span>{submissions.length ? submissions.map((submission) => <button className={selectedSubmission?.id === submission.id ? "active" : ""} key={submission.id} onClick={() => setSelectedSubmissionId(submission.id)}><i>{studentById.get(submission.studentId)?.initials ?? submission.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</i><span><strong>{submission.studentName}</strong><small>Versión {submission.version} · {submission.status === "reviewed" ? "Finalizada" : submission.status === "feedback" ? "Con comentarios" : "Por revisar"}</small></span></button>) : <p>Aún no hay entregas.</p>}</div>
+                <div className="workshop-submission-tabs">
+                  <span><Users size={16} /> Entregas ({submissions.length}/{task.audienceStudentIds.length})</span>
+                  {submissions.length ? <div className="workshop-submission-list">
+                    {submissions.map((submission) => <button
+                      type="button"
+                      disabled={busy}
+                      className={selectedSubmission?.id === submission.id ? "active" : ""}
+                      key={submission.id}
+                      onClick={() => setSelectedSubmissionId(submission.id)}
+                    >
+                      <i>{studentById.get(submission.studentId)?.initials ?? submission.studentName.split(" ").map((part) => part[0]).slice(0, 2).join("")}</i>
+                      <span><strong>{submission.studentName}</strong><small>Versión {submission.version} · {submission.status === "reviewed" ? "Finalizada" : submission.status === "feedback" ? "Con comentarios" : "Por revisar"}</small></span>
+                    </button>)}
+                  </div> : <p>Aún no hay entregas.</p>}
+                </div>
                 {selectedSubmission && (
                   <div className="workshop-review-pane">
                     <span className="eyebrow">Entrega de {selectedSubmission.studentName}</span>
@@ -855,22 +935,15 @@ function WorkshopTaskDetailDialog({
                         ))}
                       </div>
                     )}
-                    <div className="workshop-rich-field">
-                      <label>Retroalimentación</label>
-                      <ForumRichText
-                        content={feedbackRich}
-                        editorKey={`workshop-feedback-${task.id}-${selectedSubmission.studentId}`}
-                        maxLength={1_600}
-                        onChange={(richText, plainText) => {
-                          setFeedbackRich(richText);
-                          setFeedback(plainText);
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <button disabled={busy} onClick={() => void saveFeedback(false)}><MessageSquareText size={16} /> Enviar comentarios</button>
-                      <button className="primary-button" disabled={busy} onClick={() => void saveFeedback(true)}><UserCheck size={16} /> Finalizar revisión</button>
-                    </div>
+                    <WorkshopFeedbackPanel
+                      key={`${task.id}-${selectedSubmission.id}-${selectedSubmission.version}`}
+                      task={task}
+                      submission={selectedSubmission}
+                      firebaseReady={firebaseReady}
+                      canManage={canManage}
+                      busy={busy}
+                      onBusyChange={setBusy}
+                    />
                   </div>
                 )}
               </section>

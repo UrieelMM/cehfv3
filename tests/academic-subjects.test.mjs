@@ -17,6 +17,7 @@ const [appSource, usersSource, firebaseSource, functionsSource, rulesSource] = a
 const {
   academicSubjectOptions,
   canonicalizeSubject,
+  resolveStudentSubjects,
   sanitizeSubjects,
   studentCanTakeSubject,
   subjectsForGrade,
@@ -50,6 +51,7 @@ test("each grade exposes only its canonical subjects", () => {
   ]);
   assert.deepEqual(subjectsForGrade("primary", "6.º"), [
     "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés",
+    "Cívica",
   ]);
   assert.deepEqual(subjectsForGrade("secondary", "1.º"), [
     "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés",
@@ -105,6 +107,30 @@ test("legacy students inherit missing subjects from their official grade catalog
   assert.equal(studentCanTakeSubject(legacyPrimaryStudent, "Ciencias"), true);
   assert.equal(studentCanTakeSubject(legacyPrimaryStudent, "Biología"), false);
   assert.equal(studentCanTakeSubject({ grade: "1.º", subjects: [] }, "Ciencias"), true);
+});
+
+test("sixth-grade students recover Cívica without changing other grade assignments", () => {
+  assert.deepEqual(resolveStudentSubjects(["Lenguaje"], "primary", "6.º"), ["Lenguaje", "Cívica"]);
+  assert.deepEqual(resolveStudentSubjects(["Civica", "Lenguaje"], "primary", "6.º"), ["Cívica", "Lenguaje"]);
+  assert.deepEqual(resolveStudentSubjects(["Lenguaje"], "primary", "5.º"), ["Lenguaje"]);
+  assert.deepEqual(resolveStudentSubjects(["Lenguaje"], "secondary", "1.º"), ["Lenguaje"]);
+  assert.equal(studentCanTakeSubject({ schoolLevel: "primary", grade: "6.º", subjects: ["Lenguaje"] }, "Cívica"), true);
+  assert.equal(studentCanTakeSubject({ schoolLevel: "primary", grade: "6.º", subjects: [] }, "Física"), false);
+  assert.match(firebaseSource, /resolveStudentSubjects\(rawSubjects, schoolLevel, grade\)/);
+  assert.match(firebaseSource.slice(firebaseSource.indexOf("export async function getProfile")), /resolveStudentSubjects/);
+});
+
+test("client and server catalogs agree for every school grade", async () => {
+  const serverSource = await readFile(new URL("../functions/src/academic-subjects.ts", import.meta.url), "utf8");
+  const server = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(serverSource)).toString("base64")}`);
+  for (const [level, grades] of Object.entries(server.gradesBySchoolLevel)) {
+    for (const grade of grades) {
+      assert.deepEqual(subjectsForGrade(level, grade), server.subjectsForGrade(level, grade));
+      for (const values of [[], ["Lenguaje"], ["Lenguaje", "Civica"]]) {
+        assert.deepEqual(resolveStudentSubjects(values, level, grade), server.resolveStudentSubjects(values, level, grade));
+      }
+    }
+  }
 });
 
 test("registration, editing and backend saves use the grade catalog", () => {

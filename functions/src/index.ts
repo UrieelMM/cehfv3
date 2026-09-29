@@ -49,6 +49,7 @@ import {
 import {
   academicSubjectOptions,
   gradesBySchoolLevel,
+  resolveStudentSubjects,
   sanitizeSubjects,
   subjectsBelongToCatalog,
   subjectsForGrade,
@@ -408,7 +409,13 @@ function serializeManagedAccount(uid: string, data: DocumentData) {
           guardianWhatsAppAuthorized: data.guardianWhatsAppAuthorized !== false,
         }
       : {}),
-    subjects: Array.isArray(data.subjects) ? data.subjects.map(String) : [],
+    subjects: data.role === "student"
+      ? resolveStudentSubjects(
+          Array.isArray(data.subjects) ? data.subjects.map(String) : [],
+          data.schoolLevel === "preschool" || data.schoolLevel === "secondary" ? data.schoolLevel : "primary",
+          String(data.grade ?? ""),
+        )
+      : Array.isArray(data.subjects) ? data.subjects.map(String) : [],
     teacherIds: Array.isArray(data.teacherIds) ? data.teacherIds.map(String) : [],
     ...(data.photoURL ? { photoURL: String(data.photoURL) } : {}),
     createdAt: accountTimestamp(data.createdAt),
@@ -5454,7 +5461,9 @@ function expectedDailyGradeSubjects(student: DocumentData) {
   const configuredSubjects = Array.isArray(student.subjects)
     ? sanitizeSubjects(student.subjects.map(String), gradeSubjects)
     : [];
-  return configuredSubjects.length ? configuredSubjects : gradeSubjects;
+  return configuredSubjects.length
+    ? resolveStudentSubjects(configuredSubjects, schoolLevel, String(student.grade ?? ""))
+    : gradeSubjects;
 }
 
 function dailyGradeCohort(student: DocumentData) {

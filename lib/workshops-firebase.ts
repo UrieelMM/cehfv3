@@ -6,6 +6,7 @@ import {
   getDoc,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -967,28 +968,41 @@ export async function saveWorkshopFeedback(
   feedbackRich: string,
   reviewed: boolean,
 ) {
+  if (!feedback.trim() || feedback.trim().length > 1_600) {
+    throw new Error("Escribe una retroalimentación de hasta 1600 caracteres.");
+  }
+  if (submission.institutionId !== task.institutionId || submission.workshopId !== task.workshopId
+    || submission.taskId !== task.id || submission.id !== submission.studentId) {
+    throw new Error("La entrega no pertenece a esta actividad.");
+  }
   const { db } = requireFirebase();
-  await updateDoc(
-    doc(
-      db,
-      "institutions",
-      task.institutionId,
-      "workshops",
-      task.workshopId,
-      "tasks",
-      task.id,
-      "submissions",
-      submission.studentId,
-    ),
-    {
+  const reference = doc(
+    db,
+    "institutions",
+    task.institutionId,
+    "workshops",
+    task.workshopId,
+    "tasks",
+    task.id,
+    "submissions",
+    submission.studentId,
+  );
+  await runTransaction(db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (!snapshot.exists()) throw new Error("Esta entrega ya no está disponible.");
+    const current = snapshot.data();
+    if (current.version !== submission.version || asIso(current.updatedAt) !== submission.updatedAt) {
+      throw new Error("La entrega cambió. Revisa la versión actual antes de publicar comentarios.");
+    }
+    transaction.update(reference, {
       teacherFeedback: feedback.trim(),
       teacherFeedbackRich: normalizeForumRichText(feedbackRich || feedback),
       status: reviewed ? "reviewed" : "feedback",
       feedbackAt: serverTimestamp(),
       reviewedAt: reviewed ? serverTimestamp() : null,
       updatedAt: serverTimestamp(),
-    },
-  );
+    });
+  });
 }
 
 export async function getWorkshopTaskAttachmentUrl(

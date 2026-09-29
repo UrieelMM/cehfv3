@@ -77,11 +77,22 @@ La aplicación calcula sin recaptura:
 - el promedio bimestral a partir de las semanas del bimestre;
 - la calificación final a partir de los bimestres del ciclo.
 
+En **Diarias**, un docente activo puede eliminar únicamente sus propias capturas,
+con confirmación del alumno, materia y fecha. La eliminación verifica que el
+registro no haya cambiado y los promedios se recalculan sin esa evidencia.
+
 Los reportes de `studentWeeklyReports` usan el mismo ciclo, bimestre y semana.
 Cada reporte pertenece a un alumno y una materia, muestra el promedio semanal
 como evidencia y guarda **Un logro para reconocer**, **Área de acompañamiento**
 y **Próximo paso**. Los borradores sólo son visibles para personal autorizado;
 el alumno únicamente puede consultar reportes publicados.
+
+Las pruebas de permisos usan datos ficticios y sólo aceptan un emulador local.
+Con Java y Firebase CLI disponibles, ejecútalas con:
+
+```bash
+npx firebase-tools emulators:exec --project demo-cehf-grading --only firestore "node --test tests/firestore-grading-rules.test.mjs"
+```
 
 ## WhatsApp
 

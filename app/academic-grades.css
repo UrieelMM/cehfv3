@@ -345,7 +345,7 @@
 .academic-capture-header,
 .academic-capture-row {
   display: grid;
-  grid-template-columns: minmax(190px, 1.1fr) minmax(520px, 3fr) minmax(135px, .8fr);
+  grid-template-columns: minmax(190px, 1.1fr) minmax(520px, 3fr) minmax(180px, .8fr);
   gap: 10px;
 }
 
@@ -468,6 +468,15 @@
 
 .academic-capture-result button svg { width: 14px; height: 14px; }
 
+.academic-capture-result .academic-delete-grade {
+  min-width: 36px;
+  justify-content: center;
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+}
+
+.academic-capture-result .academic-delete-grade:hover { background: color-mix(in srgb, var(--danger) 22%, var(--surface)); }
+
 .academic-capture-result button:disabled {
   cursor: wait;
   opacity: .65;
@@ -585,7 +594,7 @@
 @media (max-width: 1100px) {
   .academic-context-bar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .academic-capture-list { overflow-x: auto; }
-  .academic-capture-header, .academic-capture-row { min-width: 900px; }
+  .academic-capture-header, .academic-capture-row { min-width: 950px; }
 }
 
 @media (max-width: 720px) {

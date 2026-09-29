@@ -48,6 +48,7 @@ import { createInitialPortalState } from "./portal-defaults";
 import {
   academicSubjectOptions,
   gradesBySchoolLevel,
+  resolveStudentSubjects,
   sanitizeSubjects,
   subjectsBelongToCatalog,
   subjectsForGrade,
@@ -295,12 +296,9 @@ export async function listManagedAccounts(
           : undefined,
       guardianWhatsAppAuthorized:
         role === "student" ? data.guardianWhatsAppAuthorized !== false : undefined,
-      subjects: sanitizeSubjects(
-        rawSubjects,
-        role === "student"
-          ? subjectsForGrade(schoolLevel, grade)
-          : academicSubjectOptions,
-      ),
+      subjects: role === "student"
+        ? resolveStudentSubjects(rawSubjects, schoolLevel, grade)
+        : sanitizeSubjects(rawSubjects),
       teacherIds: Array.isArray(data.teacherIds)
         ? data.teacherIds.map(String)
         : [],
@@ -646,14 +644,13 @@ export async function getProfile(user: User): Promise<UserProfile | null> {
       data.role === "student" && data.guardianName
         ? String(data.guardianName)
         : undefined,
-    subjects: Array.isArray(data.subjects)
-      ? sanitizeSubjects(
-          data.subjects.map(String),
-          role === "student"
-            ? subjectsForGrade(schoolLevel, grade)
-            : academicSubjectOptions,
+    subjects: role === "student"
+      ? resolveStudentSubjects(
+          Array.isArray(data.subjects) ? data.subjects.map(String) : [],
+          schoolLevel,
+          grade,
         )
-      : undefined,
+      : Array.isArray(data.subjects) ? sanitizeSubjects(data.subjects.map(String)) : undefined,
     teacherIds: Array.isArray(data.teacherIds)
       ? data.teacherIds.map(String)
       : undefined,

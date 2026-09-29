@@ -39,6 +39,7 @@ const primaryUpperSubjects = [
 ] as const satisfies readonly AcademicSubject[];
 const primarySixthSubjects = [
   "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés",
+  "Cívica",
 ] as const satisfies readonly AcademicSubject[];
 const secondaryFirstSubjects = [
   "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés",
@@ -109,6 +110,18 @@ export function sanitizeSubjects(
     }
   }
   return sanitized;
+}
+
+export function resolveStudentSubjects(
+  values: readonly string[],
+  schoolLevel: SchoolLevel,
+  grade: string,
+) {
+  const subjects = sanitizeSubjects(values, subjectsForGrade(schoolLevel, grade));
+  if (schoolLevel === "primary" && grade === "6.º" && !subjects.includes("Cívica")) {
+    subjects.push("Cívica");
+  }
+  return subjects;
 }
 
 export function subjectsBelongToCatalog(

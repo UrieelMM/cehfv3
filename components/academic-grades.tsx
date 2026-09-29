@@ -13,6 +13,7 @@ import {
   Save,
   Search,
   Sparkles,
+  Trash2,
   UserRound,
   UsersRound,
   X,
@@ -22,6 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { studentCanTakeSubject, subjectsMatch } from "@/lib/academic-subjects";
 import { clampGradeScore, GRADE_MAX } from "@/lib/grade-scale";
 import {
@@ -30,6 +32,7 @@ import {
   calculateWeightedGrade,
   DEFAULT_GRADING_WEIGHTS,
   DEFAULT_WEEKLY_GRADE_SCORES,
+  deleteDailyGrade,
   GRADING_CRITERIA,
   saveDailyGrade,
   watchDailyGrades,
@@ -124,11 +127,15 @@ function CaptureRow({
   record,
   weights,
   onSave,
+  onDelete,
+  deleting,
 }: {
   student: ManagedAccount;
   record?: DailyGradeRecord;
   weights: TeacherGradingConfig["weights"];
   onSave: (student: ManagedAccount, scores: WeeklyGradeScores) => Promise<void>;
+  onDelete: (record: DailyGradeRecord) => void;
+  deleting: boolean;
 }) {
   const [scores, setScores] = useState<WeeklyGradeScores>(record?.scores ?? { ...DEFAULT_WEEKLY_GRADE_SCORES });
   const [saving, setSaving] = useState(false);
@@ -154,6 +161,7 @@ function CaptureRow({
               max={GRADE_MAX}
               step="0.1"
               value={scores[criterion.key]}
+              disabled={saving || deleting}
               onChange={(event) => setScores((current) => ({
                 ...current,
                 [criterion.key]: clampGradeScore(event.target.value),
@@ -166,7 +174,7 @@ function CaptureRow({
         <span className={`academic-score-badge is-${result >= 9 ? "high" : result >= 7 ? "mid" : "low"}`}>{score(result)}</span>
         <button
           type="button"
-          disabled={saving}
+          disabled={saving || deleting}
           onClick={async () => {
             setSaving(true);
             try { await onSave(student, scores); } finally { setSaving(false); }
@@ -175,6 +183,16 @@ function CaptureRow({
           {saving ? <span className="academic-button-loader" /> : record ? <Check size={16} /> : <Save size={16} />}
           {saving ? "Guardando" : record ? "Actualizar" : "Guardar"}
         </button>
+        {record && <button
+          type="button"
+          className="academic-delete-grade"
+          disabled={saving || deleting}
+          aria-label={`Eliminar calificación diaria de ${student.name}`}
+          title="Eliminar calificación diaria"
+          onClick={() => onDelete(record)}
+        >
+          <Trash2 size={16} />
+        </button>}
       </div>
     </div>
   );
@@ -431,6 +449,8 @@ export function AcademicGradesPanel({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [exportOpen, setExportOpen] = useState(false);
+  const [gradeToDelete, setGradeToDelete] = useState<DailyGradeRecord | null>(null);
+  const [deletingGrade, setDeletingGrade] = useState(false);
   const [exportingStudentPdf, setExportingStudentPdf] = useState(false);
   const [directorNames, setDirectorNames] = useState<string[]>(profile.role === "director" ? [profile.name] : []);
   const teacherSubjects = useMemo(() => profile.subjects ?? [], [profile.subjects]);
@@ -510,6 +530,21 @@ export function AcademicGradesPanel({
       toast.success(`Calificación diaria de ${student.name} guardada`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No pudimos guardar la calificación.");
+    }
+  }
+
+  async function removeGrade() {
+    if (!gradeToDelete || deletingGrade) return;
+    setDeletingGrade(true);
+    try {
+      await deleteDailyGrade(profile, gradeToDelete);
+      setGradeToDelete(null);
+      toast.success("Calificación diaria eliminada. Los promedios se recalcularán automáticamente.");
+    } catch (error) {
+      setGradeToDelete(null);
+      toast.error(error instanceof Error ? error.message : "No pudimos eliminar la calificación.");
+    } finally {
+      setDeletingGrade(false);
     }
   }
 
@@ -622,10 +657,24 @@ export function AcademicGradesPanel({
                 record={daySubjectRecords.find((record) => record.studentId === student.uid)}
                 weights={config.weights}
                 onSave={persist}
+                onDelete={setGradeToDelete}
+                deleting={deletingGrade && gradeToDelete?.studentId === student.uid
+                  && gradeToDelete.gradeDate === activeDate && subjectsMatch(gradeToDelete.subject, activeSubject)}
               />)}
         </div>
       ) : level === "daily" ? <DailyTable records={pagedDaily} /> : <SummaryTable records={pagedSummary} level={level} />}
       <Pagination page={page} total={captureTotal} onChange={setPage} />
+      <ConfirmDeleteDialog
+        open={Boolean(gradeToDelete)}
+        title="Eliminar calificación diaria"
+        description={gradeToDelete
+          ? `Se eliminará la calificación de ${gradeToDelete.studentName} (${groupLabel(gradeToDelete)}), de ${gradeToDelete.subject}, del ${dateLabel(gradeToDelete.gradeDate, true)}. Los promedios se recalcularán sin esta captura. Esta acción no se puede deshacer.`
+          : ""}
+        confirmLabel="Eliminar calificación"
+        busy={deletingGrade}
+        onCancel={() => { if (!deletingGrade) setGradeToDelete(null); }}
+        onConfirm={() => void removeGrade()}
+      />
       {typeof document !== "undefined" && createPortal(
         exportOpen && profile.role !== "student" ? (
           <GradeExportDialog

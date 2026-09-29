@@ -76,7 +76,7 @@ test("Talleres conserva el formato enriquecido en recursos, trabajos y entregas"
   assert.match(page, /resource\.descriptionRich \|\| normalizeForumRichText\(resource\.description\)/);
   assert.match(tasks, /editorKey=\{`workshop-task-create-\$\{workshop\.id\}`\}/);
   assert.match(tasks, /editorKey=\{`workshop-submission-\$\{task\.id\}-\$\{contentRevision\}`\}/);
-  assert.match(tasks, /editorKey=\{`workshop-feedback-\$\{task\.id\}-\$\{selectedSubmission\.studentId\}`\}/);
+  assert.match(tasks, /editorKey=\{`workshop-feedback-\$\{task\.id\}-\$\{submission\.studentId\}-\$\{submission\.version\}-\$\{revision\}`\}/);
   assert.match(firebase, /descriptionRich: normalizeForumRichText/);
   assert.match(firebase, /contentRich: normalizeForumRichText\(input\.contentRich \|\| input\.content\)/);
   assert.match(firebase, /teacherFeedbackRich: normalizeForumRichText\(feedbackRich \|\| feedback\)/);

@@ -62,7 +62,8 @@ service cloud.firestore {
         "Inglés", "Cívica", "Lectura y comprensión"
       ];
       let primarySixth = [
-        "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés"
+        "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés",
+        "Cívica"
       ];
       let secondaryFirst = [
         "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés"
@@ -1010,7 +1011,8 @@ service cloud.firestore {
           "ingles", "civica", "lectura-y-comprension"
         ];
         let primarySixth = [
-          "lenguaje", "matematicas", "ciencias", "historia", "geografia", "ingles"
+          "lenguaje", "matematicas", "ciencias", "historia", "geografia", "ingles",
+          "civica"
         ];
         let secondaryFirst = [
           "lenguaje", "matematicas", "civica", "geografia", "biologia", "ingles"
@@ -1079,10 +1081,10 @@ service cloud.firestore {
             profile().subjects, data.subject, data.subjectId
           )
           && (
-            hasAssignedGradeSubject(
+            gradeCatalogHasSubject(student, data.subjectId)
+            || hasAssignedGradeSubject(
               student.subjects, data.subject, data.subjectId
             )
-            || gradeCatalogHasSubject(student, data.subjectId)
           );
       }
 
@@ -1285,7 +1287,7 @@ service cloud.firestore {
         allow update: if validDailyGradeCorrection(
           resource.data, request.resource.data
         );
-        allow delete: if false;
+        allow delete: if teacherOwnsGrade(resource.data);
       }
 
       match /studentWeeklyReports/{reportId} {
