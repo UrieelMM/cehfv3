@@ -631,6 +631,21 @@ function WorkshopFeedbackPanel({ task, submission, firebaseReady, canManage, bus
   );
 }
 
+function WorkshopSubmissionLinks({ links }: { links: WorkshopLink[] }) {
+  if (!links.length) return null;
+  return (
+    <section className="workshop-submission-links" aria-label="Enlaces de la entrega">
+      <span>Enlaces de la entrega</span>
+      {links.map((link, index) => (
+        <a className="workshop-submission-link" key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer">
+          <ExternalLink size={16} />
+          <span><strong>{link.label}</strong><small>{link.url}</small></span>
+        </a>
+      ))}
+    </section>
+  );
+}
+
 function WorkshopTaskDetailDialog({
   task,
   profile,
@@ -659,7 +674,7 @@ function WorkshopTaskDetailDialog({
   const [content, setContent] = useState("");
   const [contentRich, setContentRich] = useState(() => normalizeForumRichText(""));
   const [contentRevision, setContentRevision] = useState(0);
-  const [link, setLink] = useState("");
+  const [links, setLinks] = useState<WorkshopLink[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<WorkshopTaskAttachment | null>(null);
@@ -782,18 +797,18 @@ function WorkshopTaskDetailDialog({
 
   async function submitStudentWork(event: FormEvent) {
     event.preventDefault();
-    if (!content.trim() && !link.trim() && !files.length) {
+    if (!content.trim() && !links.length && !files.length) {
       toast.error("Escribe una respuesta, agrega un enlace o adjunta un archivo.");
       return;
     }
     setBusy(true);
     try {
       if (!firebaseReady) throw new Error("Inicia sesión para entregar trabajos.");
-      await submitWorkshopTask(task, profile, { content, contentRich, link, files });
+      await submitWorkshopTask(task, profile, { content, contentRich, links, files });
       setContent("");
       setContentRich(normalizeForumRichText(""));
       setContentRevision((current) => current + 1);
-      setLink("");
+      setLinks([]);
       setFiles([]);
       toast.success(mySubmission ? "Nueva versión enviada" : "Trabajo enviado");
     } catch (error) {
@@ -849,9 +864,9 @@ function WorkshopTaskDetailDialog({
             {role === "student" ? (
               <section className="workshop-student-delivery">
                 {mySubmission && <WorkshopFeedbackCard submission={mySubmission} studentView />}
-                {mySubmission && <div className="workshop-previous-delivery"><CheckCircle2 size={18} /><span><strong>Versión {mySubmission.version} enviada</strong><small>{mySubmission.content || (mySubmission.link ? "Enlace adjunto" : `${mySubmission.attachments.length} archivo(s)`)}</small></span></div>}
+                {mySubmission && <div className="workshop-previous-delivery"><CheckCircle2 size={18} /><span><strong>Versión {mySubmission.version} enviada</strong><small>{mySubmission.content || (mySubmission.links.length ? `${mySubmission.links.length} ${mySubmission.links.length === 1 ? "enlace adjunto" : "enlaces adjuntos"}` : `${mySubmission.attachments.length} archivo(s)`)}</small></span></div>}
                 {mySubmission?.content && <div className="workshop-submission-rich"><ForumRichText content={mySubmission.contentRich || normalizeForumRichText(mySubmission.content)} editorKey={`workshop-own-submission-${task.id}-${mySubmission.version}`} editable={false} /></div>}
-                {mySubmission?.link && <a className="workshop-submission-link" href={mySubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace entregado</a>}
+                {mySubmission && <WorkshopSubmissionLinks links={mySubmission.links} />}
                 {mySubmission && mySubmission.attachments.length > 0 && (
                   <div className="workshop-submission-files">
                     <span>Archivos de tu entrega</span>
@@ -880,10 +895,7 @@ function WorkshopTaskDetailDialog({
                         }}
                       />
                     </div>
-                    <label className="workshop-delivery-link">
-                      <span>Enlace <small>Opcional</small></span>
-                      <input type="url" value={link} onChange={(event) => setLink(event.target.value)} maxLength={2000} placeholder="https://ejemplo.com/mi-trabajo" />
-                    </label>
+                    <WorkshopLinksEditor title="Enlaces de tu entrega" links={links} onChange={setLinks} disabled={busy} />
                     <label className="workshop-delivery-file"><input type="file" multiple onChange={(event) => setFiles(Array.from(event.target.files ?? []))} /><Paperclip size={18} /><span>{files.length ? `${files.length} archivo(s) seleccionado(s)` : "Adjuntar archivos"}</span></label>
                     <button className="primary-button" disabled={busy}>{busy ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{mySubmission ? "Enviar nueva versión" : "Entregar trabajo"}</button>
                   </form>
@@ -918,9 +930,9 @@ function WorkshopTaskDetailDialog({
                         />
                       </div>
                     ) : (
-                      <p>{selectedSubmission.link ? "Entrega mediante enlace." : "Entrega basada en archivos adjuntos."}</p>
+                      <p>{selectedSubmission.links.length ? "Entrega mediante enlaces." : "Entrega basada en archivos adjuntos."}</p>
                     )}
-                    {selectedSubmission.link && <a className="workshop-submission-link" href={selectedSubmission.link} target="_blank" rel="noopener noreferrer"><ExternalLink size={16} /> Abrir enlace del alumno</a>}
+                    <WorkshopSubmissionLinks links={selectedSubmission.links} />
                     {selectedSubmission.attachments.length > 0 && (
                       <div className="workshop-submission-files">
                         <span>Archivos enviados</span>

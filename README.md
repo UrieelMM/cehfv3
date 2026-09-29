@@ -87,12 +87,22 @@ como evidencia y guarda **Un logro para reconocer**, **Área de acompañamiento*
 y **Próximo paso**. Los borradores sólo son visibles para personal autorizado;
 el alumno únicamente puede consultar reportes publicados.
 
-Las pruebas de permisos usan datos ficticios y sólo aceptan un emulador local.
+Las pruebas de permisos de calificaciones y talleres usan datos ficticios y sólo
+aceptan un emulador local. El idioma de Java evita errores de diagnóstico del
+emulador al evaluar solicitudes rechazadas.
 Con Java y Firebase CLI disponibles, ejecútalas con:
 
 ```bash
-npx firebase-tools emulators:exec --project demo-cehf-grading --only firestore "node --test tests/firestore-grading-rules.test.mjs"
+JAVA_TOOL_OPTIONS="-Duser.language=en -Duser.country=US" npx firebase-tools emulators:exec --project demo-cehf-grading --only firestore "node --test tests/firestore-grading-rules.test.mjs"
 ```
+
+## Entregas de talleres
+
+En una actividad de taller, el alumno puede agregar hasta 10 enlaces con nombre
+y URL HTTP o HTTPS desde **Enlaces de tu entrega → Agregar enlace**. Se pueden
+enviar solos o acompañados de una respuesta y archivos. El alumno y el docente
+consultan todos los enlaces enviados; cada nueva versión conserva su historial.
+Los enlaces individuales de las entregas anteriores siguen disponibles.
 
 ## WhatsApp
 

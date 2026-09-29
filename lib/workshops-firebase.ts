@@ -143,22 +143,10 @@ function normalizeWorkshopLinks(links: WorkshopLink[]): WorkshopLink[] {
   });
 }
 
-function normalizeWorkshopSubmissionLink(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "";
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    throw new Error("Escribe un enlace válido para tu entrega.");
-  }
-  if (
-    !["http:", "https:"].includes(parsed.protocol) ||
-    trimmed.length > 2_000
-  ) {
-    throw new Error("El enlace de la entrega debe comenzar con http:// o https://.");
-  }
-  return parsed.toString();
+function submissionLinksFromData(data: DocumentData): WorkshopLink[] {
+  const links = workshopLinksFromData(data.links);
+  if (links.length) return links;
+  return workshopLinksFromData([{ label: "Enlace entregado", url: data.link }]);
 }
 
 function requirePersistedWorkshopLinks(
@@ -635,6 +623,7 @@ function submissionFromData(
     content: String(data.content ?? ""),
     contentRich: data.contentRich ? String(data.contentRich) : undefined,
     link: String(data.link ?? ""),
+    links: submissionLinksFromData(data),
     attachments: attachmentsFromData(data.attachments),
     version: Math.max(1, Number(data.version ?? 1)),
     status: ["feedback", "reviewed"].includes(String(data.status))
@@ -906,10 +895,18 @@ export function watchWorkshopSubmissions(
 export async function submitWorkshopTask(
   task: WorkshopTask,
   profile: UserProfile,
-  input: { content: string; contentRich: string; link: string; files: File[] },
+  input: { content: string; contentRich: string; links?: WorkshopLink[]; link?: string; files: File[] },
 ) {
   if (profile.role !== "student") {
     throw new Error("Sólo los alumnos pueden enviar este trabajo.");
+  }
+  const links = normalizeWorkshopLinks(input.links ?? (input.link?.trim()
+    ? [{ label: "Enlace entregado", url: input.link }] : []));
+  if (links.some((link) => link.url.length > 2_000)) {
+    throw new Error("Cada enlace de la entrega debe tener hasta 2000 caracteres.");
+  }
+  if (!input.content.trim() && !links.length && !input.files.length) {
+    throw new Error("Escribe una respuesta, agrega un enlace o adjunta un archivo.");
   }
   const { db } = requireFirebase();
   const submissionReference = doc(
@@ -925,7 +922,6 @@ export async function submitWorkshopTask(
   );
   const previous = await getDoc(submissionReference);
   const version = previous.exists() ? Number(previous.data().version ?? 1) + 1 : 1;
-  const link = normalizeWorkshopSubmissionLink(input.link);
   const prefix = `institutions/${task.institutionId}/workshops/${task.workshopId}/tasks/${task.id}/submissions/${profile.uid}/${version}`;
   const attachments = await uploadWorkshopFiles(prefix, input.files);
   const payload = {
@@ -938,7 +934,8 @@ export async function submitWorkshopTask(
       : profile.name,
     content: input.content.trim(),
     contentRich: normalizeForumRichText(input.contentRich || input.content),
-    link,
+    link: links[0]?.url ?? "",
+    links,
     attachments,
     version,
     status: "submitted",

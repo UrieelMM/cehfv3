@@ -761,6 +761,40 @@ service cloud.firestore {
                 );
             }
 
+            function validSubmissionLinkEntry(link) {
+              // The field checks below also require both label and url to exist.
+              return link is map
+                && link.keys().hasOnly(["label", "url"])
+                && link.label is string
+                && link.label.size() > 0
+                && link.label.size() <= 100
+                && link.url is string
+                && link.url.size() <= 2000
+                && link.url.matches("^https?://[^[:space:]]+$");
+            }
+
+            function validSubmissionLinkAt(links, index) {
+              return links.size() <= index || validSubmissionLinkEntry(links[index]);
+            }
+
+            function validSubmissionLinks(data) {
+              return !data.keys().hasAny(["links"])
+                || (
+                  data.links is list
+                  && data.links.size() <= 10
+                  && validSubmissionLinkAt(data.links, 0)
+                  && validSubmissionLinkAt(data.links, 1)
+                  && validSubmissionLinkAt(data.links, 2)
+                  && validSubmissionLinkAt(data.links, 3)
+                  && validSubmissionLinkAt(data.links, 4)
+                  && validSubmissionLinkAt(data.links, 5)
+                  && validSubmissionLinkAt(data.links, 6)
+                  && validSubmissionLinkAt(data.links, 7)
+                  && validSubmissionLinkAt(data.links, 8)
+                  && validSubmissionLinkAt(data.links, 9)
+                );
+            }
+
             allow read: if canReadWorkshopSubmission();
             allow create: if studentCanSubmit()
               && request.resource.data.studentId == studentId
@@ -769,6 +803,7 @@ service cloud.firestore {
               && request.resource.data.institutionId == institutionId
               && request.resource.data.status == "submitted"
               && validSubmissionLink(request.resource.data)
+              && validSubmissionLinks(request.resource.data)
               && validWorkshopSubmissionRichText(request.resource.data)
               && request.resource.data.version == 1;
             allow update: if (
@@ -782,12 +817,13 @@ service cloud.firestore {
               && request.resource.data.status == "submitted"
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly([
-                  "content", "link", "attachments", "version", "status",
+                  "content", "link", "links", "attachments", "version", "status",
                   "contentRich", "teacherFeedback", "teacherFeedbackRich",
                   "submittedAt", "feedbackAt",
                   "reviewedAt", "updatedAt"
                 ])
               && validSubmissionLink(request.resource.data)
+              && validSubmissionLinks(request.resource.data)
               && validWorkshopSubmissionRichText(request.resource.data)
             ) || (
               canManageWorkshopTask(parentTask())
@@ -818,7 +854,8 @@ service cloud.firestore {
                 && request.resource.data.taskId == taskId
                 && request.resource.data.status == "submitted"
                 && validWorkshopSubmissionRichText(request.resource.data)
-                && validSubmissionLink(request.resource.data);
+                && validSubmissionLink(request.resource.data)
+                && validSubmissionLinks(request.resource.data);
               allow update, delete: if false;
             }
           }

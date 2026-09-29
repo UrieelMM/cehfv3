@@ -27,9 +27,11 @@ function value(data) {
   return { mapValue: { fields: Object.fromEntries(Object.entries(data).map(([key, item]) => [key, value(item)])) } };
 }
 
-test("Firestore enforces sixth-grade Cívica and author-only daily deletion", { skip: !host }, async (t) => {
+test("Firestore protege las calificaciones y los enlaces de entregas de talleres", { skip: !host }, async (t) => {
   assert.match(host, /^(localhost|127\.0\.0\.1):\d+$/, "Rules tests require a loopback emulator");
   const base = `http://${host}/v1/projects/${project}/databases/(default)/documents`;
+  const cleared = await fetch(`http://${host}/emulator/v1/projects/${project}/databases/(default)/documents`, { method: "DELETE" });
+  assert.ok(cleared.ok, await cleared.text());
   async function write(path, data, actor = "owner") {
     return fetch(`${base}/${path}`, {
       method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${actor === "owner" ? actor : token(actor)}` },
@@ -131,5 +133,97 @@ test("Firestore enforces sixth-grade Cívica and author-only daily deletion", { 
     await seed(path, grade);
     const response = await remove(path, "teacher-a");
     assert.equal(response.status, 403, await response.text());
+  });
+
+  await t.test("los enlaces de talleres conservan validación, autoría y versiones", async (t) => {
+    const student = "workshop-student";
+    const otherStudent = "workshop-other-student";
+    for (const uid of [student, otherStudent]) {
+      await seed(`users/${uid}`, { institutionId: institution, role: "student", active: true });
+    }
+    const workshopPath = `institutions/${institution}/workshops/reading`;
+    const taskPath = `${workshopPath}/tasks/activity-a`;
+    const submissionPath = `${taskPath}/submissions/${student}`;
+    await seed(workshopPath, {
+      institutionId: institution, studentIds: [student], teacherIds: ["teacher-a"],
+      managerIds: ["teacher-a"], memberIds: [student, "teacher-a"],
+    });
+    const activity = { institutionId: institution, workshopId: "reading", createdBy: "teacher-a", status: "published", audienceStudentIds: [student] };
+    await seed(taskPath, activity);
+    const links = Array.from({ length: 10 }, (_, index) => ({ label: `Enlace ${index + 1}`, url: `https://example.com/actividad/${index}` }));
+    const revisedLinks = links.map((link, index) => ({ ...link, url: `https://example.com/segunda-version/${index}` }));
+    const submission = {
+      institutionId: institution, workshopId: "reading", taskId: "activity-a", studentId: student,
+      studentName: "Alumno de prueba", content: "", link: links[0].url, links, attachments: [],
+      version: 1, status: "submitted", teacherFeedback: "", submittedAt: new Date(), updatedAt: new Date(),
+    };
+    async function read(path, actor) {
+      return fetch(`${base}/${path}`, { headers: { Authorization: `Bearer ${token(actor)}` } });
+    }
+    await t.test("el alumno puede enviar diez enlaces junto con su historial en una sola operación", async () => {
+      const response = await fetch(`${base}:commit`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token(student)}` },
+        body: JSON.stringify({ writes: [submissionPath, `${submissionPath}/history/version-1`].map((path) => ({
+          update: { name: `projects/${project}/databases/(default)/documents/${path}`, fields: value(submission).mapValue.fields },
+        })) }),
+      });
+      assert.ok(response.ok, await response.text());
+      for (const actor of [student, "teacher-a"]) {
+        const current = await read(submissionPath, actor);
+        assert.ok(current.ok, await current.clone().text());
+        assert.equal((await current.json()).fields.links.arrayValue.values.length, 10);
+      }
+    });
+    await t.test("el alumno puede actualizar diez enlaces al enviar una nueva versión", async () => {
+      const response = await write(submissionPath, { ...submission, links: revisedLinks, link: revisedLinks[0].url, version: 2 }, student);
+      assert.ok(response.ok, await response.text());
+    });
+    await t.test("rechaza protocolos peligrosos, listas grandes y campos inválidos en cualquier posición", async () => {
+      const invalidLists = [
+        [...links, links[0]], "not-a-list", [null], [{ url: links[0].url }], [{ label: links[0].label }],
+        [{ ...links[0], label: 10 }], [{ ...links[0], url: 10 }],
+        [{ ...links[0], label: "" }], [{ ...links[0], label: "x".repeat(101) }],
+        [{ ...links[0], url: "ftp://example.com/file" }],
+        [{ ...links[0], url: `https://example.com/${"x".repeat(2000)}` }],
+        [{ ...links[0], url: "https://example.com/with space" }],
+        [{ ...links[0], extra: "field" }],
+        ...links.map((_, position) => links.map((item, index) => index === position ? { ...item, url: "javascript:alert(1)" } : item)),
+      ];
+      for (const invalidLinks of invalidLists) {
+        const response = await write(submissionPath, { ...submission, version: 3, links: invalidLinks }, student);
+        assert.equal(response.status, 403, await response.text());
+      }
+      const response = await write(`${submissionPath}/history/invalid-links`, { ...submission, links: [{ ...links[0], url: "javascript:alert(1)" }] }, student);
+      assert.equal(response.status, 403, await response.text());
+    });
+    await t.test("otro alumno o un docente no pueden reemplazar los enlaces de la entrega", async () => {
+      for (const actor of [otherStudent, "teacher-b", "teacher-a"]) {
+        const response = await write(submissionPath, { ...submission, version: 3, links: [links[1]] }, actor);
+        assert.equal(response.status, 403, await response.text());
+      }
+      const response = await read(submissionPath, otherStudent);
+      assert.equal(response.status, 403, await response.text());
+    });
+    await t.test("el docente conserva la publicación de comentarios sin modificar enlaces", async () => {
+      const response = await write(submissionPath, { ...submission, version: 2, links: revisedLinks, link: revisedLinks[0].url, status: "feedback", teacherFeedback: "Buen trabajo" }, "teacher-a");
+      assert.ok(response.ok, await response.text());
+    });
+    await t.test("las entregas del formato anterior y las respuestas sin enlaces siguen funcionando", async () => {
+      const legacy = { ...submission, version: 3 };
+      delete legacy.links;
+      let response = await write(submissionPath, legacy, student);
+      assert.ok(response.ok, await response.text());
+      response = await write(submissionPath, { ...submission, version: 4, content: "Respuesta escrita", link: "", links: [] }, student);
+      assert.ok(response.ok, await response.text());
+    });
+    await t.test("el historial de una versión enviada continúa siendo inmutable", async () => {
+      const response = await write(`${submissionPath}/history/version-1`, { ...submission, links: [links[1]] }, student);
+      assert.equal(response.status, 403, await response.text());
+    });
+    await t.test("cerrar la actividad sigue impidiendo nuevas entregas con enlaces", async () => {
+      await seed(taskPath, { ...activity, status: "closed" });
+      const response = await write(submissionPath, { ...submission, version: 5 }, student);
+      assert.equal(response.status, 403, await response.text());
+    });
   });
 });

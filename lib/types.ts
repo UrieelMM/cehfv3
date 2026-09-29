@@ -1035,7 +1035,9 @@ export type WorkshopSubmission = {
   studentName: string;
   content: string;
   contentRich?: string;
+  /** First link retained for clients that predate multiple submission links. */
   link: string;
+  links: WorkshopLink[];
   attachments: WorkshopTaskAttachment[];
   version: number;
   status: WorkshopSubmissionStatus;

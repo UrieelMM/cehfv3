@@ -954,12 +954,13 @@
 .workshop-task-links a:hover { border-color: var(--violet); }
 
 .workshop-links-editor { display: grid; gap: 10px; min-width: 0; }
-.workshop-links-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.workshop-links-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .workshop-links-heading > span { font-size: .82rem; font-weight: 760; }
-.workshop-links-heading small { color: var(--muted); font-weight: 500; }
+.workshop-links-heading small { display: inline-block; margin-left: 5px; color: var(--muted); font-weight: 500; }
 .workshop-links-heading button,
 .workshop-link-row > button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--violet); font-size: .8rem; font-weight: 700; cursor: pointer; }
-.workshop-links-heading button:disabled { opacity: .45; cursor: default; }
+.workshop-links-heading button:disabled,
+.workshop-link-row > button:disabled { opacity: .45; cursor: default; }
 .workshop-link-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.5fr) auto; align-items: end; gap: 8px; }
 .workshop-link-row label { min-width: 0; }
 .workshop-link-row label span { display: block; margin-bottom: 5px; color: var(--muted); font-size: .76rem; }
@@ -1499,7 +1500,6 @@
 .workshop-student-delivery form { display: grid; gap: 10px; padding: 17px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-raised); }
 .workshop-student-delivery form > label > span { display: block; margin-bottom: 5px; font-size: calc(0.66rem + 0.125rem); font-weight: 760; }
 .workshop-student-delivery textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); font-size: calc(0.7rem + 0.125rem); resize: vertical; }
-.workshop-delivery-link input { width: 100%; min-height: 41px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); font-size: calc(0.68rem + 0.125rem); }
 .workshop-delivery-file { display: flex; align-items: center; gap: 7px; padding: 10px; border: 1px dashed var(--border-strong); border-radius: 10px; color: var(--muted); font-size: calc(0.63rem + 0.125rem); cursor: pointer; }
 .workshop-delivery-file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .workshop-student-delivery form > button { display: inline-flex; width: fit-content; min-height: 39px; align-items: center; gap: 6px; padding: 0 13px; border: 0; border-radius: 9px; }
@@ -1526,6 +1526,13 @@
 .workshop-submission-files > span { color: var(--muted); font-size: calc(0.57rem + 0.125rem); font-weight: 780; letter-spacing: 0.04em; text-transform: uppercase; }
 .workshop-submission-link { display: inline-flex; max-width: 100%; align-items: center; gap: 7px; margin: 0 5px 8px 0; padding: 8px 10px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--violet) 28%, var(--border)); border-radius: 9px; background: var(--violet-soft); color: var(--violet); font-size: calc(0.61rem + 0.125rem); font-weight: 720; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .workshop-submission-link:hover { border-color: var(--violet); }
+.workshop-submission-links { display: grid; min-width: 0; gap: 8px; margin-bottom: 12px; }
+.workshop-submission-links > span { color: var(--muted); font-size: calc(0.57rem + 0.125rem); font-weight: 780; letter-spacing: .04em; text-transform: uppercase; }
+.workshop-submission-links .workshop-submission-link { min-width: 0; margin: 0; white-space: normal; }
+.workshop-submission-link > svg { flex: 0 0 auto; }
+.workshop-submission-link > span { display: grid; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
+.workshop-submission-link strong { font-weight: 720; }
+.workshop-submission-link small { color: var(--muted-strong); font-size: .7rem; font-weight: 500; }
 .workshop-review-pane > label { display: block; margin-top: 8px; }
 .workshop-review-pane > label > span { display: block; margin-bottom: 5px; font-size: calc(0.64rem + 0.125rem); font-weight: 760; }
 .workshop-review-pane textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); font-size: calc(0.68rem + 0.125rem); resize: vertical; }

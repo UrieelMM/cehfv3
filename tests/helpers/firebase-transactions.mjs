@@ -12,7 +12,22 @@ export async function loadFirebaseTransactions(path) {
       constructor(value) { this.value = value; }
       toDate() { return new Date(this.value); }
     }
-    export const doc = (_db, ...segments) => ({ path: segments.join("/") });
+    export const doc = (parent, ...segments) => ({ path: [parent.path, ...segments].filter(Boolean).join("/") });
+    export const collection = (parent, ...segments) => ({ ...doc(parent, ...segments), kind: "collection" });
+    const snapshot = (path) => ({ id: path.split("/").at(-1), exists: () => state.documents.has(path), data: () => state.documents.get(path) });
+    export async function getDoc(reference) { state.reads.push(reference.path); return snapshot(reference.path); }
+    export function onSnapshot(reference, callback) { callback(snapshot(reference.path)); return () => {}; }
+    export function writeBatch() {
+      const writes = [];
+      return {
+        set(reference, data) { writes.push({ type: "set", path: reference.path, data }); },
+        async commit() {
+          if (state.batchError) throw state.batchError;
+          state.commits.push(...writes);
+          for (const write of writes) state.documents.set(write.path, write.data);
+        },
+      };
+    }
     export const serverTimestamp = () => "server-timestamp";
     export async function runTransaction(_db, callback) {
       let writes;
@@ -35,8 +50,7 @@ export async function loadFirebaseTransactions(path) {
       }
     }
     const unused = () => { throw new Error("Unexpected Firebase operation outside transaction"); };
-    export const collection = unused, getDoc = unused, onSnapshot = unused, query = unused,
-      setDoc = unused, updateDoc = unused, where = unused, writeBatch = unused;
+    export const query = unused, setDoc = unused, updateDoc = unused, where = unused;
   `);
   const mock = await import(firestoreUrl);
   const firebaseUrl = moduleUrl(`export const firebase = { db: {}, storage: {} }; // ${harnessId}`);

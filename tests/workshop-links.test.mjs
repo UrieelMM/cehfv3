@@ -85,21 +85,22 @@ test("Talleres conserva el formato enriquecido en recursos, trabajos y entregas"
   assert.match(functions, /descriptionRich: forumRichText\(/);
 });
 
-test("las entregas de Talleres aceptan y muestran un enlace del alumno", async () => {
+test("las entregas de Talleres muestran varios enlaces y conservan el enlace anterior", async () => {
   const [tasks, firebase, rules, types] = await Promise.all([
     source("components/workshop-tasks.tsx"),
     source("lib/workshops-firebase.ts"),
     source("firestore.rules"),
     source("lib/types.ts"),
   ]);
-  assert.match(tasks, /className="workshop-delivery-link"/);
-  assert.match(tasks, /type="url" value=\{link\}/);
-  assert.match(tasks, /Abrir enlace del alumno/);
-  assert.match(firebase, /normalizeWorkshopSubmissionLink\(input\.link\)/);
+  assert.match(tasks, /<WorkshopLinksEditor title="Enlaces de tu entrega"/);
+  assert.match(tasks, /<WorkshopSubmissionLinks links=\{mySubmission\.links\}/);
+  assert.match(tasks, /<WorkshopSubmissionLinks links=\{selectedSubmission\.links\}/);
+  assert.match(firebase, /links: submissionLinksFromData\(data\)/);
   assert.match(firebase, /link: String\(data\.link \?\? ""\)/);
   assert.match(types, /export type WorkshopSubmission = \{[\s\S]*?link: string;/);
   assert.match(rules, /function validSubmissionLink\(data\)/);
-  assert.match(rules, /"content", "link", "attachments"/);
+  assert.match(rules, /function validSubmissionLinks\(data\)/);
+  assert.match(rules, /"content", "link", "links", "attachments"/);
 });
 
 test("los archivos del maestro y del alumno conservan vista previa y descarga", async () => {
