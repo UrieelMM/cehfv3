@@ -171,9 +171,13 @@ function CaptureRow({
         ))}
       </div>
       <div className="academic-capture-result">
-        <span className={`academic-score-badge is-${result >= 9 ? "high" : result >= 7 ? "mid" : "low"}`}>{score(result)}</span>
+        <div className="academic-capture-average">
+          <span className="academic-capture-average-label">Promedio</span>
+          <span className={`academic-score-badge is-${result >= 9 ? "high" : result >= 7 ? "mid" : "low"}`}>{score(result)}</span>
+        </div>
         <button
           type="button"
+          className="academic-save-grade"
           disabled={saving || deleting}
           onClick={async () => {
             setSaving(true);
@@ -648,7 +652,7 @@ export function AcademicGradesPanel({
 
       {loading ? <SectionOrbLoader label="Calculando calificaciones…" detail="Estamos sincronizando alumnos, materias y periodos." /> : profile.role === "teacher" && level === "daily" ? (
         <div className="academic-capture-list">
-          <div className="academic-capture-header"><span>Alumno</span><span>Criterios del día · valores de 0 a 10</span><span>Resultado</span></div>
+          <div className="academic-capture-header"><span>Alumno</span><span>Criterios del día · valores de 0 a 10</span><span>Promedio y acciones</span></div>
           {!activeSubject ? <div className="academic-empty"><GraduationCap size={28} /><h3>No tienes materias asignadas</h3><p>Dirección debe actualizar tu perfil antes de capturar.</p></div>
             : !capturePageStudents.length ? <div className="academic-empty"><Search size={28} /><h3>No encontramos alumnos</h3><p>Revisa la materia o ajusta la búsqueda.</p></div>
               : capturePageStudents.map((student) => <CaptureRow
