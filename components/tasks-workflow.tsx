@@ -33,13 +33,14 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { ForumRichText } from "@/components/forum-rich-text";
 import { TaskResourceViewer } from "@/components/task-resource-viewer";
+import { TaskCreationAnimation, useTaskCreationAnimation } from "@/components/task-creation-animation";
 import { academicSubjectOptions, subjectsMatch } from "@/lib/academic-subjects";
 import { normalizeForumRichText } from "@/lib/forum-rich-text";
 import {
@@ -445,7 +446,9 @@ export function TaskCreateModal({
   const [publishAt, setPublishAt] = useState(() =>
     toLocalDateTime(new Date(Date.now() + 60 * 60 * 1000)),
   );
-  const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const creation = useTaskCreationAnimation(formRef);
+  const busy = creation.busy;
   const academicScope = useMemo(
     () => resolveTaskAcademicScope(calendar, dueAt),
     [calendar, dueAt],
@@ -457,6 +460,11 @@ export function TaskCreateModal({
     return [...new Set([...fromAccounts, "5.º A", "5.º B"])].sort();
   }, [accounts]);
   const selectedGroup = targetGroup || groups[0] || "5.º A";
+
+  function close() {
+    if (!creation.isPending()) onClose();
+    else formRef.current?.querySelector<HTMLElement>(".task-creation-animation")?.focus({ preventScroll: true });
+  }
 
   function selectFile(index: number, file?: File) {
     if (!file) return;
@@ -471,6 +479,7 @@ export function TaskCreateModal({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (creation.active || creation.isPending()) return;
     if (!academicScope) {
       toast.error(
         "La fecha de entrega no pertenece a ninguna semana del calendario académico.",
@@ -489,9 +498,8 @@ export function TaskCreateModal({
       toast.error("La publicación debe ser futura y anterior a la entrega.");
       return;
     }
-    setBusy(true);
     try {
-      await onCreate({
+      const created = await creation.create(() => onCreate({
         title: title.trim(),
         description: description.trim(),
         descriptionRich,
@@ -510,12 +518,10 @@ export function TaskCreateModal({
           publicationMode === "scheduled"
             ? new Date(publishAt).toISOString()
             : undefined,
-      });
-      onClose();
+      }));
+      if (created) onClose();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No pudimos crear la tarea.");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -525,27 +531,36 @@ export function TaskCreateModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      onMouseDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (creation.isPending()) event.preventDefault();
+        close();
+      }}
     >
       <motion.form
         className="task-create-modal"
+        ref={formRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-create-heading"
+        aria-busy={busy}
         initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.985 }}
         onSubmit={submit}
       >
-        <header className="task-create-header">
+        <header className="task-create-header" inert={creation.active}>
           <div>
             <span className="eyebrow">Nueva actividad</span>
-            <h2>Prepara una tarea para tu grupo</h2>
+            <h2 id="task-create-heading">Prepara una tarea para tu grupo</h2>
             <p>Los alumnos recibirán el aviso en cuanto se publique.</p>
           </div>
-          <button className="plain-icon" type="button" onClick={onClose}>
+          <button className="plain-icon" type="button" onClick={close} disabled={busy} aria-label="Cerrar">
             <X size={21} />
           </button>
         </header>
 
-        <div className="task-create-body">
+        <div className="task-create-body" inert={creation.active}>
           {!calendar.configured && (
             <div className="task-calendar-warning" role="alert">
               <CircleAlert size={19} />
@@ -566,7 +581,7 @@ export function TaskCreateModal({
             <label>
               Nombre de la actividad
               <input
-                autoFocus
+                data-creation-focus
                 required
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
@@ -783,19 +798,19 @@ export function TaskCreateModal({
           </section>
         </div>
 
-        <footer className="task-create-footer">
+        <footer className="task-create-footer" inert={creation.active}>
           <span>
             <ShieldCheck size={16} /> Ciclo {config.schoolYearLabel}
             {academicScope ? ` · ${academicScope.term.label}` : " · Fecha pendiente"}
           </span>
           <div>
-            <button className="secondary-button" type="button" onClick={onClose}>
+            <button className="secondary-button" type="button" onClick={close} disabled={busy}>
               Cancelar
             </button>
             <button
               className="primary-button"
               disabled={
-                busy || !academicScope || !title.trim() || !description.trim()
+                creation.active || !academicScope || !title.trim() || !description.trim()
               }
             >
               {busy ? <span className="button-spinner" /> : <Sparkles size={17} />}
@@ -809,6 +824,9 @@ export function TaskCreateModal({
             </button>
           </div>
         </footer>
+        <AnimatePresence>
+          {creation.phase !== "idle" && <TaskCreationAnimation key="creation" phase={creation.phase} title={title} context={`${subject} · ${selectedGroup}`} onClose={close} />}
+        </AnimatePresence>
       </motion.form>
     </motion.div>
   );

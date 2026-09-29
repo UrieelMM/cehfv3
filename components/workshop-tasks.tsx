@@ -35,6 +35,7 @@ import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { ForumRichText } from "@/components/forum-rich-text";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
 import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
+import { TaskCreationAnimation, useTaskCreationAnimation } from "@/components/task-creation-animation";
 import { friendlyFirebaseError } from "@/lib/firebase";
 import { normalizeForumRichText } from "@/lib/forum-rich-text";
 import {
@@ -429,7 +430,9 @@ function WorkshopTaskCreateDialog({
   const [selectedStudents, setSelectedStudents] = useState<string[]>(rosterIds);
   const [files, setFiles] = useState<File[]>([]);
   const [links, setLinks] = useState<WorkshopLink[]>([]);
-  const [saving, setSaving] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const creation = useTaskCreationAnimation(formRef);
+  const saving = creation.busy;
   const accountById = new Map(accounts.map((account) => [account.uid, account]));
   const roster = rosterIds.map((studentId) =>
     accountById.get(studentId) ?? {
@@ -450,15 +453,20 @@ function WorkshopTaskCreateDialog({
     );
   }
 
+  function close() {
+    if (!creation.isPending()) onClose();
+    else formRef.current?.querySelector<HTMLElement>(".task-creation-animation")?.focus({ preventScroll: true });
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (creation.active || creation.isPending()) return;
     if (!selectedStudents.length) {
       toast.error("Selecciona al menos un alumno.");
       return;
     }
-    setSaving(true);
     try {
-      await onCreate({
+      const created = await creation.create(() => onCreate({
         title: title.trim(),
         description: description.trim(),
         descriptionRich,
@@ -467,27 +475,30 @@ function WorkshopTaskCreateDialog({
         audienceStudentIds: selectedStudents,
         files,
         links,
-      });
+      }));
+      if (!created) return;
       toast.success(status === "published" ? "Trabajo publicado" : "Borrador guardado");
       onClose();
     } catch (error) {
       toast.error(messageFor(error));
-    } finally {
-      setSaving(false);
     }
   }
 
   return (
-    <motion.div className="modal-backdrop workshop-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-      <motion.form className="workshop-task-create-modal" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} onSubmit={submit}>
-        <header>
+    <motion.div className="modal-backdrop workshop-modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => {
+      if (event.target !== event.currentTarget) return;
+      if (creation.isPending()) event.preventDefault();
+      close();
+    }}>
+      <motion.form className="workshop-task-create-modal" ref={formRef} role="dialog" aria-modal="true" aria-labelledby="workshop-task-create-heading" aria-busy={saving} initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} onSubmit={submit}>
+        <header inert={creation.active}>
           <span><ClipboardCheck size={22} /></span>
-          <div><small>Nueva actividad</small><h2>Crear trabajo en {workshop.title}</h2><p>Sólo podrás elegir alumnos asignados por Dirección.</p></div>
-          <button type="button" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+          <div><small>Nueva actividad</small><h2 id="workshop-task-create-heading">Crear trabajo en {workshop.title}</h2><p>Sólo podrás elegir alumnos asignados por Dirección.</p></div>
+          <button type="button" onClick={close} disabled={saving} aria-label="Cerrar"><X size={20} /></button>
         </header>
-        <div className="workshop-task-create-body">
+        <div className="workshop-task-create-body" inert={creation.active}>
           <div className="workshop-task-form-fields">
-            <label><span>Título</span><input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} required placeholder="Ej. Mi primera historia interactiva" /></label>
+            <label><span>Título</span><input data-creation-focus value={title} onChange={(event) => setTitle(event.target.value)} maxLength={120} required placeholder="Ej. Mi primera historia interactiva" /></label>
             <div className="workshop-rich-field">
               <label>Indicaciones</label>
               <ForumRichText
@@ -522,13 +533,16 @@ function WorkshopTaskCreateDialog({
             )) : <p className="workshop-no-roster"><ShieldCheck size={20} /> Dirección aún no te asigna alumnos en este taller.</p>}
           </aside>
         </div>
-        <footer>
+        <footer inert={creation.active}>
           <div className="workshop-publication-choice">
             <button type="button" className={status === "draft" ? "active" : ""} onClick={() => setStatus("draft")}>Borrador</button>
             <button type="button" className={status === "published" ? "active" : ""} onClick={() => setStatus("published")}>Publicar ahora</button>
           </div>
-          <div><button type="button" onClick={onClose}>Cancelar</button><button className="primary-button" disabled={saving || !roster.length}>{saving ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{saving ? "Guardando…" : status === "published" ? "Publicar" : "Guardar"}</button></div>
+          <div><button type="button" onClick={close} disabled={saving}>Cancelar</button><button className="primary-button" disabled={creation.active || !roster.length}>{saving ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{saving ? "Guardando…" : status === "published" ? "Publicar" : "Guardar"}</button></div>
         </footer>
+        <AnimatePresence>
+          {creation.phase !== "idle" && <TaskCreationAnimation key="creation" phase={creation.phase} title={title} context={workshop.title} onClose={close} />}
+        </AnimatePresence>
       </motion.form>
     </motion.div>
   );

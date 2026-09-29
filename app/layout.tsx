@@ -6,6 +6,7 @@ import "@blocknote/mantine/style.css";
 import "./globals.css";
 import "./tasks.css";
 import "./workshops.css";
+import "./task-creation.css";
 import "./materials.css";
 import "./reviews.css";
 import "./grades.css";
