@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { createTaskCreationSequence, TASK_CREATION_DELAY_MS } from "@/lib/task-creation";
 
-type CreationPhase = "preview" | "idle" | "forming" | "saving";
+type CreationPhase = "preview" | "idle" | "forming" | "saving" | "success";
 
 export function useTaskCreationAnimation(formRef: RefObject<HTMLFormElement | null>) {
   const [phase, setPhase] = useState<CreationPhase>("preview");
@@ -31,19 +31,23 @@ export function useTaskCreationAnimation(formRef: RefObject<HTMLFormElement | nu
   async function create(action: () => Promise<void>) {
     if (phase !== "idle" || sequence.pending) return false;
     setPhase("forming");
+    let created = false;
     try {
-      return await sequence.run(action, () => {
+      created = await sequence.run(action, () => {
         if (mounted.current) setPhase("saving");
+      }, () => {
+        if (mounted.current) setPhase("success");
       });
+      return created;
     } finally {
-      if (mounted.current) setPhase("idle");
+      if (mounted.current && !created) setPhase("idle");
     }
   }
 
   return {
     phase,
     active: phase !== "idle",
-    busy: phase === "forming" || phase === "saving",
+    busy: phase === "forming" || phase === "saving" || phase === "success",
     isPending: () => sequence.pending,
     create,
   };
@@ -58,9 +62,11 @@ export function TaskCreationAnimation({ phase, title, context, onClose }: {
   const reducedMotion = useReducedMotion();
   const statusRef = useRef<HTMLDivElement>(null);
   const preview = phase === "preview";
+  const success = phase === "success";
   const heading = preview ? "De una idea a una gran tarea."
-    : phase === "forming" ? "Tu tarea está tomando forma."
-      : "Guardando tu tarea.";
+    : success ? "¡Tarea creada!"
+      : phase === "forming" ? "Tu tarea está tomando forma."
+        : "Guardando tu tarea.";
 
   useEffect(() => {
     statusRef.current?.focus({ preventScroll: true });
@@ -91,7 +97,7 @@ export function TaskCreationAnimation({ phase, title, context, onClose }: {
     >
       <div className="task-creation-aurora" aria-hidden="true"><i /><i /><i /></div>
       <div className="task-creation-grid" aria-hidden="true" />
-      <div className="task-creation-topline" aria-hidden="true"><Sparkles size={14} /> {preview ? "El comienzo de algo grande" : "Creando una nueva actividad"}</div>
+      <div className="task-creation-topline" aria-hidden="true">{success ? <Check size={14} /> : <Sparkles size={14} />} {preview ? "El comienzo de algo grande" : success ? "Actividad creada correctamente" : "Creando una nueva actividad"}</div>
       {preview && <button className="task-creation-close" type="button" onClick={onClose} aria-label="Cerrar"><X size={19} /></button>}
 
       <div className="task-creation-scene" aria-hidden="true">
@@ -110,13 +116,13 @@ export function TaskCreationAnimation({ phase, title, context, onClose }: {
           <div className="task-creation-scan" />
         </div>
         <span className="task-creation-tile"><FileText size={22} /><i /><i /></span>
-        <span className="task-creation-badge"><Sparkles size={21} /></span>
+        <span className="task-creation-badge">{success ? <Check size={32} strokeWidth={2.5} /> : <Sparkles size={21} />}</span>
       </div>
 
       <div className="task-creation-copy">
-        <span className="task-creation-eyebrow">{preview ? "Imagina. Comparte. Inspira." : "Un momento, por favor"}</span>
+        <span className="task-creation-eyebrow">{preview ? "Imagina. Comparte. Inspira." : success ? "Todo listo" : "Un momento, por favor"}</span>
         <h3>{heading}</h3>
-        <p>{preview ? "Prepara algo extraordinario para tu grupo." : phase === "forming" ? "Preparando el contenido y los recursos de tu actividad." : "Estamos guardando el contenido y los archivos adjuntos."}</p>
+        <p>{preview ? "Prepara algo extraordinario para tu grupo." : success ? "Tu actividad se guardó correctamente." : phase === "forming" ? "Preparando el contenido y los recursos de tu actividad." : "Estamos guardando el contenido y los archivos adjuntos."}</p>
         <div className="task-creation-progress" aria-hidden="true"><span /></div>
       </div>
     </motion.div>

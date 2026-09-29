@@ -490,7 +490,7 @@ function WorkshopTaskCreateDialog({
       if (creation.isPending()) event.preventDefault();
       close();
     }}>
-      <motion.form className="workshop-task-create-modal" ref={formRef} role="dialog" aria-modal="true" aria-labelledby="workshop-task-create-heading" aria-busy={saving} initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} onSubmit={submit}>
+      <motion.form className="workshop-task-create-modal" ref={formRef} role="dialog" aria-modal="true" aria-labelledby="workshop-task-create-heading" aria-busy={saving && creation.phase !== "success"} initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} onSubmit={submit}>
         <header inert={creation.active}>
           <span><ClipboardCheck size={22} /></span>
           <div><small>Nueva actividad</small><h2 id="workshop-task-create-heading">Crear trabajo en {workshop.title}</h2><p>Sólo podrás elegir alumnos asignados por Dirección.</p></div>

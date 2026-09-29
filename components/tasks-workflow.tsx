@@ -543,7 +543,7 @@ export function TaskCreateModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="task-create-heading"
-        aria-busy={busy}
+        aria-busy={busy && creation.phase !== "success"}
         initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 10, scale: 0.985 }}
