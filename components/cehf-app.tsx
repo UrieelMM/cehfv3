@@ -2474,7 +2474,7 @@ function Dashboard({
         {dashboard.metrics.map((metric) => {
           const MetricIcon = metricIcons[roleMetricIconKey(role, metric.key)] ?? GraduationCap;
           return (
-            <article className="metric-card" key={metric.key}>
+            <article className="metric-card" data-tone={metric.tone} key={metric.key}>
               <span className={`metric-icon ${metric.tone}`}>
                 <MetricIcon size={20} />
               </span>

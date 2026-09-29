@@ -1,3 +1,244 @@
+.dashboard-stack {
+  --home-glow-strength: 72%;
+  --home-edge-strength: 26%;
+  --home-card-accent: #8670dc;
+}
+
+:root[data-theme="dark"] .dashboard-stack {
+  --home-glow-strength: 34%;
+  --home-edge-strength: 14%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .dashboard-stack {
+    --home-glow-strength: 34%;
+    --home-edge-strength: 14%;
+  }
+}
+
+.dashboard-stack :is(.hero-card, .weekly-verse, .metric-card, .focus-card, .panel) {
+  border-radius: 28px;
+}
+
+.dashboard-stack .hero-card {
+  isolation: isolate;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  background:
+    radial-gradient(ellipse at 92% 12%, rgb(242 202 255 / 0.42), transparent 47%),
+    radial-gradient(ellipse at 70% 88%, rgb(119 142 255 / 0.55), transparent 55%),
+    radial-gradient(ellipse at 14% 0%, rgb(219 180 255 / 0.22), transparent 54%),
+    linear-gradient(125deg, #353184, #6451b3 67%, #8666bd);
+  box-shadow: 0 18px 44px rgb(72 53 131 / 0.17), inset 0 1px 0 rgb(255 255 255 / 0.28);
+}
+
+.dashboard-stack .hero-card::after {
+  z-index: 0;
+  right: -90px;
+  bottom: -170px;
+  width: 440px;
+  height: 440px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  box-shadow: 0 0 0 28px rgb(255 255 255 / 0.04), 0 0 0 58px rgb(255 255 255 / 0.04), 0 0 0 90px rgb(255 255 255 / 0.03);
+  pointer-events: none;
+}
+
+.dashboard-stack .hero-copy h2 {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-weight: 550;
+}
+
+.dashboard-stack .hero-copy p,
+.dashboard-stack .hero-metric > span {
+  color: rgb(255 255 255 / 0.9);
+}
+
+.dashboard-stack .hero-metric > span {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgb(35 28 77 / 0.24);
+  color: white;
+}
+
+.dashboard-stack .hero-card .pill-light,
+.dashboard-stack .hero-card .light-button {
+  border: 1px solid rgb(255 255 255 / 0.3);
+  background: rgb(255 255 255 / 0.18);
+  color: white;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dashboard-stack .hero-card .light-button {
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.78);
+  color: #302660;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.15);
+}
+
+.dashboard-stack .hero-card .light-button:hover {
+  background: rgb(255 255 255 / 0.92);
+}
+
+.dashboard-stack .progress-ring:not(.small)::after {
+  background: linear-gradient(145deg, #6253ac, #4b438f);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 6px 22px rgb(47 33 96 / 0.14);
+}
+
+.dashboard-stack .weekly-verse {
+  border-color: color-mix(in srgb, var(--gold) 18%, var(--surface));
+  background:
+    radial-gradient(ellipse at 90% 80%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 58%),
+    linear-gradient(120deg, var(--surface), var(--gold-soft));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--gold) 6%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 85%, transparent);
+}
+
+.dashboard-stack .weekly-verse-icon {
+  border: 1px solid color-mix(in srgb, var(--surface-raised) 75%, var(--gold));
+  background: color-mix(in srgb, var(--surface-raised) 65%, transparent);
+}
+
+.dashboard-stack .metric-card[data-tone="violet"],
+.dashboard-stack .focus-card.violet-card {
+  --home-card-accent: #9971e7;
+}
+
+.dashboard-stack .metric-card[data-tone="coral"],
+.dashboard-stack .focus-card.coral-card {
+  --home-card-accent: #f272a1;
+}
+
+.dashboard-stack .metric-card[data-tone="mint"] {
+  --home-card-accent: #56c7b0;
+}
+
+.dashboard-stack .metric-card[data-tone="gold"] {
+  --home-card-accent: #efbb68;
+}
+
+.dashboard-stack .focus-card.mint-card {
+  --home-card-accent: #7194ee;
+}
+
+.dashboard-stack :is(.metric-card, .focus-card) {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--surface-raised) 78%, var(--home-card-accent));
+  background:
+    radial-gradient(ellipse at 78% 72%, color-mix(in srgb, var(--home-card-accent) var(--home-glow-strength), transparent) 0 12%, transparent 76%),
+    radial-gradient(ellipse at 12% 8%, color-mix(in srgb, var(--home-card-accent) var(--home-edge-strength), transparent), transparent 64%),
+    linear-gradient(145deg, var(--surface-raised), var(--surface-soft));
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--home-card-accent) 10%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 85%, transparent);
+}
+
+.dashboard-stack :is(.metric-card, .focus-card)::after {
+  position: absolute;
+  z-index: 0;
+  top: auto;
+  right: -25px;
+  bottom: -92px;
+  width: 180px;
+  height: 180px;
+  border: 1px solid color-mix(in srgb, var(--home-card-accent) 24%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 16px color-mix(in srgb, var(--home-card-accent) 6%, transparent), 0 0 0 33px color-mix(in srgb, var(--home-card-accent) 4%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.dashboard-stack :is(.metric-card, .focus-card) > * {
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-stack .metric-card {
+  padding: 22px;
+}
+
+.dashboard-stack .metric-card strong {
+  margin-top: 18px;
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  font-weight: 550;
+  letter-spacing: -0.045em;
+}
+
+.dashboard-stack .metric-card p,
+.dashboard-stack .focus-card :is(p, .due-line, .card-kicker) {
+  color: var(--foreground);
+}
+
+.dashboard-stack :is(.metric-icon, .subject-icon, .focus-card .soft-tag) {
+  border: 1px solid color-mix(in srgb, var(--surface-raised) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  color: var(--foreground);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 70%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.dashboard-stack :is(.metric-icon, .subject-icon) {
+  border-radius: 14px;
+}
+
+.dashboard-stack .focus-card h3 {
+  font-family: var(--font-geist-sans), sans-serif;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.dashboard-stack .focus-card .linear-progress {
+  margin-bottom: 18px;
+  background: color-mix(in srgb, var(--surface-raised) 75%, transparent);
+}
+
+.dashboard-stack .focus-card .linear-progress span {
+  background: linear-gradient(90deg, var(--violet), var(--home-card-accent));
+}
+
+.dashboard-stack .focus-card .due-line {
+  margin-bottom: 18px;
+}
+
+.dashboard-stack .card-action {
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--surface-raised) 80%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 55%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 70%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+
+.dashboard-stack .card-action:hover {
+  background: color-mix(in srgb, var(--surface-raised) 85%, transparent);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--home-card-accent) 15%, transparent);
+}
+
+.dashboard-stack .card-action:focus-visible,
+.dashboard-stack .hero-card .light-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+
+.dashboard-stack .panel {
+  border-color: color-mix(in srgb, var(--surface-raised) 75%, var(--border));
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--violet-soft) 72%, transparent), transparent 52%),
+    var(--surface);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--violet) 5%, transparent), inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 85%, transparent);
+}
+
+@media (max-width: 600px) {
+  .dashboard-stack :is(.hero-card, .weekly-verse, .metric-card, .focus-card, .panel) {
+    border-radius: 23px;
+  }
+
+  .dashboard-stack .metric-card { padding: 18px; }
+  .dashboard-stack .metric-card strong { font-size: 1.9rem; }
+}
+
 .hero-copy-message {
   width: min(100%, 680px);
 }
@@ -131,6 +372,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .dashboard-stack .card-action { transition: none; }
   .hero-copy-skeleton span::after { animation: none; }
   .progress-ring:not(.small),
   .progress-ring:not(.small)::after { transition: none; }
