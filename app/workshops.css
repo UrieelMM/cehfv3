@@ -1446,7 +1446,7 @@
 .workshop-publication-choice button.active { background: var(--violet-soft); color: var(--violet); }
 .workshop-task-create-modal > footer > div:last-child { display: flex; gap: 7px; }
 .workshop-task-create-modal > footer > div:last-child button { display: inline-flex; min-height: 38px; align-items: center; gap: 6px; padding: 0 13px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); font-size: calc(0.66rem + 0.125rem); font-weight: 750; }
-.workshop-task-create-modal > footer button.primary-button { border-color: var(--violet); background: var(--violet); color: var(--on-primary); }
+.workshop-task-create-modal > footer > div:last-child button.primary-button { border-color: var(--violet); background: var(--violet); color: var(--on-primary); }
 
 .workshop-task-detail-modal > header { grid-template-columns: minmax(0, 1fr) auto; }
 .workshop-task-detail-modal > header .workshop-task-status { margin-bottom: 5px; }
