@@ -541,7 +541,7 @@ function WorkshopTaskCreateDialog({
           <div><button type="button" onClick={close} disabled={saving}>Cancelar</button><button className="primary-button" disabled={creation.active || !roster.length}>{saving ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}{saving ? "Guardando…" : status === "published" ? "Publicar" : "Guardar"}</button></div>
         </footer>
         <AnimatePresence>
-          {creation.phase !== "idle" && <TaskCreationAnimation key="creation" phase={creation.phase} title={title} context={workshop.title} onClose={close} />}
+          {creation.phase !== "idle" && <TaskCreationAnimation key="creation" phase={creation.phase} title={title} context={workshop.title} />}
         </AnimatePresence>
       </motion.form>
     </motion.div>

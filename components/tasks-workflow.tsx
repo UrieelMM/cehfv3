@@ -825,7 +825,7 @@ export function TaskCreateModal({
           </div>
         </footer>
         <AnimatePresence>
-          {creation.phase !== "idle" && <TaskCreationAnimation key="creation" phase={creation.phase} title={title} context={`${subject} · ${selectedGroup}`} onClose={close} />}
+          {creation.phase !== "idle" && <TaskCreationAnimation key="creation" phase={creation.phase} title={title} context={`${subject} · ${selectedGroup}`} />}
         </AnimatePresence>
       </motion.form>
     </motion.div>
