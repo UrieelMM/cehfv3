@@ -18,10 +18,10 @@
   overflow: hidden;
   padding: 68px 24px 34px;
   outline: none;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--surface-raised) 60%, transparent), color-mix(in srgb, var(--surface-soft) 42%, transparent));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--surface-raised) 68%, transparent), color-mix(in srgb, var(--surface-soft) 54%, transparent));
   color: var(--foreground);
-  backdrop-filter: blur(6px) saturate(1.2);
-  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
 
 .task-creation-aurora { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
