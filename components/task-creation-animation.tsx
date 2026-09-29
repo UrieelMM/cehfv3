@@ -1,11 +1,32 @@
 "use client";
 
-import { BookOpen, Check, FileText, Sparkles, X } from "lucide-react";
+import { Box, Check, Sparkles, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { AnimatedOrb } from "@/components/animated-orb";
 import { createTaskCreationSequence, TASK_CREATION_DELAY_MS } from "@/lib/task-creation";
 
 type CreationPhase = "preview" | "idle" | "forming" | "saving" | "success";
+
+const particlePixel = (value: number) => `${value.toFixed(2)}px`;
+
+// Fixed paths keep the initial render identical on the server and client.
+const creationParticles = Array.from({ length: 36 }, (_, index) => {
+  const angle = (index / 36) * Math.PI * 2;
+  const radius = 158 + (index % 5) * 17;
+  const colors = ["var(--creation-cyan)", "var(--creation-violet)", "var(--creation-coral)"];
+  return {
+    "--particle-x": particlePixel(Math.cos(angle) * radius),
+    "--particle-y": particlePixel(Math.sin(angle) * radius * 0.65),
+    "--particle-curve-x": particlePixel(Math.cos(angle + 0.5) * radius * 0.52),
+    "--particle-curve-y": particlePixel(Math.sin(angle + 0.5) * radius * 0.4),
+    "--particle-end-x": particlePixel(Math.cos(angle + 1) * 38),
+    "--particle-end-y": particlePixel(Math.sin(angle + 1) * 38),
+    "--particle-delay": `${(index % 6) * 0.035}s`,
+    "--particle-size": `${3 + (index % 4)}px`,
+    "--particle-color": colors[index % colors.length],
+  } as CSSProperties;
+});
 
 export function useTaskCreationAnimation(formRef: RefObject<HTMLFormElement | null>) {
   const [phase, setPhase] = useState<CreationPhase>("preview");
@@ -96,27 +117,27 @@ export function TaskCreationAnimation({ phase, title, context, onClose }: {
       }}
     >
       <div className="task-creation-aurora" aria-hidden="true"><i /><i /><i /></div>
-      <div className="task-creation-grid" aria-hidden="true" />
       <div className="task-creation-topline" aria-hidden="true">{success ? <Check size={14} /> : <Sparkles size={14} />} {preview ? "El comienzo de algo grande" : success ? "Actividad creada correctamente" : "Creando una nueva actividad"}</div>
       {preview && <button className="task-creation-close" type="button" onClick={onClose} aria-label="Cerrar"><X size={19} /></button>}
 
       <div className="task-creation-scene" aria-hidden="true">
+        <div className="task-creation-halo" />
         <div className="task-creation-orbit" />
         <div className="task-creation-orbit is-inner" />
-        <div className="task-creation-spark is-one" /><div className="task-creation-spark is-two" /><div className="task-creation-spark is-three" />
-        <div className="task-creation-document">
-          <div className="task-creation-document-glow" />
-          <div className="task-creation-document-content">
-            <div className="task-creation-document-top"><span><BookOpen size={19} /></span><i /><i /><i /></div>
-            <span className="task-creation-document-label">{context || "Una nueva oportunidad para aprender"}</span>
-            <strong>{title.trim() || "Tu próxima gran idea"}</strong>
-            <div className="task-creation-document-lines"><i /><i /><i /></div>
-            <div className="task-creation-document-bottom"><span><Check size={11} /> Contenido</span><span><FileText size={11} /> Recursos</span></div>
-          </div>
-          <div className="task-creation-scan" />
+        <div className="task-creation-particles">
+          {creationParticles.map((style, index) => <i className="task-creation-particle" style={style} key={index} />)}
         </div>
-        <span className="task-creation-tile"><FileText size={22} /><i /><i /></span>
-        <span className="task-creation-badge">{success ? <Check size={32} strokeWidth={2.5} /> : <Sparkles size={21} />}</span>
+        <div className="task-creation-orb">
+          <AnimatedOrb className="task-creation-core" size="large" busy tone={success ? "mint" : "brand"} />
+          {success && <span className="task-creation-orb-check"><Check size={46} strokeWidth={2.5} /></span>}
+        </div>
+        <span className="task-creation-shape is-cube"><Box size={44} strokeWidth={1.2} /></span>
+        <span className="task-creation-shape is-pyramid"><svg viewBox="0 0 48 48" fill="none"><path d="M24 5 44 40H4Z" /><path d="M24 5v27M4 40l20-8 20 8" /></svg></span>
+        <span className="task-creation-shape is-ring"><i /></span>
+        <span className="task-creation-shape is-diamond"><i /></span>
+        <span className="task-creation-shape is-sphere"><i /></span>
+        <span className="task-creation-shape is-star"><Sparkles size={23} strokeWidth={1.3} /></span>
+        <div className="task-creation-caption"><span>{context}</span><strong>{title.trim() || "Tu próxima gran idea"}</strong></div>
       </div>
 
       <div className="task-creation-copy">
