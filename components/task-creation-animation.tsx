@@ -2,7 +2,7 @@
 
 import { Box, Check, Sparkles } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { AnimatedOrb } from "@/components/animated-orb";
 import { createTaskCreationSequence } from "@/lib/task-creation";
 
@@ -28,10 +28,12 @@ const creationParticles = Array.from({ length: 36 }, (_, index) => {
   } as CSSProperties;
 });
 
-export function useTaskCreationAnimation(formRef: RefObject<HTMLFormElement | null>) {
+export function useTaskCreationAnimation(formRef?: RefObject<HTMLElement | null>, { resetOnSuccess = false }: { resetOnSuccess?: boolean } = {}) {
   const [phase, setPhase] = useState<CreationPhase>("idle");
   const [sequence] = useState(createTaskCreationSequence);
   const mounted = useRef(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const isPending = useCallback(() => sequence.pending, [sequence]);
 
   useEffect(() => {
     mounted.current = true;
@@ -43,12 +45,13 @@ export function useTaskCreationAnimation(formRef: RefObject<HTMLFormElement | nu
 
   useEffect(() => {
     if (phase === "idle") {
-      formRef.current?.querySelector<HTMLInputElement>("[data-creation-focus]")?.focus({ preventScroll: true });
+      formRef?.current?.querySelector<HTMLInputElement>("[data-creation-focus]")?.focus({ preventScroll: true });
     }
   }, [phase, formRef]);
 
   async function create(action: () => Promise<void>) {
     if (phase !== "idle" || sequence.pending) return false;
+    if (resetOnSuccess) returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPhase("forming");
     let created = false;
     try {
@@ -59,7 +62,12 @@ export function useTaskCreationAnimation(formRef: RefObject<HTMLFormElement | nu
       });
       return created;
     } finally {
-      if (mounted.current && !created) setPhase("idle");
+      if (mounted.current && (!created || resetOnSuccess)) {
+        setPhase("idle");
+        if (resetOnSuccess) requestAnimationFrame(() => {
+          if (mounted.current && returnFocus.current?.isConnected) returnFocus.current.focus({ preventScroll: true });
+        });
+      }
     }
   }
 
@@ -67,22 +75,30 @@ export function useTaskCreationAnimation(formRef: RefObject<HTMLFormElement | nu
     phase,
     active: phase !== "idle",
     busy: phase === "forming" || phase === "saving" || phase === "success",
-    isPending: () => sequence.pending,
+    isPending,
     create,
   };
 }
 
-export function TaskCreationAnimation({ phase, title, context }: {
+export function TaskCreationAnimation({ phase, title, context, mode = "creation" }: {
   phase: Exclude<CreationPhase, "idle">;
   title: string;
   context: string;
+  mode?: "creation" | "submission";
 }) {
   const reducedMotion = useReducedMotion();
   const statusRef = useRef<HTMLDivElement>(null);
   const success = phase === "success";
-  const heading = success ? "¡Tarea creada!"
-    : phase === "forming" ? "Tu tarea está tomando forma."
-      : "Guardando tu tarea.";
+  const submission = mode === "submission";
+  const heading = submission
+    ? success ? "¡Entrega realizada!" : phase === "forming" ? "Tu entrega está tomando forma." : "Enviando tu entrega."
+    : success ? "¡Tarea creada!" : phase === "forming" ? "Tu tarea está tomando forma." : "Guardando tu tarea.";
+  const topline = submission
+    ? success ? "Entrega enviada correctamente" : "Preparando tu entrega"
+    : success ? "Actividad creada correctamente" : "Creando una nueva actividad";
+  const description = submission
+    ? success ? "Tu maestro ya puede revisar esta entrega." : phase === "forming" ? "Organizando tu respuesta y los recursos adjuntos." : "Estamos enviando tu respuesta y los archivos adjuntos."
+    : success ? "Tu actividad se guardó correctamente." : phase === "forming" ? "Preparando el contenido y los recursos de tu actividad." : "Estamos guardando el contenido y los archivos adjuntos.";
 
   useEffect(() => {
     statusRef.current?.focus({ preventScroll: true });
@@ -110,7 +126,7 @@ export function TaskCreationAnimation({ phase, title, context }: {
       }}
     >
       <div className="task-creation-aurora" aria-hidden="true"><i /><i /><i /></div>
-      <div className="task-creation-topline" aria-hidden="true">{success ? <Check size={14} /> : <Sparkles size={14} />} {success ? "Actividad creada correctamente" : "Creando una nueva actividad"}</div>
+      <div className="task-creation-topline" aria-hidden="true">{success ? <Check size={14} /> : <Sparkles size={14} />} {topline}</div>
 
       <div className="task-creation-scene" aria-hidden="true">
         <div className="task-creation-halo" />
@@ -135,7 +151,7 @@ export function TaskCreationAnimation({ phase, title, context }: {
       <div className="task-creation-copy">
         <span className="task-creation-eyebrow">{success ? "Todo listo" : "Un momento, por favor"}</span>
         <h3>{heading}</h3>
-        <p>{success ? "Tu actividad se guardó correctamente." : phase === "forming" ? "Preparando el contenido y los recursos de tu actividad." : "Estamos guardando el contenido y los archivos adjuntos."}</p>
+        <p>{description}</p>
         <div className="task-creation-progress" aria-hidden="true"><span /></div>
       </div>
     </motion.div>

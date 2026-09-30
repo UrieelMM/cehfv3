@@ -691,6 +691,8 @@ function WorkshopTaskDetailDialog({
   const [links, setLinks] = useState<WorkshopLink[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const submissionAnimation = useTaskCreationAnimation(undefined, { resetOnSuccess: true });
+  const isSubmissionPending = submissionAnimation.isPending;
   const [previewAttachment, setPreviewAttachment] = useState<WorkshopTaskAttachment | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewSource, setPreviewSource] = useState("");
@@ -723,7 +725,7 @@ function WorkshopTaskDetailDialog({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (
         event.key === "Escape" &&
-        !busy &&
+        !busy && !isSubmissionPending() &&
         !document.querySelector(".workshop-attachment-viewer-backdrop, .delete-confirm-backdrop")
       ) {
         onClose();
@@ -731,7 +733,7 @@ function WorkshopTaskDetailDialog({
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [busy, onClose]);
+  }, [busy, onClose, isSubmissionPending]);
 
   async function openAttachment(
     attachment: WorkshopTaskAttachment,
@@ -811,20 +813,26 @@ function WorkshopTaskDetailDialog({
 
   async function submitStudentWork(event: FormEvent) {
     event.preventDefault();
+    if (busy || submissionAnimation.isPending()) return;
     if (!content.trim() && !links.length && !files.length) {
       toast.error("Escribe una respuesta, agrega un enlace o adjunta un archivo.");
       return;
     }
+    if (!firebaseReady) {
+      toast.error("Inicia sesión para entregar trabajos.");
+      return;
+    }
     setBusy(true);
     try {
-      if (!firebaseReady) throw new Error("Inicia sesión para entregar trabajos.");
-      await submitWorkshopTask(task, profile, { content, contentRich, links, files });
-      setContent("");
-      setContentRich(normalizeForumRichText(""));
-      setContentRevision((current) => current + 1);
-      setLinks([]);
-      setFiles([]);
-      toast.success(mySubmission ? "Nueva versión enviada" : "Trabajo enviado");
+      const sent = await submissionAnimation.create(async () => {
+        await submitWorkshopTask(task, profile, { content, contentRich, links, files });
+        setContent("");
+        setContentRich(normalizeForumRichText(""));
+        setContentRevision((current) => current + 1);
+        setLinks([]);
+        setFiles([]);
+      });
+      if (sent) toast.success(mySubmission ? "Nueva versión enviada" : "Trabajo enviado");
     } catch (error) {
       toast.error(messageFor(error));
     } finally {
@@ -845,13 +853,13 @@ function WorkshopTaskDetailDialog({
   }
 
   return (
-    <motion.div className="modal-backdrop workshop-modal-backdrop workshop-task-detail-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { if (!busy) onClose(); }}>
-      <motion.section className="workshop-task-detail-modal" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
-        <header>
+    <motion.div className="modal-backdrop workshop-modal-backdrop workshop-task-detail-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { if (!busy && !submissionAnimation.isPending()) onClose(); }}>
+      <motion.section className="workshop-task-detail-modal" initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10 }} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-busy={submissionAnimation.active && submissionAnimation.phase !== "success"}>
+        <header inert={submissionAnimation.active}>
           <div><span className={`workshop-task-status is-${task.status}`}>{task.status === "draft" ? "Borrador" : task.status === "closed" ? "Cerrado" : "Publicado"}</span><h2>{task.title}</h2><p><CalendarClock size={15} /> Entrega: {dueLabel(task.dueAt)} · {task.teacherName}</p></div>
           <button disabled={busy} onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
         </header>
-        <div className="workshop-task-detail-body">
+        <div className="workshop-task-detail-body" inert={submissionAnimation.active}>
           <main>
             <section className="workshop-task-instructions">
               <span className="eyebrow">Indicaciones</span>
@@ -990,6 +998,9 @@ function WorkshopTaskDetailDialog({
             onClose={closeAttachmentPreview}
           />
         )}
+        <AnimatePresence>
+          {submissionAnimation.phase !== "idle" && <TaskCreationAnimation key="submission" mode="submission" phase={submissionAnimation.phase} title={task.title} context="Actividad de taller" />}
+        </AnimatePresence>
       </motion.section>
     </motion.div>
   );

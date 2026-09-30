@@ -1,4 +1,4 @@
-.task-create-modal, .workshop-task-create-modal {
+.task-create-modal, .workshop-task-create-modal, .task-detail-modal, .workshop-task-detail-modal {
   position: relative;
   isolation: isolate;
 }

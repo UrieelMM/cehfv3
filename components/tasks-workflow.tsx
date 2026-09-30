@@ -879,6 +879,8 @@ export function TaskDetailModal({
   const [busy, setBusy] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
+  const submissionAnimation = useTaskCreationAnimation(undefined, { resetOnSuccess: true });
+  const isSubmissionPending = submissionAnimation.isPending;
   const eligibleStudents = useMemo(
     () =>
       accounts.filter(
@@ -906,14 +908,14 @@ export function TaskDetailModal({
         if (busy !== "delete") setConfirmDelete(false);
       }
       else if (selectedResource) setSelectedResource(null);
-      else onClose();
+      else if (!isSubmissionPending()) onClose();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [busy, confirmDelete, onClose, selectedResource]);
+  }, [busy, confirmDelete, onClose, selectedResource, isSubmissionPending]);
 
   useEffect(() => {
     if (!liveFirebaseTask) return;
@@ -986,19 +988,23 @@ export function TaskDetailModal({
   }
 
   async function submitResponse() {
-    if (!response.trim() && !responseFiles.length) return;
-    await runAction(
-      "submit",
-      async () => {
-        const version = await submitTaskResponse(task, profile, response, responseRich, responseFiles);
+    if ((!response.trim() && !responseFiles.length) || submissionAnimation.isPending()) return;
+    setBusy("submit");
+    let version = 0;
+    try {
+      const sent = await submissionAnimation.create(async () => {
+        version = await submitTaskResponse(task, profile, response, responseRich, responseFiles);
         setResponse("");
         setResponseRich(normalizeForumRichText(""));
         setResponseRevision((current) => current + 1);
         setResponseFiles([]);
-        toast.success(`Versión ${version} entregada y maestro notificado`);
-      },
-      "Entrega registrada",
-    );
+      });
+      if (sent) toast.success(`Versión ${version} entregada y maestro notificado`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No pudimos entregar la tarea.");
+    } finally {
+      setBusy("");
+    }
   }
 
   async function sendFeedback() {
@@ -1043,19 +1049,20 @@ export function TaskDetailModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      onMouseDown={(event) => event.target === event.currentTarget && !submissionAnimation.isPending() && onClose()}
     >
       <motion.section
         className="task-detail-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="task-detail-title"
+        aria-busy={submissionAnimation.active && submissionAnimation.phase !== "success"}
         initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.985 }}
       >
-        <header className="task-detail-header">
-          <button className="plain-icon" onClick={onClose} aria-label="Cerrar detalle">
+        <header className="task-detail-header" inert={submissionAnimation.active}>
+          <button className="plain-icon" onClick={() => { if (!submissionAnimation.isPending()) onClose(); }} aria-label="Cerrar detalle">
             <ArrowLeft size={20} />
           </button>
           <div>
@@ -1067,12 +1074,12 @@ export function TaskDetailModal({
           <span className={`task-status-badge ${visualStatus.className}`}>
             {visualStatus.label}
           </span>
-          <button className="plain-icon task-detail-close" onClick={onClose}>
+          <button className="plain-icon task-detail-close" onClick={() => { if (!submissionAnimation.isPending()) onClose(); }}>
             <X size={20} />
           </button>
         </header>
 
-        <div className="task-detail-scroll">
+        <div className="task-detail-scroll" inert={submissionAnimation.active}>
           <section className="task-detail-hero">
             <div>
               <span className="task-detail-kicker">
@@ -1226,6 +1233,9 @@ export function TaskDetailModal({
               onClose={() => setSelectedResource(null)}
             />
           )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {submissionAnimation.phase !== "idle" && <TaskCreationAnimation key="submission" mode="submission" phase={submissionAnimation.phase} title={task.title} context={`${task.subject} · ${task.targetGroup}`} />}
         </AnimatePresence>
       </motion.section>
     </motion.div>
