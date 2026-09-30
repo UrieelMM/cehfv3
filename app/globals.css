@@ -25,6 +25,11 @@
   --gold-soft: #f6eee2;
   --blue: #3b6f9e;
   --blue-soft: #e7eff7;
+  --feature-hero-background:
+    radial-gradient(ellipse at 92% 12%, color-mix(in srgb, var(--coral) 32%, transparent), transparent 47%),
+    radial-gradient(ellipse at 70% 88%, color-mix(in srgb, var(--blue) 55%, transparent), transparent 55%),
+    radial-gradient(ellipse at 14% 0%, color-mix(in srgb, var(--blue) 25%, transparent), transparent 54%),
+    linear-gradient(125deg, color-mix(in srgb, var(--brand-primary) 76%, black), var(--brand-primary) 67%, color-mix(in srgb, var(--brand-primary) 65%, var(--blue)));
   --danger: #a91e35;
   --tab-active-gradient: linear-gradient(135deg, color-mix(in srgb, var(--violet-soft) 88%, var(--surface)), color-mix(in srgb, var(--violet-soft) 58%, var(--coral-soft)) 64%, color-mix(in srgb, var(--coral-soft) 66%, var(--surface)));
   --tab-active-border: color-mix(in srgb, var(--violet) 26%, var(--border));
