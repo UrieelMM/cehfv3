@@ -43,6 +43,7 @@ import { TaskResourceViewer } from "@/components/task-resource-viewer";
 import { TaskCreationAnimation, useTaskCreationAnimation } from "@/components/task-creation-animation";
 import { academicSubjectOptions, subjectsMatch } from "@/lib/academic-subjects";
 import { normalizeForumRichText } from "@/lib/forum-rich-text";
+import { scheduledTaskTimingError } from "@/lib/task-publication";
 import {
   closeTaskAssignment,
   deleteTaskAssignment,
@@ -355,6 +356,11 @@ export function TaskListPage({
                   <span>
                     <Users size={13} /> {task.targetGroup}
                   </span>
+                  {role !== "student" && task.status === "scheduled" && task.publishAt && (
+                    <span>
+                      <CalendarClock size={13} /> Publicación: {formatDate(task.publishAt)}
+                    </span>
+                  )}
                 </span>
                 <span className="task-card-deadline">
                   <span>
@@ -453,6 +459,9 @@ export function TaskCreateModal({
     () => resolveTaskAcademicScope(calendar, dueAt),
     [calendar, dueAt],
   );
+  const scheduledTimingError = publicationMode === "scheduled"
+    ? scheduledTaskTimingError(dueAt, publishAt)
+    : null;
   const groups = useMemo(() => {
     const fromAccounts = accounts
       .filter((account) => account.role === "student" && account.grade && account.group)
@@ -490,12 +499,8 @@ export function TaskCreateModal({
       toast.error("La fecha de entrega debe estar en el futuro.");
       return;
     }
-    if (
-      publicationMode === "scheduled" &&
-      (new Date(publishAt).getTime() <= Date.now() ||
-        new Date(publishAt).getTime() >= new Date(dueAt).getTime())
-    ) {
-      toast.error("La publicación debe ser futura y anterior a la entrega.");
+    if (publicationMode === "scheduled" && scheduledTimingError) {
+      toast.error(scheduledTimingError);
       return;
     }
     try {
@@ -773,6 +778,18 @@ export function TaskCreateModal({
                 </span>
               </div>
             </div>
+            {publicationMode === "scheduled" && (
+              <div
+                className={`task-week-resolution ${scheduledTimingError ? "has-error" : "is-valid"}`}
+                role={scheduledTimingError ? "alert" : "status"}
+              >
+                {scheduledTimingError ? <CircleAlert size={20} /> : <CalendarClock size={20} />}
+                <div>
+                  <strong>{scheduledTimingError ?? `Los alumnos podrán verla el ${formatDate(publishAt, true)}.`}</strong>
+                  <span>Revisa que la publicación deje al menos 24 horas antes de la entrega.</span>
+                </div>
+              </div>
+            )}
             <fieldset className="task-publication-options">
               <legend>¿Cuándo podrán verla los alumnos?</legend>
               {[
@@ -810,7 +827,7 @@ export function TaskCreateModal({
             <button
               className="primary-button"
               disabled={
-                creation.active || !academicScope || !title.trim() || !description.trim()
+                creation.active || !academicScope || !title.trim() || !description.trim() || Boolean(scheduledTimingError)
               }
             >
               {busy ? <span className="button-spinner" /> : <Sparkles size={17} />}

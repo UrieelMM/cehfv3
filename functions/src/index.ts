@@ -2071,6 +2071,18 @@ export const updateManagedContent = onCall(async (request) => {
       .map((attachment) => String(attachment.storagePath ?? ""))
       .filter((path) => path.startsWith(`${firestorePath}/recursos/`));
     const description = materialText(input.description, "La descripción", 3, 4_000);
+    const dueAt = editableDate(input.dueAt, "La fecha límite");
+    if (data.status === "scheduled") {
+      const publishAt = data.publishAt;
+      if (!(publishAt instanceof Timestamp) ||
+        publishAt.toMillis() <= Date.now() ||
+        dueAt.toMillis() - publishAt.toMillis() < 24 * 60 * 60 * 1000) {
+        throw new HttpsError(
+          "invalid-argument",
+          "Los alumnos deben tener al menos 24 horas entre la publicación y la entrega.",
+        );
+      }
+    }
     updates = {
       title,
       description,
@@ -2080,7 +2092,7 @@ export const updateManagedContent = onCall(async (request) => {
         description,
         4_000,
       ),
-      dueAt: editableDate(input.dueAt, "La fecha límite"),
+      dueAt,
       links: materialLinks(input.links),
       attachments,
       updatedAt: Timestamp.now(),

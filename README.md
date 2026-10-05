@@ -65,6 +65,8 @@ institutions/cehf-primaria/
 
 Cada tarea conserva sus subcolecciones `entregas`, `historial` y `prorrogas`. Las reglas comprueban que una tarea nueva use la semana actual y un bimestre válido; también rechazan entregas fuera de fecha o cerradas, salvo que exista una prórroga individual vigente. Los futuros documentos de avance y reportes deben incluir `schoolYearId`, `termId`, `termLabel`, `weekId` y `weekLabel`, que se validan contra el mismo catálogo. El detalle siempre puede abrirse en `/tasks/{taskId}`.
 
+Las tareas programadas deben publicarse al menos 24 horas antes de la entrega. El formulario muestra la fecha en que las verá el grupo y las reglas de Firestore, junto con la edición mediante Cloud Functions, mantienen el mismo límite para cualquier materia o grado.
+
 ## Calificaciones y reportes
 
 El maestro captura una calificación por alumno, materia y día en

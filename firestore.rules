@@ -197,6 +197,18 @@ service cloud.firestore {
         && data.weekLabel == get(weekPath).data.label;
     }
 
+    function validScheduledTaskTiming(data) {
+      return !(
+        data.status == "scheduled"
+        || (data.keys().hasAny(["intendedStatus"]) && data.intendedStatus == "scheduled")
+      ) || (
+        data.publishAt is timestamp
+        && data.dueAt is timestamp
+        && data.publishAt > request.time
+        && data.publishAt + duration.value(24, 'h') <= data.dueAt
+      );
+    }
+
     match /system/bootstrap {
       allow read: if isDirector();
       allow write: if false;
@@ -1524,6 +1536,7 @@ service cloud.firestore {
           )
           && request.resource.data.subjectId == subjectId
           && validTaskRichText(request.resource.data)
+          && validScheduledTaskTiming(request.resource.data)
           && request.resource.data.status in ["draft", "scheduled", "published"];
         allow update: if taskBelongsToInstitution(resource.data)
           && taskBelongsToInstitution(request.resource.data)
@@ -1535,6 +1548,7 @@ service cloud.firestore {
           && request.resource.data.weekId == resource.data.weekId
           && request.resource.data.subjectId == resource.data.subjectId
           && validTaskRichText(request.resource.data)
+          && validScheduledTaskTiming(request.resource.data)
           && request.resource.data.status in [
             "draft", "scheduled", "published", "closed", "archived"
           ];

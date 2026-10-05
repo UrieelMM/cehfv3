@@ -24,6 +24,7 @@ import { httpsCallable } from "firebase/functions";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
 import { normalizeForumRichText } from "./forum-rich-text";
+import { scheduledTaskTimingError } from "./task-publication";
 import type {
   AcademicCalendar,
   AcademicCalendarInput,
@@ -565,6 +566,10 @@ export async function createTaskAssignment(
   const dueAt = new Date(input.dueAt);
   if (!Number.isFinite(dueAt.getTime()) || dueAt.getTime() <= Date.now()) {
     throw new Error("La fecha de entrega debe ser válida y estar en el futuro.");
+  }
+  if (input.publicationMode === "scheduled") {
+    const timingError = scheduledTaskTimingError(input.dueAt, input.publishAt);
+    if (timingError) throw new Error(timingError);
   }
   if (!calendar.configured || calendar.schoolYearId !== config.schoolYearId) {
     throw new Error(
