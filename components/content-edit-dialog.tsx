@@ -11,6 +11,7 @@ export function ContentEditDialog({
   title,
   description,
   note,
+  className = "",
   busy,
   children,
   onCancel,
@@ -21,6 +22,7 @@ export function ContentEditDialog({
   title: string;
   description: string;
   note?: string;
+  className?: string;
   busy: boolean;
   children: ReactNode;
   onCancel: () => void;
@@ -50,7 +52,7 @@ export function ContentEditDialog({
           }}
         >
           <motion.form
-            className="content-edit-dialog"
+            className={`content-edit-dialog ${className}`}
             initial={{ opacity: 0, y: 18, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.985 }}

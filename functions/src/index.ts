@@ -2016,6 +2016,7 @@ export const updateManagedContent = onCall(async (request) => {
   let entityId: string;
   let title: string;
   let removedStoragePaths: string[] = [];
+  let reviewUpdateTime: Timestamp | undefined;
 
   if (entityType === "task") {
     const firestorePath = String(input.firestorePath ?? "").trim();
@@ -2108,6 +2109,7 @@ export const updateManagedContent = onCall(async (request) => {
     if (!snapshot.exists || !data || data.institutionId !== actor.institutionId || !actorCanManageRecord(actor, data)) {
       throw new HttpsError("permission-denied", "No puedes editar este repaso.");
     }
+    reviewUpdateTime = snapshot.updateTime;
     const duration = Math.round(Number(input.duration));
     const maxAttempts = Math.round(Number(input.maxAttempts));
     if (!Number.isFinite(duration) || duration < 3 || duration > 180 ||
@@ -2115,11 +2117,48 @@ export const updateManagedContent = onCall(async (request) => {
       throw new HttpsError("invalid-argument", "La duración o el número de intentos no es válido.");
     }
     title = materialText(input.title, "El título", 3, 140);
+    const rawQuestions = Array.isArray(data.questions) ? data.questions as Array<Record<string, unknown>> : [];
+    const rawChanges = input.questionImages == null ? [] : input.questionImages;
+    if (!Array.isArray(rawChanges) || rawChanges.length > rawQuestions.length) {
+      throw new HttpsError("invalid-argument", "Las imágenes de los reactivos no son válidas.");
+    }
+    const changes = new Map<string, NonNullable<ReviewPublicQuestion["image"]> | null>();
+    for (const entry of rawChanges) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        throw new HttpsError("invalid-argument", "Una imagen de reactivo no es válida.");
+      }
+      const change = entry as Record<string, unknown>;
+      const questionId = materialId(change.questionId);
+      if (changes.has(questionId) || !rawQuestions.some((question) => question.id === questionId)) {
+        throw new HttpsError("invalid-argument", "El reactivo de una imagen no existe o está repetido.");
+      }
+      changes.set(questionId, change.image == null
+        ? null
+        : reviewQuestionImage(change.image, actor.institutionId, entityId, questionId));
+    }
+    const newImages = [...changes.values()].filter((image): image is NonNullable<ReviewPublicQuestion["image"]> => image !== null);
+    await verifyReviewQuestionImages(newImages, actor.uid);
+    const questions = rawQuestions.map((question) => {
+      const id = String(question.id ?? "");
+      if (!changes.has(id)) return question;
+      const previousImage = question.image as Record<string, unknown> | undefined;
+      const image = changes.get(id);
+      if (previousImage?.storagePath && previousImage.storagePath !== image?.storagePath) {
+        const path = String(previousImage.storagePath);
+        if (path.startsWith(`institutions/${actor.institutionId}/weeklyReviews/${entityId}/questions/${id}/`)) {
+          removedStoragePaths.push(path);
+        }
+      }
+      const nextQuestion = { ...question };
+      delete nextQuestion.image;
+      return image ? { ...nextQuestion, image } : nextQuestion;
+    });
     updates = {
       title,
       description: optionalMaterialText(input.description, "La descripción", 2_000),
       duration,
       maxAttempts,
+      ...(changes.size ? { questions } : {}),
       updatedAt: Timestamp.now(),
     };
   } else if (entityType === "material") {
@@ -2218,12 +2257,19 @@ export const updateManagedContent = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "El tipo de contenido no es válido.");
   }
 
-  await reference.update(updates);
-  await Promise.all(
-    removedStoragePaths.map((path) =>
-      getStorage().bucket().file(path).delete({ ignoreNotFound: true }),
-    ),
+  if (reviewUpdateTime) await reference.update(updates, { lastUpdateTime: reviewUpdateTime });
+  else await reference.update(updates);
+  const cleanup = removedStoragePaths.map((path) =>
+    getStorage().bucket().file(path).delete({ ignoreNotFound: true }),
   );
+  if (entityType === "review") {
+    const results = await Promise.allSettled(cleanup);
+    if (results.some((result) => result.status === "rejected")) {
+      logger.warn("An old review image could not be removed after the review was updated", { entityId });
+    }
+  } else {
+    await Promise.all(cleanup);
+  }
   if (entityType === "task") {
     await reference.collection("historial").add({
       type: "updated",
@@ -2733,6 +2779,13 @@ type ReviewPublicQuestion = {
   prompt: string;
   options: Array<{ id: string; label: string }>;
   points: number;
+  image?: {
+    id: string;
+    name: string;
+    storagePath: string;
+    contentType: string;
+    size: number;
+  };
 };
 
 function serializeWeeklyReview(
@@ -2756,6 +2809,7 @@ function serializeWeeklyReview(
               })
             : [],
           points: Math.max(1, Number(question.points ?? 1)),
+          ...(question.image ? { image: question.image } : {}),
         };
       })
     : [];
@@ -2888,7 +2942,51 @@ function reviewAttachments(
   });
 }
 
-function reviewQuestions(value: unknown) {
+function reviewQuestionImage(value: unknown, institutionId: string, reviewId: string, questionId: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new HttpsError("invalid-argument", "La imagen del reactivo no es válida.");
+  }
+  const input = value as Record<string, unknown>;
+  const id = materialId(input.id);
+  const storagePath = String(input.storagePath ?? "");
+  const contentType = String(input.contentType ?? "");
+  const size = Number(input.size);
+  if (
+    storagePath !== `institutions/${institutionId}/weeklyReviews/${reviewId}/questions/${questionId}/${id}` ||
+    !["image/jpeg", "image/png", "image/webp", "image/gif"].includes(contentType) ||
+    !Number.isInteger(size) || size <= 0 || size >= 10 * 1024 * 1024
+  ) {
+    throw new HttpsError("invalid-argument", "La imagen del reactivo no coincide con una carga permitida.");
+  }
+  return {
+    id,
+    name: materialText(input.name, "El nombre de la imagen", 1, 180),
+    storagePath,
+    contentType,
+    size,
+  };
+}
+
+async function verifyReviewQuestionImages(
+  images: NonNullable<ReviewPublicQuestion["image"]>[],
+  actorUid: string,
+) {
+  const bucket = getStorage().bucket();
+  await Promise.all(images.map(async (image) => {
+    const [metadata] = await bucket.file(image.storagePath).getMetadata().catch(() => {
+      throw new HttpsError("failed-precondition", "Una imagen no terminó de cargarse.");
+    });
+    if (
+      metadata.contentType !== image.contentType ||
+      Number(metadata.size) !== image.size ||
+      metadata.metadata?.uploaderUid !== actorUid
+    ) {
+      throw new HttpsError("invalid-argument", "Una imagen no coincide con el archivo cargado.");
+    }
+  }));
+}
+
+function reviewQuestions(value: unknown, institutionId: string, reviewId: string) {
   if (!Array.isArray(value) || value.length < 1 || value.length > 30) {
     throw new HttpsError("invalid-argument", "Agrega entre 1 y 30 reactivos.");
   }
@@ -2896,6 +2994,7 @@ function reviewQuestions(value: unknown) {
   const publicQuestions = value.map((item, index): ReviewPublicQuestion => {
     const input = (item ?? {}) as Record<string, unknown>;
     const id = materialId(input.id);
+    const image = input.image == null ? undefined : reviewQuestionImage(input.image, institutionId, reviewId, id);
     const type = String(input.type ?? "");
     if (!["multiple_choice", "true_false", "reflection"].includes(type)) {
       throw new HttpsError(
@@ -2911,7 +3010,7 @@ function reviewQuestions(value: unknown) {
     );
     if (type === "reflection") {
       answerKey[id] = "";
-      return { id, type, prompt, options: [], points: 0 };
+      return { id, type, prompt, options: [], points: 0, ...(image ? { image } : {}) };
     }
     const rawOptions =
       type === "true_false"
@@ -2966,6 +3065,7 @@ function reviewQuestions(value: unknown) {
       prompt,
       options,
       points,
+      ...(image ? { image } : {}),
     };
   });
   if (new Set(publicQuestions.map((question) => question.id)).size !== publicQuestions.length) {
@@ -3064,7 +3164,8 @@ export const createWeeklyReview = onCall(async (request) => {
     actor.institutionId,
     selectedReviewId,
   );
-  const { publicQuestions, answerKey } = reviewQuestions(input.questions);
+  const { publicQuestions, answerKey } = reviewQuestions(input.questions, actor.institutionId, selectedReviewId);
+  await verifyReviewQuestionImages(publicQuestions.flatMap((question) => question.image ? [question.image] : []), actor.uid);
   const schoolYearId = calendarId(input.schoolYearId, "El ciclo escolar");
   const termId = calendarId(input.termId, "El bimestre");
   const weekId = calendarId(input.weekId, "La semana");

@@ -90,6 +90,7 @@ export type WeeklyReviewQuestion = {
   prompt: string;
   options: WeeklyReviewOption[];
   points: number;
+  image?: WeeklyReviewAttachment;
 };
 
 export type WeeklyReviewAttachment = {
@@ -163,6 +164,7 @@ export type WeeklyReviewQuestionInput = {
   options: WeeklyReviewOption[];
   correctAnswer: string;
   points: number;
+  image?: WeeklyReviewAttachment;
 };
 
 export type WeeklyReviewCreateInput = {
@@ -175,6 +177,7 @@ export type WeeklyReviewCreateInput = {
   targetGroups: string[];
   status: "draft" | "published";
   questions: WeeklyReviewQuestionInput[];
+  questionImages: Record<string, File>;
   files: File[];
 };
 

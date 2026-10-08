@@ -16,6 +16,8 @@ import {
   FileQuestion,
   FileText,
   Gauge,
+  Image as ImageIcon,
+  ImagePlus,
   ListChecks,
   LoaderCircle,
   LockKeyhole,
@@ -33,7 +35,9 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { SectionOrbLoader } from "@/components/animated-orb";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
@@ -48,6 +52,7 @@ import {
   submitWeeklyReview,
   updateWeeklyReviewStatus,
   updateWeeklyReview,
+  validateReviewImage,
   watchWeeklyReviewAttempts,
 } from "@/lib/reviews-firebase";
 import type {
@@ -56,6 +61,7 @@ import type {
   ManagedAccount,
   UserProfile,
   WeeklyReview,
+  WeeklyReviewAttachment,
   WeeklyReviewAttempt,
   WeeklyReviewCreateInput,
   WeeklyReviewQuestionInput,
@@ -516,6 +522,7 @@ export function ReviewsPage({
         {selected && profile.role !== "student" && (
           <StaffReviewModal
             review={selected}
+            profile={profile}
             accounts={accounts}
             onClose={closeReview}
           />
@@ -542,6 +549,10 @@ function StudentReviewModal({
   const [restarting, setRestarting] = useState(false);
   const [error, setError] = useState("");
   const [resourceUrls, setResourceUrls] = useState<Record<string, string>>({});
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  const [imageError, setImageError] = useState("");
+  const [imageRetry, setImageRetry] = useState(0);
+  const [imageZoom, setImageZoom] = useState(false);
   const completed = review.myAttempt?.status === "completed";
   const closed = review.status === "closed" && !completed;
   const answeredCount = review.questions.filter((question) =>
@@ -549,6 +560,8 @@ function StudentReviewModal({
   ).length;
   const allAnswered = answeredCount === review.questions.length;
   const question = review.questions[current];
+  const questionImage = question?.image;
+  const questionImageUrl = questionImage ? imageUrls[questionImage.storagePath] : undefined;
   const canRetry = Boolean(
     review.myAttempt &&
       review.status === "published" &&
@@ -577,6 +590,22 @@ function StudentReviewModal({
   }, [review.attachments]);
 
   useEffect(() => {
+    if (!questionImage || imageUrls[questionImage.storagePath]) return;
+    let active = true;
+    void getWeeklyReviewAttachmentUrl(questionImage)
+      .then((url) => { if (active) { setImageUrls((current) => ({ ...current, [questionImage.storagePath]: url })); setImageError(""); } })
+      .catch((loadError) => { if (active) setImageError(friendlyFirebaseError(loadError)); });
+    return () => { active = false; };
+  }, [questionImage, imageRetry, imageUrls]);
+
+  useEffect(() => {
+    if (!imageZoom) return;
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setImageZoom(false); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [imageZoom]);
+
+  useEffect(() => {
     if (!dirty || completed || closed) return;
     const timer = window.setTimeout(() => {
       setSaving(true);
@@ -595,6 +624,12 @@ function StudentReviewModal({
     }));
     setDirty(true);
     setError("");
+  }
+
+  function selectQuestion(index: number) {
+    setCurrent(index);
+    setImageZoom(false);
+    setImageError("");
   }
 
   async function submit() {
@@ -623,7 +658,7 @@ function StudentReviewModal({
       await restartWeeklyReview(review);
       const attemptNumber = (review.myAttempt?.attemptNumber ?? 1) + 1;
       setAnswers({});
-      setCurrent(0);
+      selectQuestion(0);
       toast.success(`Intento ${attemptNumber} listo`);
     } catch (restartError) {
       setError(friendlyFirebaseError(restartError));
@@ -632,7 +667,7 @@ function StudentReviewModal({
     }
   }
 
-  return (
+  return (<>
     <motion.div
       className="review-player-backdrop"
       initial={{ opacity: 0 }}
@@ -643,7 +678,7 @@ function StudentReviewModal({
       }}
     >
       <motion.section
-        className="review-player"
+        className={`review-player ${questionImage && !completed && !closed ? "has-question-image" : ""}`}
         initial={{ opacity: 0, y: 18, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 12, scale: 0.985 }}
@@ -718,7 +753,7 @@ function StudentReviewModal({
                 {review.questions.map((item, index) => (
                   <button
                     className={`${index === current ? "active" : ""} ${answers[item.id]?.trim() ? "answered" : ""}`}
-                    onClick={() => setCurrent(index)}
+                    onClick={() => selectQuestion(index)}
                     key={item.id}
                   >
                     {answers[item.id]?.trim() ? <Check size={13} /> : index + 1}
@@ -746,7 +781,7 @@ function StudentReviewModal({
               )}
             </aside>
             <main>
-              {question && (
+              {question && <div className={`review-question-stage ${questionImage ? "has-image" : ""}`}>
                 <motion.div
                   className="review-question"
                   key={question.id}
@@ -786,14 +821,25 @@ function StudentReviewModal({
                     </div>
                   )}
                 </motion.div>
-              )}
+                {questionImage && <aside className="review-question-image" aria-label={`Imagen del reactivo ${current + 1}`}>
+                  <div className="review-question-image-heading"><ImageIcon size={16} /><span>Imagen de apoyo</span><small>Reactivo {current + 1}</small></div>
+                  {questionImageUrl ? (
+                    <button type="button" className="review-question-image-view" onClick={() => setImageZoom(true)} aria-label={`Ampliar imagen del reactivo ${current + 1}`}>
+                      <Image unoptimized src={questionImageUrl} alt={`Material visual del reactivo ${current + 1}`} width={900} height={700} />
+                      <span>Ver imagen en grande</span>
+                    </button>
+                  ) : imageError ? (
+                    <div className="review-question-image-error"><span>No se pudo cargar la imagen.</span><button type="button" onClick={() => { setImageError(""); setImageRetry((value) => value + 1); }}>Reintentar</button></div>
+                  ) : <div className="review-question-image-loading"><LoaderCircle className="spin" size={19} /> Cargando imagen…</div>}
+                </aside>}
+              </div>}
               {error && <p className="review-inline-error">{error}</p>}
               <footer>
-                <button className="secondary-button" disabled={current === 0} onClick={() => setCurrent((value) => value - 1)}>
+                <button className="secondary-button" disabled={current === 0} onClick={() => selectQuestion(current - 1)}>
                   <ArrowLeft size={15} /> Anterior
                 </button>
                 {current < review.questions.length - 1 ? (
-                  <button className="primary-button" onClick={() => setCurrent((value) => value + 1)}>
+                  <button className="primary-button" onClick={() => selectQuestion(current + 1)}>
                     Siguiente <ArrowRight size={15} />
                   </button>
                 ) : (
@@ -808,15 +854,22 @@ function StudentReviewModal({
         )}
       </motion.section>
     </motion.div>
-  );
+    {imageZoom && questionImageUrl && typeof document !== "undefined" && createPortal(
+      <div className="review-image-zoom" role="dialog" aria-modal="true" aria-label={`Imagen del reactivo ${current + 1}`} onMouseDown={(event) => { if (event.target === event.currentTarget) setImageZoom(false); }}>
+        <div className="review-image-zoom-panel"><header><span>Imagen de apoyo · Reactivo {current + 1}</span><button type="button" onClick={() => setImageZoom(false)} aria-label="Cerrar imagen"><X size={20} /></button></header><Image unoptimized src={questionImageUrl} alt={`Material visual del reactivo ${current + 1}`} width={1200} height={900} /></div>
+      </div>, document.body,
+    )}
+  </>);
 }
 
 function StaffReviewModal({
   review,
+  profile,
   accounts,
   onClose,
 }: {
   review: WeeklyReview;
+  profile: UserProfile;
   accounts: ManagedAccount[];
   onClose: () => void;
 }) {
@@ -964,23 +1017,24 @@ function StaffReviewModal({
       onCancel={() => setConfirmDelete(false)}
       onConfirm={() => void removeReview()}
     />
-    {editing && <ReviewEditDialog review={review} open onCancel={() => setEditing(false)} />}
+    {editing && <ReviewEditDialog review={review} profile={profile} open onCancel={() => setEditing(false)} />}
     </>
   );
 }
 
-function ReviewEditDialog({ review, open, onCancel }: { review: WeeklyReview; open: boolean; onCancel: () => void }) {
+function ReviewEditDialog({ review, profile, open, onCancel }: { review: WeeklyReview; profile: UserProfile; open: boolean; onCancel: () => void }) {
   const [title, setTitle] = useState(review.title);
   const [description, setDescription] = useState(review.description);
   const [duration, setDuration] = useState(review.duration);
   const [maxAttempts, setMaxAttempts] = useState(review.maxAttempts);
+  const [imageChanges, setImageChanges] = useState<Record<string, File | null>>({});
   const [busy, setBusy] = useState(false);
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     try {
-      await updateWeeklyReview(review, { title: title.trim(), description: description.trim(), duration, maxAttempts });
+      await updateWeeklyReview(review, { title: title.trim(), description: description.trim(), duration, maxAttempts }, imageChanges, profile);
       toast.success("Repaso actualizado");
       onCancel();
     } catch (error) {
@@ -991,15 +1045,57 @@ function ReviewEditDialog({ review, open, onCancel }: { review: WeeklyReview; op
   }
 
   return (
-    <ContentEditDialog open={open} eyebrow="Repaso semanal" title="Editar repaso" description="Ajusta la presentación y condiciones del repaso." note="Los reactivos, respuestas correctas, audiencia y archivos se conservan para no invalidar intentos existentes." busy={busy} onCancel={onCancel} onSubmit={save}>
+    <ContentEditDialog open={open} className="review-edit-dialog" eyebrow="Repaso semanal" title="Editar repaso" description="Ajusta la presentación, las imágenes y las condiciones del repaso." note="Las preguntas, respuestas correctas y audiencia se conservan para respetar los intentos existentes." busy={busy} onCancel={onCancel} onSubmit={save}>
       <label>Título<input value={title} minLength={3} maxLength={140} required onChange={(event) => setTitle(event.target.value)} /></label>
       <label>Descripción<textarea value={description} maxLength={2000} onChange={(event) => setDescription(event.target.value)} /></label>
       <div className="content-edit-grid">
         <label>Duración (minutos)<input type="number" min={3} max={180} value={duration} required onChange={(event) => setDuration(Number(event.target.value))} /></label>
         <label>Intentos permitidos<input type="number" min={0} max={20} value={maxAttempts} required onChange={(event) => setMaxAttempts(Number(event.target.value))} /><small>0 significa intentos ilimitados.</small></label>
       </div>
+      <details className="review-edit-images"><summary><ImageIcon size={17} /><span><strong>Imágenes de los reactivos</strong><small>Opcionales · una imagen por reactivo</small></span></summary>
+        <div>{review.questions.map((question, index) => <div className="review-edit-image-row" key={question.id}>
+          <span><b>{index + 1}</b><span>{question.prompt}</span></span>
+          <ReviewQuestionImageField label={`Reactivo ${index + 1}`} existingImage={question.image} file={imageChanges[question.id] ?? undefined} removed={imageChanges[question.id] === null} disabled={busy} onChange={(file) => setImageChanges((current) => ({ ...current, [question.id]: file }))} />
+        </div>)}</div>
+      </details>
     </ContentEditDialog>
   );
+}
+
+function ReviewQuestionImageField({ label, existingImage, file, removed = false, disabled = false, onChange }: {
+  label: string;
+  existingImage?: WeeklyReviewAttachment;
+  file?: File;
+  removed?: boolean;
+  disabled?: boolean;
+  onChange: (file: File | null) => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState("");
+  const visibleExisting = removed ? undefined : existingImage;
+  useEffect(() => {
+    let active = true;
+    if (file) {
+      const url = URL.createObjectURL(file);
+      queueMicrotask(() => { if (active) setPreviewUrl(url); });
+      return () => { active = false; URL.revokeObjectURL(url); };
+    }
+    if (!visibleExisting) { queueMicrotask(() => { if (active) setPreviewUrl(""); }); return () => { active = false; }; }
+    void getWeeklyReviewAttachmentUrl(visibleExisting)
+      .then((url) => { if (active) setPreviewUrl(url); })
+      .catch(() => { if (active) setPreviewUrl(""); });
+    return () => { active = false; };
+  }, [file, visibleExisting]);
+  const selectedName = file?.name ?? visibleExisting?.name;
+  return <div className="review-question-image-field">
+    {selectedName && <div className="review-question-image-selected">{previewUrl ? <Image unoptimized src={previewUrl} alt="" width={32} height={26} /> : <ImageIcon size={17} />}<span title={selectedName}>{selectedName}</span><button type="button" disabled={disabled} onClick={() => onChange(null)} aria-label={`Quitar imagen de ${label}`}><X size={14} /></button></div>}
+    <label className="review-question-image-pick"><ImagePlus size={16} /><span>{selectedName ? "Cambiar imagen" : "Agregar imagen"}</span><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={disabled} onChange={(event) => {
+      const selected = event.target.files?.[0];
+      event.currentTarget.value = "";
+      if (!selected) return;
+      try { validateReviewImage(selected); onChange(selected); } catch (error) { toast.error(error instanceof Error ? error.message : "La imagen no es válida."); }
+    }} /></label>
+    {!selectedName && <small>JPG, PNG, WebP o GIF · máximo 10 MB</small>}
+  </div>;
 }
 
 function newChoiceQuestion(): WeeklyReviewQuestionInput {
@@ -1067,6 +1163,7 @@ export function ReviewCreateModal({
   const [status, setStatus] = useState<"draft" | "published">("published");
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [questions, setQuestions] = useState<WeeklyReviewQuestionInput[]>([newChoiceQuestion()]);
+  const [questionImages, setQuestionImages] = useState<Record<string, File>>({});
   const [files, setFiles] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -1119,7 +1216,7 @@ export function ReviewCreateModal({
         setSubmitting(true);
         setError("");
         try {
-          await onCreate({ title, description, subject, weekId, duration, maxAttempts, targetGroups: selectedGroups, status, questions, files });
+          await onCreate({ title, description, subject, weekId, duration, maxAttempts, targetGroups: selectedGroups, status, questions, questionImages, files });
           onClose();
         } catch (creationError) {
           setError(friendlyFirebaseError(creationError));
@@ -1152,8 +1249,9 @@ export function ReviewCreateModal({
               <div className="review-question-builder">
                 {questions.map((item, index) => (
                   <article key={item.id}>
-                    <header><strong>Reactivo {index + 1}</strong><select value={item.type} onChange={(event) => updateQuestion(item.id, (question) => changeQuestionType(question, event.target.value as WeeklyReviewQuestionType))}><option value="multiple_choice">Opción múltiple</option><option value="true_false">Verdadero o falso</option><option value="reflection">Respuesta reflexiva</option></select>{questions.length > 1 && <button type="button" onClick={() => setQuestions((current) => current.filter((question) => question.id !== item.id))} aria-label={`Eliminar reactivo ${index + 1}`}><Trash2 size={15} /></button>}</header>
+                    <header><strong>Reactivo {index + 1}</strong><select value={item.type} onChange={(event) => updateQuestion(item.id, (question) => changeQuestionType(question, event.target.value as WeeklyReviewQuestionType))}><option value="multiple_choice">Opción múltiple</option><option value="true_false">Verdadero o falso</option><option value="reflection">Respuesta reflexiva</option></select>{questions.length > 1 && <button type="button" onClick={() => { setQuestions((current) => current.filter((question) => question.id !== item.id)); setQuestionImages((current) => { const next = { ...current }; delete next[item.id]; return next; }); }} aria-label={`Eliminar reactivo ${index + 1}`}><Trash2 size={15} /></button>}</header>
                     <label>Pregunta<textarea value={item.prompt} onChange={(event) => updateQuestion(item.id, (question) => ({ ...question, prompt: event.target.value }))} placeholder="Escribe una pregunta clara" maxLength={500} rows={2} /></label>
+                    <ReviewQuestionImageField label={`Reactivo ${index + 1}`} file={questionImages[item.id]} disabled={submitting} onChange={(file) => setQuestionImages((current) => { const next = { ...current }; if (file) next[item.id] = file; else delete next[item.id]; return next; })} />
                     {item.type === "multiple_choice" && <div className="review-option-builder"><small>Marca la respuesta correcta</small>{item.options.map((option, optionIndex) => <label key={option.id}><input type="radio" name={`correct-${item.id}`} checked={item.correctAnswer === option.id} onChange={() => updateQuestion(item.id, (question) => ({ ...question, correctAnswer: option.id }))} /><span>{String.fromCharCode(65 + optionIndex)}</span><input value={option.label} onChange={(event) => updateQuestion(item.id, (question) => ({ ...question, options: question.options.map((current) => current.id === option.id ? { ...current, label: event.target.value } : current) }))} placeholder={`Opción ${optionIndex + 1}`} /></label>)}</div>}
                     {item.type === "true_false" && <label className="review-correct-select">Respuesta correcta<select value={item.correctAnswer} onChange={(event) => updateQuestion(item.id, (question) => ({ ...question, correctAnswer: event.target.value }))}><option value="true">Verdadero</option><option value="false">Falso</option></select></label>}
                     {item.type === "reflection" && <p className="review-reflection-note"><Sparkles size={14} /> Se evalúa por participación; permite al alumno explicar y conectar ideas.</p>}

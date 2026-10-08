@@ -3,6 +3,7 @@
 import {
   collection,
   doc,
+  getDocFromServer,
   onSnapshot,
   query,
   Timestamp,
@@ -32,6 +33,40 @@ import type {
 } from "./types";
 
 const MAX_REVIEW_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_REVIEW_IMAGE_SIZE = 10 * 1024 * 1024;
+export const REVIEW_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+
+export function validateReviewImage(file: File) {
+  if (!REVIEW_IMAGE_TYPES.includes(file.type as typeof REVIEW_IMAGE_TYPES[number])) {
+    throw new Error("Usa una imagen JPG, PNG, WebP o GIF.");
+  }
+  if (file.size <= 0 || file.size >= MAX_REVIEW_IMAGE_SIZE) {
+    throw new Error("La imagen debe pesar menos de 10 MB.");
+  }
+  if (!file.name.trim() || file.name.length > 180) {
+    throw new Error("El nombre de la imagen debe tener menos de 180 caracteres.");
+  }
+}
+
+async function cleanupUnlinkedReviewUploads(reviewId: string, uploaded: WeeklyReviewAttachment[]) {
+  if (!uploaded.length) return;
+  const { db, storage } = requireFirebase();
+  let linkedPaths = new Set<string>();
+  try {
+    const snapshot = await getDocFromServer(doc(db, "weeklyReviews", reviewId));
+    if (snapshot.exists()) {
+      const data = snapshot.data();
+      linkedPaths = new Set([
+        ...(Array.isArray(data.attachments) ? data.attachments.map((item: WeeklyReviewAttachment) => item.storagePath) : []),
+        ...(Array.isArray(data.questions) ? data.questions.flatMap((item: WeeklyReviewQuestion) => item.image ? [item.image.storagePath] : []) : []),
+      ]);
+    }
+  } catch {
+    // Si no se puede comprobar el estado del repaso, se conservan los archivos.
+    return;
+  }
+  await Promise.allSettled(uploaded.filter((item) => !linkedPaths.has(item.storagePath)).map((item) => deleteObject(ref(storage, item.storagePath))));
+}
 
 function requireFirebase() {
   if (!firebase.db || !firebase.storage || !firebase.functions) {
@@ -96,6 +131,7 @@ function questionFromData(value: unknown): WeeklyReviewQuestion | null {
           .filter(Boolean) as WeeklyReviewQuestion["options"]
       : [],
     points: Math.max(0, Number(data.points ?? 1)),
+    image: attachmentFromData(data.image) ?? undefined,
   };
 }
 
@@ -219,6 +255,7 @@ export function watchWeeklyReviews(
         : "listStaffWeeklyReviews",
     );
     const attemptStops = new Map<string, Unsubscribe>();
+    const reviewStops = new Map<string, Unsubscribe>();
     const attempts = new Map<string, WeeklyReviewAttempt>();
     let reviews: WeeklyReview[] = [];
     const emit = () =>
@@ -239,6 +276,21 @@ export function watchWeeklyReviews(
             review,
           ),
         );
+        reviews.forEach((review) => {
+          reviewStops.set(review.id, onSnapshot(
+            doc(firebase.db!, "weeklyReviews", review.id),
+            (snapshot) => {
+              if (!active) return;
+              reviews = snapshot.exists()
+                ? reviews.map((item) => item.id === review.id
+                  ? reviewFromData(snapshot.id, snapshot.ref.path, snapshot.data())
+                  : item)
+                : reviews.filter((item) => item.id !== review.id);
+              emit();
+            },
+            (error) => onError?.(error),
+          ));
+        });
         if (profile.role === "student") {
           reviews.forEach((review) => {
             attemptStops.set(
@@ -282,6 +334,7 @@ export function watchWeeklyReviews(
       });
     return () => {
       active = false;
+      reviewStops.forEach((stop) => stop());
       attemptStops.forEach((stop) => stop());
     };
   }
@@ -349,10 +402,17 @@ export async function createWeeklyReview(
   }
   const oversized = input.files.find((file) => file.size >= MAX_REVIEW_FILE_SIZE);
   if (oversized) throw new Error(`${oversized.name} supera el límite de 20 MB.`);
+  const questionIds = new Set(input.questions.map((question) => question.id));
+  if (Object.keys(input.questionImages).some((id) => !questionIds.has(id))) {
+    throw new Error("Una imagen corresponde a un reactivo que ya no existe.");
+  }
+  Object.values(input.questionImages).forEach(validateReviewImage);
 
   const { storage, functions } = requireFirebase();
   const reviewId = crypto.randomUUID();
   const uploaded: WeeklyReviewAttachment[] = [];
+  const uploadedImages: WeeklyReviewAttachment[] = [];
+  let callableInvoked = false;
   try {
     for (const file of input.files.slice(0, 3)) {
       const id = crypto.randomUUID();
@@ -369,10 +429,28 @@ export async function createWeeklyReview(
         size: file.size,
       });
     }
+    const questions = [] as WeeklyReviewQuestionInput[];
+    for (const question of input.questions) {
+      const file = input.questionImages[question.id];
+      if (!file) {
+        questions.push(question);
+        continue;
+      }
+      const id = crypto.randomUUID();
+      const storagePath = `institutions/${profile.institutionId}/weeklyReviews/${reviewId}/questions/${question.id}/${id}`;
+      await uploadBytes(ref(storage, storagePath), file, {
+        contentType: file.type,
+        customMetadata: { uploaderUid: profile.uid },
+      });
+      const image = { id, name: file.name, storagePath, contentType: file.type, size: file.size };
+      uploadedImages.push(image);
+      questions.push({ ...question, image });
+    }
     const callable = httpsCallable<
       Record<string, unknown>,
       { reviewId: string; recipientCount: number }
     >(functions, "createWeeklyReview");
+    callableInvoked = true;
     return (
       await callable({
         reviewId,
@@ -391,16 +469,14 @@ export async function createWeeklyReview(
         maxAttempts: input.maxAttempts,
         targetGroups: input.targetGroups,
         status: input.status,
-        questions: input.questions,
+        questions,
         attachments: uploaded,
       })
     ).data;
   } catch (error) {
-    await Promise.allSettled(
-      uploaded.map((attachment) =>
-        deleteObject(ref(storage, attachment.storagePath)),
-      ),
-    );
+    const allUploaded = [...uploaded, ...uploadedImages];
+    if (callableInvoked) await cleanupUnlinkedReviewUploads(reviewId, allUploaded);
+    else await Promise.allSettled(allUploaded.map((item) => deleteObject(ref(storage, item.storagePath))));
     throw error;
   }
 }
@@ -470,15 +546,44 @@ export async function deleteWeeklyReview(review: WeeklyReview) {
 export async function updateWeeklyReview(
   review: WeeklyReview,
   input: Pick<WeeklyReview, "title" | "description" | "duration" | "maxAttempts">,
+  imageChanges: Record<string, File | null> = {},
+  profile?: UserProfile,
 ) {
   if (!firebase.functions || !isFirebaseWeeklyReview(review)) {
     throw new Error("Este repaso no se puede editar porque no está sincronizado con Firebase.");
   }
-  const callable = httpsCallable<
-    { entityType: "review"; reviewId: string } & typeof input,
-    { updated: boolean }
-  >(firebase.functions, "updateManagedContent");
-  return (await callable({ entityType: "review", reviewId: review.id, ...input })).data;
+  const { storage } = requireFirebase();
+  if (Object.keys(imageChanges).length && !profile) throw new Error("Falta tu perfil para cargar imágenes.");
+  const questionIds = new Set(review.questions.map((question) => question.id));
+  if (Object.keys(imageChanges).some((id) => !questionIds.has(id))) throw new Error("Hay una imagen sin reactivo.");
+  const uploaded: WeeklyReviewAttachment[] = [];
+  const questionImages: Array<{ questionId: string; image: WeeklyReviewAttachment | null }> = [];
+  let callableInvoked = false;
+  try {
+    for (const [questionId, file] of Object.entries(imageChanges)) {
+      if (!file) { questionImages.push({ questionId, image: null }); continue; }
+      validateReviewImage(file);
+      const id = crypto.randomUUID();
+      const storagePath = `institutions/${review.institutionId}/weeklyReviews/${review.id}/questions/${questionId}/${id}`;
+      await uploadBytes(ref(storage, storagePath), file, {
+        contentType: file.type,
+        customMetadata: { uploaderUid: profile!.uid },
+      });
+      const image = { id, name: file.name, storagePath, contentType: file.type, size: file.size };
+      uploaded.push(image);
+      questionImages.push({ questionId, image });
+    }
+    const callable = httpsCallable<
+      { entityType: "review"; reviewId: string; questionImages: typeof questionImages } & typeof input,
+      { updated: boolean }
+    >(firebase.functions, "updateManagedContent");
+    callableInvoked = true;
+    return (await callable({ entityType: "review", reviewId: review.id, ...input, questionImages })).data;
+  } catch (error) {
+    if (callableInvoked) await cleanupUnlinkedReviewUploads(review.id, uploaded);
+    else await Promise.allSettled(uploaded.map((image) => deleteObject(ref(storage, image.storagePath))));
+    throw error;
+  }
 }
 
 export async function getWeeklyReviewAttachmentUrl(
