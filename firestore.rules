@@ -63,7 +63,7 @@ service cloud.firestore {
       ];
       let primarySixth = [
         "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés",
-        "Cívica"
+        "Cívica", "Lectura y comprensión"
       ];
       let secondaryFirst = [
         "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés"
@@ -1722,6 +1722,37 @@ service cloud.firestore {
         }
 
         match /entregas/{studentId} {
+          function validSubmissionLinkAt(links, index) {
+            return links.size() <= index || (
+              links[index] is map
+              && links[index].keys().hasOnly(["label", "url"])
+              && links[index].keys().hasAll(["label", "url"])
+              && links[index].label is string
+              && links[index].label.size() > 0
+              && links[index].label.size() <= 100
+              && links[index].url is string
+              && links[index].url.size() <= 2000
+              && links[index].url.matches("^https?://[^[:space:]]+$")
+            );
+          }
+
+          function validSubmissionLinks(data) {
+            return !data.keys().hasAny(["links"]) || (
+              data.links is list
+              && data.links.size() <= 10
+              && validSubmissionLinkAt(data.links, 0)
+              && validSubmissionLinkAt(data.links, 1)
+              && validSubmissionLinkAt(data.links, 2)
+              && validSubmissionLinkAt(data.links, 3)
+              && validSubmissionLinkAt(data.links, 4)
+              && validSubmissionLinkAt(data.links, 5)
+              && validSubmissionLinkAt(data.links, 6)
+              && validSubmissionLinkAt(data.links, 7)
+              && validSubmissionLinkAt(data.links, 8)
+              && validSubmissionLinkAt(data.links, 9)
+            );
+          }
+
           function validSubmissionRichText(data) {
             return (
                 !data.keys().hasAny(["contentRich"])
@@ -1757,6 +1788,7 @@ service cloud.firestore {
             && request.resource.data.teacherId == parentTask().createdBy
             && request.resource.data.status == "submitted"
             && validSubmissionRichText(request.resource.data)
+            && validSubmissionLinks(request.resource.data)
             && request.resource.data.version == 1;
           allow update: if taskBelongsToInstitution(parentTask()) && (
             (
@@ -1769,10 +1801,11 @@ service cloud.firestore {
               && request.resource.data.status == "submitted"
               && request.resource.data.version == resource.data.version + 1
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                "content", "contentRich", "attachments", "status", "version",
+                "content", "contentRich", "attachments", "links", "status", "version",
                 "submittedAt", "updatedAt", "teacherFeedback"
               ])
               && validSubmissionRichText(request.resource.data)
+              && validSubmissionLinks(request.resource.data)
             ) || (
               isTaskStaff(parentTask())
               && request.resource.data.studentId == resource.data.studentId
@@ -1795,6 +1828,7 @@ service cloud.firestore {
             );
             allow create: if taskBelongsToInstitution(parentTask())
               && validHistoryRichText(request.resource.data)
+              && validSubmissionLinks(request.resource.data)
               && (
               (
                 canStudentSubmit(studentId)

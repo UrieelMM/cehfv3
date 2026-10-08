@@ -1617,7 +1617,10 @@ export const saveStudentWeeklyReport = onCall(async (request) => {
     academicSubjectOptions,
   );
   const studentCanTakeSubject =
-    gradeSubjects.includes(subject) || studentSubjects.includes(subject);
+    (gradeSubjects.includes(subject) && !(
+      schoolLevel === "primary" && student?.grade === "6.º" &&
+      subject === "Lectura y comprensión"
+    )) || studentSubjects.includes(subject);
   if (
     !studentSnapshot.exists ||
     student?.active !== true ||

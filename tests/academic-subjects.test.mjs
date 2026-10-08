@@ -51,7 +51,7 @@ test("each grade exposes only its canonical subjects", () => {
   ]);
   assert.deepEqual(subjectsForGrade("primary", "6.º"), [
     "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés",
-    "Cívica",
+    "Cívica", "Lectura y comprensión",
   ]);
   assert.deepEqual(subjectsForGrade("secondary", "1.º"), [
     "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés",
@@ -115,6 +115,8 @@ test("sixth-grade students recover Cívica without changing other grade assignme
   assert.deepEqual(resolveStudentSubjects(["Lenguaje"], "primary", "5.º"), ["Lenguaje"]);
   assert.deepEqual(resolveStudentSubjects(["Lenguaje"], "secondary", "1.º"), ["Lenguaje"]);
   assert.equal(studentCanTakeSubject({ schoolLevel: "primary", grade: "6.º", subjects: ["Lenguaje"] }, "Cívica"), true);
+  assert.equal(studentCanTakeSubject({ schoolLevel: "primary", grade: "6.º", subjects: ["Lenguaje"] }, "Lectura y comprensión"), false);
+  assert.equal(studentCanTakeSubject({ schoolLevel: "primary", grade: "6.º", subjects: ["Lenguaje", "Lectura y comprensión"] }, "Lectura y comprensión"), true);
   assert.equal(studentCanTakeSubject({ schoolLevel: "primary", grade: "6.º", subjects: [] }, "Física"), false);
   assert.match(firebaseSource, /resolveStudentSubjects\(rawSubjects, schoolLevel, grade\)/);
   assert.match(firebaseSource.slice(firebaseSource.indexOf("export async function getProfile")), /resolveStudentSubjects/);

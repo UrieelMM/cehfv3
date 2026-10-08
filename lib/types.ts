@@ -483,6 +483,8 @@ export type TaskSubmissionStatus =
   | "feedback"
   | "reviewed";
 
+export type TaskSubmissionLink = { label: string; url: string };
+
 export type TaskSubmission = {
   id: string;
   studentId: string;
@@ -491,6 +493,7 @@ export type TaskSubmission = {
   taskId: string;
   content: string;
   contentRich?: string;
+  links: TaskSubmissionLink[];
   attachments: TaskAttachment[];
   status: TaskSubmissionStatus;
   version: number;
@@ -527,6 +530,7 @@ export type TaskHistoryEvent = {
   createdAt: string;
   version?: number;
   attachments?: TaskAttachment[];
+  links?: TaskSubmissionLink[];
   studentId?: string;
   studentName?: string;
   dueAt?: string;

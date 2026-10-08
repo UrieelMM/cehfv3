@@ -39,7 +39,7 @@ const primaryUpperSubjects = [
 ] as const satisfies readonly AcademicSubject[];
 const primarySixthSubjects = [
   "Lenguaje", "Matemáticas", "Ciencias", "Historia", "Geografía", "Inglés",
-  "Cívica",
+  "Cívica", "Lectura y comprensión",
 ] as const satisfies readonly AcademicSubject[];
 const secondaryFirstSubjects = [
   "Lenguaje", "Matemáticas", "Cívica", "Geografía", "Biología", "Inglés",

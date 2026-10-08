@@ -42,6 +42,7 @@ import type {
   TaskResource,
   TaskResourceView,
   TaskSubmission,
+  TaskSubmissionLink,
   UserProfile,
 } from "./types";
 
@@ -278,6 +279,7 @@ function submissionFromData(id: string, data: DocumentData): TaskSubmission {
     taskId: String(data.taskId ?? ""),
     content: String(data.content ?? ""),
     contentRich: data.contentRich ? String(data.contentRich) : undefined,
+    links: submissionLinksFromData(data.links),
     attachments: attachmentsFromData(data.attachments),
     status: data.status ?? "draft",
     version: Number(data.version ?? 0),
@@ -306,10 +308,36 @@ function historyFromData(id: string, data: DocumentData): TaskHistoryEvent {
     createdAt: asIso(data.createdAt),
     version: data.version ? Number(data.version) : undefined,
     attachments: attachmentsFromData(data.attachments),
+    links: submissionLinksFromData(data.links),
     studentId: data.studentId ? String(data.studentId) : undefined,
     studentName: data.studentName ? String(data.studentName) : undefined,
     dueAt: data.dueAt ? asIso(data.dueAt) : undefined,
   };
+}
+
+function submissionLinksFromData(value: unknown): TaskSubmissionLink[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const link = entry as Record<string, unknown>;
+    const label = String(link.label ?? "").trim();
+    const url = String(link.url ?? "").trim();
+    return label && /^https?:\/\//i.test(url) ? [{ label, url }] : [];
+  });
+}
+
+function normalizeSubmissionLinks(links: TaskSubmissionLink[]): TaskSubmissionLink[] {
+  if (links.length > 10) throw new Error("Puedes agregar hasta 10 enlaces.");
+  return links.map((link, index) => {
+    const label = link.label.trim();
+    const url = link.url.trim();
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { throw new Error(`El enlace ${index + 1} no es válido.`); }
+    if (!label || label.length > 100 || url.length > 2000 || !["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error(`Revisa el nombre y la URL del enlace ${index + 1}.`);
+    }
+    return { label, url: parsed.toString() };
+  });
 }
 
 export function watchAcademicConfig(
@@ -916,7 +944,12 @@ export async function submitTaskResponse(
   content: string,
   contentRich: string,
   files: File[],
+  links: TaskSubmissionLink[],
 ) {
+  const normalizedLinks = normalizeSubmissionLinks(links);
+  if (!content.trim() && !files.length && !normalizedLinks.length) {
+    throw new Error("Escribe una respuesta, agrega un enlace o adjunta un archivo.");
+  }
   const { db } = requireFirebase();
   const reference = taskRef(task);
   const currentTaskSnapshot = await getDoc(reference);
@@ -952,6 +985,7 @@ export async function submitTaskResponse(
       teacherId: task.createdBy,
       content: content.trim(),
       contentRich: normalizedContentRich,
+      links: normalizedLinks,
       attachments,
       status: "submitted",
       version,
@@ -975,6 +1009,7 @@ export async function submitTaskResponse(
     studentName: profile.name,
     message: content.trim(),
     messageRich: normalizedContentRich,
+    links: normalizedLinks,
     attachments,
     version,
     createdAt: serverTimestamp(),

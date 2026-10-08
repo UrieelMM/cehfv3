@@ -65,6 +65,7 @@ const primarySixthSubjects = [
   "Geografía",
   "Inglés",
   "Cívica",
+  "Lectura y comprensión",
 ] as const satisfies readonly AcademicSubject[];
 
 const secondaryFirstSubjects = [
@@ -162,6 +163,9 @@ export function studentCanTakeSubject(
 ) {
   if (includesSubject(student.subjects, subject)) return true;
   if (!student.grade) return false;
+  // En sexto, Lectura y comprensión se asigna individualmente.
+  if ((student.schoolLevel ?? "primary") === "primary" && student.grade === "6.º" &&
+      subjectsMatch(subject, "Lectura y comprensión")) return false;
   return includesSubject(
     subjectsForGrade(student.schoolLevel ?? "primary", student.grade),
     subject,

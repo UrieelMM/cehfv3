@@ -40,6 +40,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { ForumRichText } from "@/components/forum-rich-text";
 import { TaskResourceViewer } from "@/components/task-resource-viewer";
+import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
 import { TaskCreationAnimation, useTaskCreationAnimation } from "@/components/task-creation-animation";
 import { academicSubjectOptions, subjectsMatch } from "@/lib/academic-subjects";
 import { normalizeForumRichText } from "@/lib/forum-rich-text";
@@ -75,6 +76,7 @@ import type {
   TaskHistoryEvent,
   TaskResource,
   TaskSubmission,
+  TaskSubmissionLink,
   UserProfile,
 } from "@/lib/types";
 
@@ -878,6 +880,7 @@ export function TaskDetailModal({
   const [responseRich, setResponseRich] = useState(() => normalizeForumRichText(""));
   const [responseRevision, setResponseRevision] = useState(0);
   const [responseFiles, setResponseFiles] = useState<File[]>([]);
+  const [responseLinks, setResponseLinks] = useState<TaskSubmissionLink[]>([]);
   const [feedback, setFeedback] = useState("");
   const [feedbackRich, setFeedbackRich] = useState(() => normalizeForumRichText(""));
   const [feedbackRevision, setFeedbackRevision] = useState(0);
@@ -1005,16 +1008,17 @@ export function TaskDetailModal({
   }
 
   async function submitResponse() {
-    if ((!response.trim() && !responseFiles.length) || submissionAnimation.isPending()) return;
+    if ((!response.trim() && !responseFiles.length && !responseLinks.length) || submissionAnimation.isPending()) return;
     setBusy("submit");
     let version = 0;
     try {
       const sent = await submissionAnimation.create(async () => {
-        version = await submitTaskResponse(task, profile, response, responseRich, responseFiles);
+        version = await submitTaskResponse(task, profile, response, responseRich, responseFiles, responseLinks);
         setResponse("");
         setResponseRich(normalizeForumRichText(""));
         setResponseRevision((current) => current + 1);
         setResponseFiles([]);
+        setResponseLinks([]);
       });
       if (sent) toast.success(`Versión ${version} entregada y maestro notificado`);
     } catch (error) {
@@ -1231,6 +1235,8 @@ export function TaskDetailModal({
               responseRevision={responseRevision}
               responseFiles={responseFiles}
               setResponseFiles={setResponseFiles}
+              responseLinks={responseLinks}
+              setResponseLinks={setResponseLinks}
               submitResponse={submitResponse}
               busy={busy}
               onOpenAttachment={openSubmissionAttachment}
@@ -1376,6 +1382,8 @@ function StudentTaskFlow({
   responseRevision,
   responseFiles,
   setResponseFiles,
+  responseLinks,
+  setResponseLinks,
   submitResponse,
   busy,
   onOpenAttachment,
@@ -1392,6 +1400,8 @@ function StudentTaskFlow({
   responseRevision: number;
   responseFiles: File[];
   setResponseFiles: (files: File[]) => void;
+  responseLinks: TaskSubmissionLink[];
+  setResponseLinks: (links: TaskSubmissionLink[]) => void;
   submitResponse: () => Promise<void>;
   busy: string;
   onOpenAttachment: (attachment: TaskSubmission["attachments"][number]) => void;
@@ -1408,7 +1418,7 @@ function StudentTaskFlow({
             <p>
               {submission
                 ? `La última entrega fue la versión ${submission.version}.`
-                : "Escribe tu respuesta y adjunta tus evidencias."}
+                : "Escribe tu respuesta o agrega enlaces y archivos."}
             </p>
           </div>
         </div>
@@ -1433,6 +1443,9 @@ function StudentTaskFlow({
                   setResponse(plainText);
                 }}
               />
+            </div>
+            <div className="task-response-links">
+              <WorkshopLinksEditor title="Enlaces de tu entrega" links={responseLinks} onChange={setResponseLinks} disabled={busy === "submit"} />
             </div>
             <label className="task-response-upload">
               <UploadCloud size={20} />
@@ -1471,7 +1484,7 @@ function StudentTaskFlow({
             )}
             <button
               className="primary-button full-button"
-              disabled={busy === "submit" || (!response.trim() && !responseFiles.length)}
+              disabled={busy === "submit" || (!response.trim() && !responseFiles.length && !responseLinks.length)}
               onClick={() => void submitResponse()}
             >
               {busy === "submit" ? <span className="button-spinner" /> : <Send size={17} />}
@@ -1486,7 +1499,7 @@ function StudentTaskFlow({
               <p>
                 {task.status === "closed"
                   ? "El docente cerró esta actividad."
-                  : "La fecha límite terminó."} Puedes consultar tu historial, pero ya no enviar archivos.
+                  : "La fecha límite terminó."} Puedes consultar tu historial, pero ya no enviar nuevas entregas.
               </p>
             </div>
           </div>
@@ -1743,6 +1756,7 @@ function StaffTaskFlow({
                       />
                     ) : <p>{selectedSubmission.content}</p>
                   )}
+                  <TaskSubmissionLinks links={selectedSubmission.links} />
                 </div>
               )}
               <div className="task-rich-field">
@@ -1879,6 +1893,7 @@ function TaskTimeline({
                       />
                     ) : <p>{event.message}</p>
                   )}
+                  <TaskSubmissionLinks links={event.links ?? []} />
                   {event.attachments && event.attachments.length > 0 && (
                     <div className="task-event-files">
                       {event.attachments.map((attachment) => (
@@ -1911,6 +1926,13 @@ function TaskTimeline({
       )}
     </section>
   );
+}
+
+function TaskSubmissionLinks({ links }: { links: TaskSubmissionLink[] }) {
+  if (!links.length) return null;
+  return <div className="task-submission-links" aria-label="Enlaces de la entrega">
+    {links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={14} /><span>{link.label}</span></a>)}
+  </div>;
 }
 
 type WeekDraft = AcademicCalendarInput["weeks"][number];

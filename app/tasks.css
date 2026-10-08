@@ -236,6 +236,10 @@
 .task-extension-notice strong { color: var(--foreground); font-size: calc(.65rem + 0.125rem); }
 .task-extension-notice small { margin-top: 2px; color: var(--muted); font-size: calc(.57rem + 0.125rem); }
 .task-response-upload { margin-top: 12px; }
+.task-response-links { margin-top: 12px; }
+.task-submission-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.task-submission-links a { display: inline-flex; max-width: 100%; align-items: center; gap: 5px; padding: 6px 9px; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--violet); font-size: .7rem; font-weight: 700; text-decoration: none; }
+.task-submission-links a:hover { border-color: var(--violet); }
 .task-selected-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .task-selected-files > span { gap: 5px; padding: 4px 5px 4px 8px; border-radius: 8px; background: var(--surface-soft); color: var(--muted-strong); font-size: calc(.57rem + 0.125rem); }
 .task-selected-files .plain-icon { width: 20px; height: 20px; }
