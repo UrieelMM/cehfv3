@@ -34,6 +34,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { ForumRichText } from "@/components/forum-rich-text";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
+import { WorkshopViews } from "@/components/workshop-views";
 import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
 import { TaskCreationAnimation, useTaskCreationAnimation } from "@/components/task-creation-animation";
 import { friendlyFirebaseError } from "@/lib/firebase";
@@ -43,6 +44,8 @@ import {
   deleteWorkshopTask,
   getWorkshopTaskAttachmentAccess,
   getWorkshopTaskAttachmentUrl,
+  loadViewedWorkshopIds,
+  markWorkshopViewed,
   saveWorkshopFeedback,
   setWorkshopTaskStatus,
   submitWorkshopTask,
@@ -164,6 +167,7 @@ export function WorkshopTasks({
   const [taskToDelete, setTaskToDelete] = useState<WorkshopTask | null>(null);
   const [taskToEdit, setTaskToEdit] = useState<WorkshopTask | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [viewedTaskIds, setViewedTaskIds] = useState<Set<string>>(new Set());
   const canCreate =
     role === "director" || workshop.managerIds.includes(profile.uid);
 
@@ -218,6 +222,15 @@ export function WorkshopTasks({
       },
     );
   }, [firebaseReady, profile, role, workshop]);
+
+  useEffect(() => {
+    if (role !== "student" || !tasks.length) return;
+    let active = true;
+    void loadViewedWorkshopIds(tasks, profile)
+      .then((ids) => { if (active) setViewedTaskIds((current) => new Set([...current, ...ids])); })
+      .catch((error) => { if (active) toast.error(messageFor(error)); });
+    return () => { active = false; };
+  }, [profile, role, tasks]);
 
   async function createTask(input: WorkshopTaskCreateInput) {
     if (!firebaseReady) throw new Error("Inicia sesión para publicar trabajos.");
@@ -287,6 +300,7 @@ export function WorkshopTasks({
               </span>
               <span className="workshop-task-icon"><ClipboardCheck size={22} /></span>
               <strong>{task.title}</strong>
+              {role === "student" && viewedTaskIds.has(task.id) && <span className="workshop-viewed-chip"><Check size={12} /> Visto</span>}
               <p>{task.description}</p>
               <span className="workshop-task-teacher">Por {task.teacherName}</span>
               <footer>
@@ -322,6 +336,7 @@ export function WorkshopTasks({
           )}
           {selectedTask && (
             <WorkshopTaskDetailDialog
+              key={selectedTask.id}
               task={selectedTask}
               profile={profile}
               role={role}
@@ -332,6 +347,7 @@ export function WorkshopTasks({
               onEdit={() => setTaskToEdit(selectedTask)}
               onDelete={() => setTaskToDelete(selectedTask)}
               onClose={closeTask}
+              onViewed={() => setViewedTaskIds((current) => new Set(current).add(selectedTask.id))}
             />
           )}
         </AnimatePresence>,
@@ -671,6 +687,7 @@ function WorkshopTaskDetailDialog({
   onEdit,
   onDelete,
   onClose,
+  onViewed,
 }: {
   task: WorkshopTask;
   profile: UserProfile;
@@ -682,6 +699,7 @@ function WorkshopTaskDetailDialog({
   onEdit: () => void;
   onDelete: () => void;
   onClose: () => void;
+  onViewed: () => void;
 }) {
   const [submissions, setSubmissions] = useState<WorkshopSubmission[]>([]);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
@@ -699,6 +717,7 @@ function WorkshopTaskDetailDialog({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [downloadingPath, setDownloadingPath] = useState<string | null>(null);
   const previewRequest = useRef(0);
+  const viewRecorded = useRef(false);
   const staff = canManage;
   const selectedSubmission =
     submissions.find((item) => item.id === selectedSubmissionId);
@@ -707,6 +726,14 @@ function WorkshopTaskDetailDialog({
     () => new Map(accounts.map((account) => [account.uid, account])),
     [accounts],
   );
+
+  useEffect(() => {
+    if (!firebaseReady || role !== "student" || viewRecorded.current) return;
+    viewRecorded.current = true;
+    void markWorkshopViewed(task, profile)
+      .then(onViewed)
+      .catch((error) => toast.error("No pudimos registrar la apertura", { description: messageFor(error) }));
+  }, [firebaseReady, onViewed, profile, role, task]);
 
   useEffect(() => {
     if (!firebaseReady) {
@@ -986,6 +1013,7 @@ function WorkshopTaskDetailDialog({
           <aside>
             <div><span>Asignación</span><strong>{task.audienceStudentIds.length} alumnos</strong></div>
             <div><span>Archivos de apoyo</span><strong>{task.attachments.length}</strong></div>
+            {role !== "student" && <WorkshopViews item={task} accounts={accounts} audienceIds={task.audienceStudentIds} />}
             {staff && <div className="workshop-task-control"><span>Estado del trabajo</span><button disabled={busy} onClick={onEdit}><Pencil size={15} /> Editar actividad</button>{task.status === "draft" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Publicar</button>}{task.status === "published" && <button disabled={busy} onClick={() => void changeStatus("closed")}><Clock3 size={15} /> Cerrar entregas</button>}{task.status === "closed" && <button disabled={busy} onClick={() => void changeStatus("published")}><Send size={15} /> Reabrir</button>}<button className="danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Eliminar actividad</button></div>}
           </aside>
         </div>

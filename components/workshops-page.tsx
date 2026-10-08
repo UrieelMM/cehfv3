@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Code2,
   Download,
+  Eye,
   FileArchive,
   FileImage,
   FileText,
@@ -43,6 +44,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { ContentEditDialog } from "@/components/content-edit-dialog";
 import { ForumRichText } from "@/components/forum-rich-text";
 import { WorkshopFileViewer } from "@/components/workshop-file-viewer";
+import { WorkshopViews } from "@/components/workshop-views";
 import { WorkshopTasks } from "@/components/workshop-tasks";
 import { WorkshopLinksEditor } from "@/components/workshop-links-editor";
 import { friendlyFirebaseError } from "@/lib/firebase";
@@ -51,6 +53,8 @@ import {
   deleteWorkshopResource,
   ensureDefaultWorkshops,
   getWorkshopResourceUrl,
+  loadViewedWorkshopIds,
+  markWorkshopViewed,
   updateWorkshopAccess,
   updateWorkshopResource,
   uploadWorkshopResource,
@@ -150,6 +154,7 @@ export function WorkshopsPage({
   const [previewFile, setPreviewFile] = useState<WorkshopResourceFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [viewedResourceIds, setViewedResourceIds] = useState<Set<string>>(new Set());
   const initializedRef = useRef(false);
   const previewRequest = useRef(0);
 
@@ -225,6 +230,15 @@ export function WorkshopsPage({
   }, [baseWorkshops, firebaseReady, profile.institutionId]);
 
   useEffect(() => {
+    if (profile.role !== "student" || !selected) return;
+    let active = true;
+    void loadViewedWorkshopIds(selected.resources, profile)
+      .then((ids) => { if (active) setViewedResourceIds((current) => new Set([...current, ...ids])); })
+      .catch((error) => { if (active) toast.error(errorMessage(error)); });
+    return () => { active = false; };
+  }, [profile, selected]);
+
+  useEffect(() => {
     const resourceId = workshopResourceFromRoute();
     const fileId = workshopResourceFileFromRoute();
     if (
@@ -281,6 +295,13 @@ export function WorkshopsPage({
     await deleteWorkshopResource(resource);
   }
 
+  function recordResourceView(resource: WorkshopResource) {
+    if (profile.role !== "student") return;
+    void markWorkshopViewed(resource, profile)
+      .then(() => setViewedResourceIds((current) => new Set(current).add(resource.id)))
+      .catch((error) => toast.error("No pudimos registrar la apertura", { description: errorMessage(error) }));
+  }
+
   async function openResource(
     resource: WorkshopResource,
     attachment: WorkshopResourceFile = resource.attachments[0],
@@ -308,7 +329,10 @@ export function WorkshopsPage({
     setPreviewLoading(true);
     try {
       const url = await getWorkshopResourceUrl(resource, attachment);
-      if (previewRequest.current === requestId) setPreviewUrl(url);
+      if (previewRequest.current === requestId) {
+        setPreviewUrl(url);
+        recordResourceView(resource);
+      }
     } catch (error) {
       if (previewRequest.current === requestId) {
         setPreviewResource(null);
@@ -373,6 +397,8 @@ export function WorkshopsPage({
           onUpload={() => setUploadWorkshop(selected)}
           onOpenResource={openResource}
           onDeleteResource={removeResource}
+          viewedResourceIds={viewedResourceIds}
+          onOpenLink={recordResourceView}
         />
         <AnimatePresence>
           {accessWorkshop && (
@@ -558,6 +584,8 @@ function WorkshopDetail({
   onUpload,
   onOpenResource,
   onDeleteResource,
+  viewedResourceIds,
+  onOpenLink,
 }: {
   workshop: Workshop;
   profile: UserProfile;
@@ -574,11 +602,14 @@ function WorkshopDetail({
     attachment?: WorkshopResourceFile,
   ) => void;
   onDeleteResource: (resource: WorkshopResource) => Promise<void>;
+  viewedResourceIds: Set<string>;
+  onOpenLink: (resource: WorkshopResource) => void;
 }) {
   const [query, setQuery] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [resourceToDelete, setResourceToDelete] = useState<WorkshopResource | null>(null);
   const [resourceToEdit, setResourceToEdit] = useState<WorkshopResource | null>(null);
+  const [resourceForViews, setResourceForViews] = useState<WorkshopResource | null>(null);
   const reading = workshop.kind === "reading";
   const filteredResources = workshop.resources.filter((resource) =>
     [
@@ -599,7 +630,7 @@ function WorkshopDetail({
       if (
         event.key === "Escape" &&
         !document.querySelector(
-          ".workshop-modal-backdrop, .workshop-attachment-viewer-backdrop, .delete-confirm-backdrop",
+          ".workshop-modal-backdrop, .workshop-attachment-viewer-backdrop, .workshop-views-backdrop, .delete-confirm-backdrop",
         )
       ) {
         onBack();
@@ -611,6 +642,15 @@ function WorkshopDetail({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [onBack]);
+
+  useEffect(() => {
+    if (!resourceForViews) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setResourceForViews(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [resourceForViews]);
 
   async function remove(resource: WorkshopResource) {
     setDeletingId(resource.id);
@@ -808,6 +848,7 @@ function WorkshopDetail({
                           : resource.fileName}
                       </small>
                       <strong>{resource.title}</strong>
+                      {role === "student" && viewedResourceIds.has(resource.id) && <span className="workshop-viewed-chip"><Check size={12} /> Visto</span>}
                       {resource.description ? (
                         <div className="workshop-rich-summary">
                           <ForumRichText
@@ -848,7 +889,7 @@ function WorkshopDetail({
                       })}
                     </div>
                   )}
-                  {resource.links.length > 0 && <div className="workshop-resource-links">{resource.links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={15} /> {link.label}</a>)}</div>}
+                  {resource.links.length > 0 && <div className="workshop-resource-links">{resource.links.map((link, index) => <a key={`${link.url}-${index}`} href={link.url} target="_blank" rel="noopener noreferrer" onClick={() => onOpenLink(resource)}><ExternalLink size={15} /> {link.label}</a>)}</div>}
                   <footer>
                     <span>{fileSize(totalSize)} · {resourceDate(resource.createdAt)}</span>
                     <span>Por {resource.uploadedByName}</span>
@@ -858,6 +899,7 @@ function WorkshopDetail({
                           <Download size={15} />
                         </button>
                       )}
+                      {role !== "student" && <button onClick={() => setResourceForViews(resource)} aria-label={`Ver aperturas de ${resource.title}`} title="Registro de aperturas"><Eye size={15} /></button>}
                       {canManage && (
                         <>
                           <button onClick={() => setResourceToEdit(resource)} aria-label="Editar recurso"><Pencil size={15} /></button>
@@ -905,7 +947,7 @@ function WorkshopDetail({
         </div>
       </div>
     </motion.section>
-    <ConfirmDeleteDialog
+      <ConfirmDeleteDialog
       open={Boolean(resourceToDelete)}
       title={`¿Eliminar “${resourceToDelete?.title ?? "este recurso"}”?`}
       description={`Se eliminarán ${resourceToDelete?.attachments.length === 1 ? "el archivo" : `los ${resourceToDelete?.attachments.length ?? 0} archivos`} y el recurso dentro del taller. Esta acción no se puede deshacer.`}
@@ -914,6 +956,14 @@ function WorkshopDetail({
       onCancel={() => setResourceToDelete(null)}
       onConfirm={() => resourceToDelete && void remove(resourceToDelete)}
     />
+    {resourceForViews && (
+      <div className="workshop-views-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setResourceForViews(null); }}>
+        <section className="workshop-views-dialog" role="dialog" aria-modal="true" aria-label={`Aperturas de ${resourceForViews.title}`}>
+          <header><div><small>Recurso del taller</small><h2>{resourceForViews.title}</h2></div><button type="button" className="plain-icon" onClick={() => setResourceForViews(null)} aria-label="Cerrar registro"><X size={19} /></button></header>
+          <WorkshopViews item={resourceForViews} accounts={managedAccounts} audienceIds={workshop.studentIds} />
+        </section>
+      </div>
+    )}
     {resourceToEdit && <WorkshopResourceEditDialog resource={resourceToEdit} onCancel={() => setResourceToEdit(null)} />}
     </>
   );

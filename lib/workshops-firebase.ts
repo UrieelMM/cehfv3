@@ -35,6 +35,7 @@ import type {
   WorkshopSubmission,
   WorkshopTask,
   WorkshopTaskAttachment,
+  WorkshopView,
 } from "./types";
 
 export const workshopDefinitions: Array<{
@@ -356,6 +357,77 @@ export function watchWorkshopResources(
     ),
   );
   return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+}
+
+type WorkshopViewedItem = WorkshopResource | WorkshopTask;
+
+function workshopViewReference(item: WorkshopViewedItem, studentId: string) {
+  const kind = "audienceStudentIds" in item ? "tasks" : "resources";
+  return doc(
+    requireFirebase().db,
+    "institutions", item.institutionId, "workshops", item.workshopId,
+    kind, item.id, "views", studentId,
+  );
+}
+
+export async function markWorkshopViewed(item: WorkshopViewedItem, profile: UserProfile) {
+  if (profile.role !== "student") return;
+  const reference = workshopViewReference(item, profile.uid);
+  await runTransaction(requireFirebase().db, async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    if (snapshot.exists()) {
+      transaction.update(reference, {
+        lastOpenedAt: serverTimestamp(),
+        viewCount: Number(snapshot.data().viewCount ?? 0) + 1,
+      });
+    } else {
+      transaction.set(reference, {
+        institutionId: item.institutionId,
+        workshopId: item.workshopId,
+        itemId: item.id,
+        studentId: profile.uid,
+        studentName: profile.name,
+        firstOpenedAt: serverTimestamp(),
+        lastOpenedAt: serverTimestamp(),
+        viewCount: 1,
+      });
+    }
+  });
+}
+
+export async function loadViewedWorkshopIds(items: WorkshopViewedItem[], profile: UserProfile) {
+  if (!firebase.db || profile.role !== "student") return new Set<string>();
+  const results = await Promise.all(items.map(async (item) => ({
+    id: item.id,
+    viewed: (await getDoc(workshopViewReference(item, profile.uid))).exists(),
+  })));
+  return new Set(results.filter((result) => result.viewed).map((result) => result.id));
+}
+
+export function watchWorkshopViews(
+  item: WorkshopViewedItem,
+  callback: (views: WorkshopView[]) => void,
+  onError?: (error: Error) => void,
+): Unsubscribe {
+  if (!firebase.db) {
+    callback([]);
+    return () => undefined;
+  }
+  const kind = "audienceStudentIds" in item ? "tasks" : "resources";
+  return onSnapshot(
+    collection(firebase.db, "institutions", item.institutionId, "workshops", item.workshopId, kind, item.id, "views"),
+    (snapshot) => callback(snapshot.docs.map((entry) => {
+      const data = entry.data();
+      return {
+        studentId: String(data.studentId ?? entry.id),
+        studentName: String(data.studentName ?? ""),
+        firstOpenedAt: asIso(data.firstOpenedAt),
+        lastOpenedAt: asIso(data.lastOpenedAt),
+        viewCount: Number(data.viewCount ?? 1),
+      };
+    })),
+    onError,
+  );
 }
 
 export async function updateWorkshopAccess(

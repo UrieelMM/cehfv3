@@ -968,6 +968,14 @@ export type WorkshopResource = {
   createdAt: string;
 };
 
+export type WorkshopView = {
+  studentId: string;
+  studentName: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  viewCount: number;
+};
+
 export type Workshop = {
   id: string;
   institutionId: string;

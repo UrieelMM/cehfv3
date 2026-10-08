@@ -945,6 +945,16 @@
 }
 .workshop-resource-card footer button.is-danger { color: var(--danger); }
 
+.workshop-viewed-chip { display: inline-flex !important; width: fit-content; align-items: center; gap: 4px; margin: 5px 0; padding: 4px 7px; border-radius: 999px; background: var(--mint-soft); color: var(--mint); font-size: .68rem; font-weight: 800; }
+.workshop-views-backdrop { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 18px; background: rgb(15 25 35 / 0.55); }
+.workshop-views-dialog { width: min(100%, 480px); max-height: min(80vh, 680px); overflow-y: auto; padding: 20px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface-raised); box-shadow: var(--shadow-lg); }
+.workshop-views-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.workshop-views-dialog > header small { color: var(--muted); }
+.workshop-views-dialog > header h2 { margin: 4px 0 0; font-size: 1.1rem; }
+.workshop-reading-panel { min-width: 0; grid-column: 1 / -1; }
+.workshop-reading-panel .material-student-views { max-height: 350px; overflow-y: auto; }
+.workshop-task-detail-body aside .workshop-reading-panel { margin-top: 14px; }
+
 .workshop-resource-links,
 .workshop-task-links { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
 .workshop-task-links { padding: 13px 0 0; }
@@ -1452,12 +1462,12 @@
 .workshop-task-detail-modal > header .workshop-task-status { margin-bottom: 5px; }
 .workshop-task-detail-body { display: grid; min-height: 0; grid-template-columns: minmax(0, 1fr) 235px; flex: 1; overflow: hidden; }
 .workshop-task-detail-body > main { min-width: 0; overflow-y: auto; padding: 24px; }
-.workshop-task-detail-body > aside { padding: 20px; border-left: 1px solid var(--border); background: var(--surface-soft); }
+.workshop-task-detail-body > aside { overflow-y: auto; padding: 20px; border-left: 1px solid var(--border); background: var(--surface-soft); }
 .workshop-task-detail-body > aside > div { margin-bottom: 9px; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
-.workshop-task-detail-body > aside span,
-.workshop-task-detail-body > aside strong { display: block; }
-.workshop-task-detail-body > aside span { color: var(--muted); font-size: calc(0.57rem + 0.125rem); }
-.workshop-task-detail-body > aside strong { margin-top: 3px; font-size: calc(0.7rem + 0.125rem); }
+.workshop-task-detail-body > aside > div:not(.workshop-reading-panel) span,
+.workshop-task-detail-body > aside > div:not(.workshop-reading-panel) strong { display: block; }
+.workshop-task-detail-body > aside > div:not(.workshop-reading-panel) span { color: var(--muted); font-size: calc(0.57rem + 0.125rem); }
+.workshop-task-detail-body > aside > div:not(.workshop-reading-panel) strong { margin-top: 3px; font-size: calc(0.7rem + 0.125rem); }
 
 .workshop-task-instructions { padding: 19px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface-raised); }
 .workshop-task-instructions > p { margin: 8px 0 0; color: var(--muted-strong); font-size: calc(0.75rem + 0.125rem); line-height: 1.65; white-space: pre-wrap; }

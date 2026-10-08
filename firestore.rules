@@ -607,6 +607,35 @@ service cloud.firestore {
             );
         }
 
+        function validWorkshopView(data, itemId, studentId) {
+          return data.keys().hasAll([
+              "institutionId", "workshopId", "itemId", "studentId", "studentName",
+              "firstOpenedAt", "lastOpenedAt", "viewCount"
+            ])
+            && data.keys().hasOnly([
+              "institutionId", "workshopId", "itemId", "studentId", "studentName",
+              "firstOpenedAt", "lastOpenedAt", "viewCount"
+            ])
+            && data.institutionId == institutionId
+            && data.workshopId == workshopId
+            && data.itemId == itemId
+            && data.studentId == studentId
+            && data.studentName is string
+            && data.studentName.size() > 0
+            && data.firstOpenedAt is timestamp
+            && data.lastOpenedAt is timestamp
+            && data.viewCount is int
+            && data.viewCount > 0;
+        }
+
+        function validWorkshopViewUpdate(itemId, studentId) {
+          return validWorkshopView(request.resource.data, itemId, studentId)
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["lastOpenedAt", "viewCount"])
+            && request.resource.data.viewCount == resource.data.viewCount + 1
+            && request.resource.data.lastOpenedAt == request.time;
+        }
+
         allow read: if canReadWorkshop(resource.data);
         allow create: if isDirector()
           && profile().institutionId == institutionId
@@ -646,6 +675,39 @@ service cloud.firestore {
             && request.resource.data.size < 20 * 1024 * 1024;
           allow update: if false;
           allow delete: if canManageWorkshop();
+
+          match /views/{studentId} {
+            function resourceData() {
+              return get(
+                /databases/$(database)/documents/institutions/$(institutionId)/workshops/$(workshopId)/resources/$(resourceId)
+              ).data;
+            }
+
+            function assignedWorkshopStudent() {
+              let workshop = workshopData();
+              let item = resourceData();
+              return canReadWorkshop(workshop)
+                && roleIs("student")
+                && request.auth.uid == studentId
+                && studentId in workshop.studentIds
+                && item.institutionId == institutionId
+                && item.workshopId == workshopId;
+            }
+
+            allow read: if canReadWorkshop(workshopData()) && (
+              (roleIs("student") && request.auth.uid == studentId)
+              || isDirector()
+              || roleIs("teacher")
+            );
+            allow create: if assignedWorkshopStudent()
+              && validWorkshopView(request.resource.data, resourceId, studentId)
+              && request.resource.data.viewCount == 1
+              && request.resource.data.firstOpenedAt == request.time
+              && request.resource.data.lastOpenedAt == request.time;
+            allow update: if assignedWorkshopStudent()
+              && validWorkshopViewUpdate(resourceId, studentId);
+            allow delete: if false;
+          }
         }
 
         match /tasks/{taskId} {
@@ -724,6 +786,31 @@ service cloud.firestore {
               .hasOnly(["status", "updatedAt"])
             && request.resource.data.status in ["draft", "published", "closed"];
           allow delete: if false;
+
+          match /views/{studentId} {
+            function assignedTaskStudent() {
+              let task = taskData();
+              return canReadWorkshopTask(task)
+                && roleIs("student")
+                && request.auth.uid == studentId
+                && task.institutionId == institutionId
+                && task.workshopId == workshopId;
+            }
+
+            allow read: if canReadWorkshopTask(taskData()) && (
+              (roleIs("student") && request.auth.uid == studentId)
+              || isDirector()
+              || roleIs("teacher")
+            );
+            allow create: if assignedTaskStudent()
+              && validWorkshopView(request.resource.data, taskId, studentId)
+              && request.resource.data.viewCount == 1
+              && request.resource.data.firstOpenedAt == request.time
+              && request.resource.data.lastOpenedAt == request.time;
+            allow update: if assignedTaskStudent()
+              && validWorkshopViewUpdate(taskId, studentId);
+            allow delete: if false;
+          }
 
           match /submissions/{studentId} {
             function validWorkshopSubmissionRichText(data) {
