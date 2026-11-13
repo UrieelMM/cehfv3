@@ -12,8 +12,12 @@ export async function loadFirebaseTransactions(path) {
       constructor(value) { this.value = value; }
       toDate() { return new Date(this.value); }
     }
-    export const doc = (parent, ...segments) => ({ path: [parent.path, ...segments].filter(Boolean).join("/") });
+    export const doc = (parent, ...segments) => ({
+      path: [parent.path, ...segments].filter(Boolean).join("/"),
+      firestore: parent.firestore ?? parent,
+    });
     export const collection = (parent, ...segments) => ({ ...doc(parent, ...segments), kind: "collection" });
+    export const collectionGroup = collection;
     const snapshot = (path) => ({ id: path.split("/").at(-1), exists: () => state.documents.has(path), data: () => state.documents.get(path) });
     export async function getDoc(reference) { state.reads.push(reference.path); return snapshot(reference.path); }
     export function onSnapshot(reference, callback) { callback(snapshot(reference.path)); return () => {}; }
@@ -40,30 +44,32 @@ export async function loadFirebaseTransactions(path) {
             return { exists: () => Boolean(data), data: () => data };
           },
           delete(reference) { writes.push({ type: "delete", path: reference.path }); },
+          set(reference, data) { writes.push({ type: "set", path: reference.path, data }); },
           update(reference, data) { writes.push({ type: "update", path: reference.path, data }); },
         });
       }
       state.commits.push(...writes);
       for (const write of writes) {
         if (write.type === "delete") state.documents.delete(write.path);
+        else if (write.type === "set") state.documents.set(write.path, write.data);
         else state.documents.set(write.path, { ...state.documents.get(write.path), ...write.data });
       }
     }
     const unused = () => { throw new Error("Unexpected Firebase operation outside transaction"); };
-    export const query = unused, setDoc = unused, updateDoc = unused, where = unused;
+    export const deleteField = unused, orderBy = unused, query = unused, setDoc = unused, updateDoc = unused, where = unused;
   `);
   const mock = await import(firestoreUrl);
-  const firebaseUrl = moduleUrl(`export const firebase = { db: {}, storage: {} }; // ${harnessId}`);
-  const unusedUrl = moduleUrl("export const httpsCallable = () => {}; export const deleteObject = () => {}; export const ref = () => {}; export const uploadBytes = () => {};");
+  const firebaseUrl = moduleUrl(`export const firebase = { db: {}, storage: {}, functions: {} }; // ${harnessId}`);
+  const unusedUrl = moduleUrl("export const httpsCallable = () => {}; export const deleteObject = () => {}; export const getDownloadURL = () => {}; export const ref = () => {}; export const uploadBytes = () => {};");
   const imports = {
     "firebase/firestore": firestoreUrl,
     "firebase/functions": unusedUrl,
     "firebase/storage": unusedUrl,
     "./firebase": firebaseUrl,
   };
-  for (const dependency of ["academic-subjects", "grade-scale", "forum-rich-text"]) {
+  for (const dependency of ["academic-subjects", "grade-scale", "forum-rich-text", "task-publication", "first-opening-firebase"]) {
     const source = await readFile(new URL(`lib/${dependency}.ts`, root), "utf8");
-    imports[`./${dependency}`] = moduleUrl(stripTypeScriptTypes(source));
+    imports[`./${dependency}`] = moduleUrl(stripTypeScriptTypes(source).replace('from "firebase/firestore"', `from "${firestoreUrl}"`));
   }
   const source = stripTypeScriptTypes(await readFile(new URL(path, root), "utf8"));
   const replaced = source.replace(/from "([^"]+)"/g, (_match, name) => {

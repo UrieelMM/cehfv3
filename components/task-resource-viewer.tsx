@@ -340,7 +340,7 @@ export function TaskResourceViewer({
                           <strong>{student.name}</strong>
                           <small>
                             {view
-                              ? `Visto ${formatDateTime(view.lastOpenedAt)}${view.viewCount > 1 ? ` · ${view.viewCount} aperturas` : ""}`
+                              ? `Primera apertura · ${formatDateTime(view.firstOpenedAt)}`
                               : "Aún no lo abre"}
                           </small>
                         </div>

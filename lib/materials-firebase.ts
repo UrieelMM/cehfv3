@@ -4,18 +4,15 @@ import {
   collection,
   doc,
   getDoc,
-  increment,
   onSnapshot,
-  serverTimestamp,
-  setDoc,
   Timestamp,
-  updateDoc,
   type DocumentData,
   type Unsubscribe,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
+import { recordFirstOpening } from "./first-opening-firebase";
 import type {
   AcademicCalendar,
   AcademicConfig,
@@ -138,8 +135,6 @@ function materialViewFromData(data: DocumentData): LearningMaterialView {
     studentId: String(data.studentId ?? ""),
     studentName: String(data.studentName ?? "Alumno"),
     firstOpenedAt: asIso(data.firstOpenedAt),
-    lastOpenedAt: asIso(data.lastOpenedAt),
-    viewCount: Math.max(1, Number(data.viewCount ?? 1)),
   };
 }
 
@@ -347,22 +342,11 @@ export async function markLearningMaterialViewed(
     "views",
     profile.uid,
   );
-  const snapshot = await getDoc(viewReference);
-  if (snapshot.exists()) {
-    await updateDoc(viewReference, {
-      lastOpenedAt: serverTimestamp(),
-      viewCount: increment(1),
-    });
-    return;
-  }
-  await setDoc(viewReference, {
+  await recordFirstOpening(viewReference, {
     institutionId: material.institutionId,
     materialId: material.id,
     studentId: profile.uid,
     studentName: profile.name,
-    firstOpenedAt: serverTimestamp(),
-    lastOpenedAt: serverTimestamp(),
-    viewCount: 1,
   });
 }
 
@@ -382,7 +366,7 @@ export function watchLearningMaterialViews(
         snapshot.docs
           .map((entry) => materialViewFromData(entry.data()))
           .sort((first, second) =>
-            second.lastOpenedAt.localeCompare(first.lastOpenedAt),
+            second.firstOpenedAt.localeCompare(first.firstOpenedAt),
           ),
       ),
     (error) => onError?.(error),

@@ -44,7 +44,7 @@ export function WorkshopViews({
         {roster.map((student) => (
           <span className={student.view ? "has-viewed" : ""} key={student.id}>
             <i>{student.view ? <Check size={12} /> : student.initials}</i>
-            <div><strong>{student.name}</strong><small>{student.view ? `Visto ${openedAt(student.view.lastOpenedAt)}${student.view.viewCount > 1 ? ` · ${student.view.viewCount} aperturas` : ""}` : "Aún no lo abre"}</small></div>
+            <div><strong>{student.name}</strong><small>{student.view ? `Primera apertura · ${openedAt(student.view.firstOpenedAt)}` : "Aún no lo abre"}</small></div>
           </span>
         ))}
         {!roster.length && <p>No hay alumnos asignados.</p>}

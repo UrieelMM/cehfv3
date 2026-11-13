@@ -23,6 +23,7 @@ import {
   uploadBytes,
 } from "firebase/storage";
 import { firebase } from "./firebase";
+import { recordFirstOpening } from "./first-opening-firebase";
 import { normalizeForumRichText } from "./forum-rich-text";
 import type {
   UserProfile,
@@ -373,25 +374,12 @@ function workshopViewReference(item: WorkshopViewedItem, studentId: string) {
 export async function markWorkshopViewed(item: WorkshopViewedItem, profile: UserProfile) {
   if (profile.role !== "student") return;
   const reference = workshopViewReference(item, profile.uid);
-  await runTransaction(requireFirebase().db, async (transaction) => {
-    const snapshot = await transaction.get(reference);
-    if (snapshot.exists()) {
-      transaction.update(reference, {
-        lastOpenedAt: serverTimestamp(),
-        viewCount: Number(snapshot.data().viewCount ?? 0) + 1,
-      });
-    } else {
-      transaction.set(reference, {
-        institutionId: item.institutionId,
-        workshopId: item.workshopId,
-        itemId: item.id,
-        studentId: profile.uid,
-        studentName: profile.name,
-        firstOpenedAt: serverTimestamp(),
-        lastOpenedAt: serverTimestamp(),
-        viewCount: 1,
-      });
-    }
+  await recordFirstOpening(reference, {
+    institutionId: item.institutionId,
+    workshopId: item.workshopId,
+    itemId: item.id,
+    studentId: profile.uid,
+    studentName: profile.name,
   });
 }
 
@@ -422,8 +410,6 @@ export function watchWorkshopViews(
         studentId: String(data.studentId ?? entry.id),
         studentName: String(data.studentName ?? ""),
         firstOpenedAt: asIso(data.firstOpenedAt),
-        lastOpenedAt: asIso(data.lastOpenedAt),
-        viewCount: Number(data.viewCount ?? 1),
       };
     })),
     onError,

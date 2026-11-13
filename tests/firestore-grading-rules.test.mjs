@@ -13,6 +13,7 @@ function token(uid) {
   return `${encode({ alg: "none", typ: "JWT" })}.${encode({
     sub: uid, user_id: uid, aud: project, iss: `https://securetoken.google.com/${project}`,
     iat: now, exp: now + 3600, auth_time: now,
+    ...(uid === "director-a" ? { role: "director", institutionId: institution, allPermissions: true } : {}),
     firebase: { sign_in_provider: "custom", identities: {} },
   })}.`;
 }
@@ -27,7 +28,7 @@ function value(data) {
   return { mapValue: { fields: Object.fromEntries(Object.entries(data).map(([key, item]) => [key, value(item)])) } };
 }
 
-test("Firestore protege las calificaciones y los enlaces de entregas de talleres", { skip: !host }, async (t) => {
+test("Firestore protege las calificaciones, las entregas y la primera apertura", { skip: !host }, async (t) => {
   assert.match(host, /^(localhost|127\.0\.0\.1):\d+$/, "Rules tests require a loopback emulator");
   const base = `http://${host}/v1/projects/${project}/databases/(default)/documents`;
   const cleared = await fetch(`http://${host}/emulator/v1/projects/${project}/databases/(default)/documents`, { method: "DELETE" });
@@ -133,6 +134,72 @@ test("Firestore protege las calificaciones y los enlaces de entregas de talleres
     await seed(path, grade);
     const response = await remove(path, "teacher-a");
     assert.equal(response.status, 403, await response.text());
+  });
+
+  await t.test("la primera apertura se registra una vez en cada tipo de contenido", async (t) => {
+    const studentId = "opening-student";
+    const studentName = "Alumno de prueba";
+    const scope = `institutions/${institution}`;
+    const studentData = { institutionId: institution, studentId, studentName };
+    const published = { institutionId: institution, status: "published" };
+    const audience = { audienceStudentIds: [studentId] };
+    const workshopId = "first-opening";
+    const workshop = `${scope}/workshops/${workshopId}`;
+    const task = `${scope}/ciclosEscolares/cycle-a/bimestres/term-a/semanas/week-a/materias/civica/tareas/task-a`;
+    await seed(`users/${studentId}`, { institutionId: institution, role: "student", active: true, name: studentName, grade: "6.º", group: "A" });
+    await seed(workshop, { institutionId: institution, memberIds: [studentId], studentIds: [studentId] });
+
+    function commitOpening(path, data, actor, timestampFields) {
+      return fetch(`${base}:commit`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token(actor)}` },
+        body: JSON.stringify({ writes: [{
+          update: { name: `projects/${project}/databases/(default)/documents/${path}`, fields: value(data).mapValue.fields },
+          updateTransforms: timestampFields.map((fieldPath) => ({ fieldPath, setToServerValue: "REQUEST_TIME" })),
+        }] }),
+      });
+    }
+
+    for (const [label, parent, parentData, path, identity] of [
+      ["material", `${scope}/materials/material-a`, { ...published, ...audience },
+        `${scope}/materials/material-a/views/${studentId}`, { materialId: "material-a" }],
+      ["recurso de tarea", task, { ...published, targetGroup: "6.º A" },
+        `${task}/resourceViews/link-a/students/${studentId}`,
+        { taskId: "task-a", resourceId: "link-a", resourceKind: "link", resourceLabel: "Enlace" }],
+      ["recurso de taller", `${workshop}/resources/resource-a`, { ...published, workshopId },
+        `${workshop}/resources/resource-a/views/${studentId}`, { workshopId, itemId: "resource-a" }],
+      ["actividad de taller", `${workshop}/tasks/activity-a`, { ...published, ...audience, workshopId },
+        `${workshop}/tasks/activity-a/views/${studentId}`, { workshopId, itemId: "activity-a" }],
+      ["reporte semanal", `${scope}/studentWeeklyReports/report-a`, { ...published, ...studentData, teacherId: "teacher-a" },
+        `${scope}/studentWeeklyReportViews/report-a`, { reportId: "report-a", teacherId: "teacher-a" }],
+    ]) {
+      await t.test(label, async () => {
+        await seed(parent, parentData);
+        const data = { ...studentData, ...identity, viewCount: 1 };
+        const first = await commitOpening(path, data, studentId, ["firstOpenedAt", "lastOpenedAt"]);
+        assert.ok(first.ok, await first.text());
+
+        const get = () => fetch(`${base}/${path}`, { headers: { Authorization: `Bearer ${token(studentId)}` } });
+        const saved = await get();
+        assert.ok(saved.ok, await saved.clone().text());
+        const { fields } = await saved.json();
+        assert.ok(fields.firstOpenedAt.timestampValue);
+        assert.deepEqual(fields.firstOpenedAt, fields.lastOpenedAt);
+
+        const overwrite = await commitOpening(path, data, studentId, ["firstOpenedAt", "lastOpenedAt"]);
+        assert.equal(overwrite.status, 403, await overwrite.text());
+        const reopen = await commitOpening(path, {
+          ...data, firstOpenedAt: new Date(fields.firstOpenedAt.timestampValue), viewCount: 2,
+        }, studentId, ["lastOpenedAt"]);
+        assert.equal(reopen.status, 403, await reopen.text());
+        const deleted = await remove(path, studentId);
+        assert.equal(deleted.status, 403, await deleted.text());
+        if (identity.reportId) {
+          const directorOverwrite = await commitOpening(path, data, "director-a", ["firstOpenedAt", "lastOpenedAt"]);
+          assert.equal(directorOverwrite.status, 403, await directorOverwrite.text());
+        }
+        assert.deepEqual((await (await get()).json()).fields, fields);
+      });
+    }
   });
 
   await t.test("los enlaces de talleres conservan validación, autoría y versiones", async (t) => {

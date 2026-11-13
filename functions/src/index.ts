@@ -1722,13 +1722,31 @@ export const saveStudentWeeklyReport = onCall(async (request) => {
 export const deleteStudentWeeklyReport = onCall(async (request) => {
   const actor = await requireMaterialStaff(request.auth);
   const reportId = materialId((request.data as Record<string, unknown> | undefined)?.reportId);
-  const reference = db.doc(`institutions/${actor.institutionId}/studentWeeklyReports/${reportId}`);
-  const snapshot = await reference.get();
-  const report = snapshot.data();
-  if (!snapshot.exists || !report || report.institutionId !== actor.institutionId || (actor.role === "teacher" && report.teacherId !== actor.uid)) {
-    throw new HttpsError("permission-denied", "No puedes eliminar este reporte.");
-  }
-  await deleteContentRecord({ actor, reference, entityType: "student_weekly_report", entityId: reportId, title: `${String(report.studentName ?? "Alumno")} · ${String(report.subject ?? "Materia")}` });
+  const institution = db.collection("institutions").doc(actor.institutionId);
+  const reference = institution.collection("studentWeeklyReports").doc(reportId);
+  const viewReference = institution.collection("studentWeeklyReportViews").doc(reportId);
+  const auditReference = db.collection("auditEvents").doc();
+
+  await db.runTransaction(async (transaction) => {
+    const report = (await transaction.get(reference)).data();
+    if (!report || report.institutionId !== actor.institutionId || (actor.role === "teacher" && report.teacherId !== actor.uid)) {
+      throw new HttpsError("permission-denied", "No puedes eliminar este reporte.");
+    }
+
+    transaction.delete(reference);
+    transaction.delete(viewReference);
+    transaction.create(auditReference, {
+      entityType: "student_weekly_report",
+      entityId: reportId,
+      institutionId: actor.institutionId,
+      action: "student_weekly_report.deleted",
+      actorId: actor.uid,
+      actorName: actor.name,
+      actorRole: actor.role,
+      before: { title: `${String(report.studentName ?? "Alumno")} · ${String(report.subject ?? "Materia")}` },
+      createdAt: Timestamp.now(),
+    });
+  });
   return { deleted: true };
 });
 

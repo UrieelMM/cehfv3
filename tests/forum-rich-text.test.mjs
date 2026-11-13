@@ -100,11 +100,11 @@ test("forum and report screens wire rich content and explicit report openings", 
 
   assert.match(reports, /Abrir reporte/);
   assert.match(reports, /recordStudentOpening\(report\)/);
+  assert.match(reports, /new Date\(view\.firstOpenedAt\)/);
   assert.match(reportsData, /markStudentWeeklyReportViewed/);
-  assert.match(reportsData, /runTransaction\(firebase\.db/);
+  assert.match(reportsData, /await recordFirstOpening\(reference,/);
   assert.match(reportsData, /studentName: report\.studentName/);
   assert.doesNotMatch(reportsData, /studentName: profile\.name/);
   assert.match(reportsData, /watchStudentWeeklyReportViews/);
   assert.match(rules, /match \/studentWeeklyReportViews\/\{reportId\}/);
-  assert.match(rules, /request\.resource\.data\.viewCount == resource\.data\.viewCount \+ 1/);
 });

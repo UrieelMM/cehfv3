@@ -99,22 +99,14 @@ function WeeklyEvidence({ grade }: { grade?: WeeklyGradeRecord }) {
   </section>;
 }
 
-function reportViewLabel(report: StudentWeeklyReport, view?: StudentWeeklyReportView) {
-  if (!view) return { current: false, label: "El alumno aún no lo abre" };
-  const current = Date.parse(view.lastOpenedAt) >= Date.parse(report.updatedAt);
-  if (!current) return { current: false, label: "Actualizado después de la última lectura" };
-  return {
-    current: true,
-    label: `Visto ${new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(view.lastOpenedAt))}`,
-  };
-}
-
 function ReportViewStatus({ report, view }: { report: StudentWeeklyReport; view?: StudentWeeklyReportView }) {
   if (report.status !== "published") return null;
-  const status = reportViewLabel(report, view);
-  return <span className={`report-view-status ${status.current ? "is-viewed" : "is-pending"}`} title={status.label}>
-    {status.current ? <Eye size={13} /> : <EyeOff size={13} />}
-    {status.label}
+  const label = view
+    ? `Primera apertura · ${new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short" }).format(new Date(view.firstOpenedAt))}`
+    : "El alumno aún no lo abre";
+  return <span className={`report-view-status ${view ? "is-viewed" : "is-pending"}`} title={label}>
+    {view ? <Eye size={13} /> : <EyeOff size={13} />}
+    {label}
   </span>;
 }
 
@@ -218,7 +210,7 @@ export function AcademicReportsPage({
 
   const recordStudentOpening = useCallback((report: StudentWeeklyReport) => {
     if (profile.role !== "student" || !firebaseReady) return;
-    const openingKey = `${report.id}:${report.updatedAt}`;
+    const openingKey = `${report.id}:${report.createdAt}`;
     if (recordedOpeningsRef.current.has(openingKey)) return;
     recordedOpeningsRef.current.add(openingKey);
     void markStudentWeeklyReportViewed(report, profile).catch((error) => {

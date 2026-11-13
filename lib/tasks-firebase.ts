@@ -6,12 +6,10 @@ import {
   deleteField,
   doc,
   getDoc,
-  increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   Timestamp,
   updateDoc,
   where,
@@ -23,6 +21,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { firebase } from "./firebase";
+import { recordFirstOpening } from "./first-opening-firebase";
 import { normalizeForumRichText } from "./forum-rich-text";
 import { scheduledTaskTimingError } from "./task-publication";
 import type {
@@ -213,8 +212,6 @@ function resourceViewFromData(data: DocumentData): TaskResourceView {
     studentId: String(data.studentId ?? ""),
     studentName: String(data.studentName ?? "Alumno"),
     firstOpenedAt: asIso(data.firstOpenedAt),
-    lastOpenedAt: asIso(data.lastOpenedAt),
-    viewCount: Math.max(1, Number(data.viewCount ?? 1)),
   };
 }
 
@@ -1228,15 +1225,7 @@ export async function markTaskResourceViewed(
     "students",
     profile.uid,
   );
-  const snapshot = await getDoc(viewReference);
-  if (snapshot.exists()) {
-    await updateDoc(viewReference, {
-      lastOpenedAt: serverTimestamp(),
-      viewCount: increment(1),
-    });
-    return;
-  }
-  await setDoc(viewReference, {
+  await recordFirstOpening(viewReference, {
     institutionId: task.institutionId,
     taskId: task.id,
     resourceId: details.id,
@@ -1244,9 +1233,6 @@ export async function markTaskResourceViewed(
     resourceLabel: details.label,
     studentId: profile.uid,
     studentName: profile.name,
-    firstOpenedAt: serverTimestamp(),
-    lastOpenedAt: serverTimestamp(),
-    viewCount: 1,
   });
 }
 
@@ -1272,7 +1258,7 @@ export function watchTaskResourceViews(
       snapshot.docs
         .map((entry) => resourceViewFromData(entry.data()))
         .sort((first, second) =>
-          second.lastOpenedAt.localeCompare(first.lastOpenedAt),
+          second.firstOpenedAt.localeCompare(first.firstOpenedAt),
         ),
     ),
     (error) => onError?.(error),

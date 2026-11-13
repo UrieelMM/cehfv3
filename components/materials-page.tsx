@@ -500,7 +500,7 @@ function MaterialViewerModal({
                 <div className="material-student-views">
                   {audience.map((student) => {
                     const view = viewsByStudent.get(student.uid);
-                    return <span className={view ? "has-viewed" : ""} key={student.uid}><i>{view ? <Check size={12} /> : student.initials}</i><div><strong>{student.name}</strong><small>{view ? `Visto ${formatDateTime(view.lastOpenedAt)}${view.viewCount > 1 ? ` · ${view.viewCount} aperturas` : ""}` : "Aún no lo abre"}</small></div></span>;
+                    return <span className={view ? "has-viewed" : ""} key={student.uid}><i>{view ? <Check size={12} /> : student.initials}</i><div><strong>{student.name}</strong><small>{view ? `Primera apertura · ${formatDateTime(view.firstOpenedAt)}` : "Aún no lo abre"}</small></div></span>;
                   })}
                   {!audience.length && <p>La audiencia está protegida; las lecturas aparecerán aquí conforme los alumnos abran el material.</p>}
                 </div>

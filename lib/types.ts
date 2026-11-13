@@ -407,8 +407,6 @@ export type StudentWeeklyReportView = {
   studentId: string;
   studentName: string;
   firstOpenedAt: string;
-  lastOpenedAt: string;
-  viewCount: number;
 };
 
 export type TaskPublicationStatus =
@@ -446,8 +444,6 @@ export type TaskResourceView = {
   studentId: string;
   studentName: string;
   firstOpenedAt: string;
-  lastOpenedAt: string;
-  viewCount: number;
 };
 
 export type TaskAssignment = {
@@ -629,8 +625,6 @@ export type LearningMaterialView = {
   studentId: string;
   studentName: string;
   firstOpenedAt: string;
-  lastOpenedAt: string;
-  viewCount: number;
 };
 
 export type LearningMaterialCreateInput = {
@@ -979,8 +973,6 @@ export type WorkshopView = {
   studentId: string;
   studentName: string;
   firstOpenedAt: string;
-  lastOpenedAt: string;
-  viewCount: number;
 };
 
 export type Workshop = {

@@ -46,6 +46,13 @@ service cloud.firestore {
       return isActive() && data.institutionId == profile().institutionId;
     }
 
+    function isFirstOpening(data) {
+      return data.firstOpenedAt == request.time
+        && data.lastOpenedAt == request.time
+        && data.viewCount is int
+        && data.viewCount == 1;
+    }
+
     function validManagedAccountSubjects(data) {
       let preschoolSubjects = [
         "Desarrollo Integral y Motricidad"
@@ -621,19 +628,7 @@ service cloud.firestore {
             && data.itemId == itemId
             && data.studentId == studentId
             && data.studentName is string
-            && data.studentName.size() > 0
-            && data.firstOpenedAt is timestamp
-            && data.lastOpenedAt is timestamp
-            && data.viewCount is int
-            && data.viewCount > 0;
-        }
-
-        function validWorkshopViewUpdate(itemId, studentId) {
-          return validWorkshopView(request.resource.data, itemId, studentId)
-            && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(["lastOpenedAt", "viewCount"])
-            && request.resource.data.viewCount == resource.data.viewCount + 1
-            && request.resource.data.lastOpenedAt == request.time;
+            && data.studentName.size() > 0;
         }
 
         allow read: if canReadWorkshop(resource.data);
@@ -701,12 +696,8 @@ service cloud.firestore {
             );
             allow create: if assignedWorkshopStudent()
               && validWorkshopView(request.resource.data, resourceId, studentId)
-              && request.resource.data.viewCount == 1
-              && request.resource.data.firstOpenedAt == request.time
-              && request.resource.data.lastOpenedAt == request.time;
-            allow update: if assignedWorkshopStudent()
-              && validWorkshopViewUpdate(resourceId, studentId);
-            allow delete: if false;
+              && isFirstOpening(request.resource.data);
+            allow update, delete: if false;
           }
         }
 
@@ -804,12 +795,8 @@ service cloud.firestore {
             );
             allow create: if assignedTaskStudent()
               && validWorkshopView(request.resource.data, taskId, studentId)
-              && request.resource.data.viewCount == 1
-              && request.resource.data.firstOpenedAt == request.time
-              && request.resource.data.lastOpenedAt == request.time;
-            allow update: if assignedTaskStudent()
-              && validWorkshopViewUpdate(taskId, studentId);
-            allow delete: if false;
+              && isFirstOpening(request.resource.data);
+            allow update, delete: if false;
           }
 
           match /submissions/{studentId} {
@@ -1469,11 +1456,7 @@ service cloud.firestore {
             && data.teacherId is string
             && data.studentId is string
             && data.studentName is string
-            && data.studentName.size() > 0
-            && data.firstOpenedAt is timestamp
-            && data.lastOpenedAt is timestamp
-            && data.viewCount is int
-            && data.viewCount > 0;
+            && data.studentName.size() > 0;
         }
 
         function studentCanOpenReport(data) {
@@ -1497,19 +1480,8 @@ service cloud.firestore {
           );
         allow create: if validReportView(request.resource.data)
           && studentCanOpenReport(request.resource.data)
-          && request.resource.data.viewCount == 1;
-        allow update: if validReportView(request.resource.data)
-          && studentCanOpenReport(request.resource.data)
-          && request.resource.data.reportId == resource.data.reportId
-          && request.resource.data.institutionId == resource.data.institutionId
-          && request.resource.data.teacherId == resource.data.teacherId
-          && request.resource.data.studentId == resource.data.studentId
-          && request.resource.data.studentName == resource.data.studentName
-          && request.resource.data.firstOpenedAt == resource.data.firstOpenedAt
-          && request.resource.data.viewCount == resource.data.viewCount + 1
-          && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(["lastOpenedAt", "viewCount"]);
-        allow delete: if false;
+          && isFirstOpening(request.resource.data);
+        allow update, delete: if false;
       }
 
       match /ciclosEscolares/{schoolYearId} {
@@ -1686,11 +1658,7 @@ service cloud.firestore {
               && data.resourceLabel.size() > 0
               && data.studentId == studentId
               && data.studentName is string
-              && data.studentName.size() > 0
-              && data.firstOpenedAt is timestamp
-              && data.lastOpenedAt is timestamp
-              && data.viewCount is int
-              && data.viewCount > 0;
+              && data.studentName.size() > 0;
           }
 
           allow read: if taskBelongsToInstitution(parentTask()) && (
@@ -1701,24 +1669,8 @@ service cloud.firestore {
             && parentTask().status in ["published", "closed"]
             && request.auth.uid == studentId
             && validResourceView(request.resource.data)
-            && request.resource.data.viewCount == 1;
-          allow update: if taskBelongsToInstitution(parentTask())
-            && isAssignedStudent(parentTask())
-            && parentTask().status in ["published", "closed"]
-            && request.auth.uid == studentId
-            && validResourceView(request.resource.data)
-            && request.resource.data.institutionId == resource.data.institutionId
-            && request.resource.data.taskId == resource.data.taskId
-            && request.resource.data.resourceId == resource.data.resourceId
-            && request.resource.data.resourceKind == resource.data.resourceKind
-            && request.resource.data.resourceLabel == resource.data.resourceLabel
-            && request.resource.data.studentId == resource.data.studentId
-            && request.resource.data.studentName == resource.data.studentName
-            && request.resource.data.firstOpenedAt == resource.data.firstOpenedAt
-            && request.resource.data.viewCount == resource.data.viewCount + 1
-            && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(["lastOpenedAt", "viewCount"]);
-          allow delete: if false;
+            && isFirstOpening(request.resource.data);
+          allow update, delete: if false;
         }
 
         match /entregas/{studentId} {
@@ -1908,20 +1860,8 @@ service cloud.firestore {
             && request.resource.data.materialId == materialId
             && request.resource.data.studentId == studentId
             && request.resource.data.studentName == profile().name
-            && request.resource.data.firstOpenedAt == request.time
-            && request.resource.data.lastOpenedAt == request.time
-            && request.resource.data.viewCount == 1;
-          allow update: if studentCanOpenMaterial()
-            && request.resource.data.institutionId == resource.data.institutionId
-            && request.resource.data.materialId == resource.data.materialId
-            && request.resource.data.studentId == resource.data.studentId
-            && request.resource.data.studentName == resource.data.studentName
-            && request.resource.data.firstOpenedAt == resource.data.firstOpenedAt
-            && request.resource.data.lastOpenedAt == request.time
-            && request.resource.data.viewCount == resource.data.viewCount + 1
-            && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(["lastOpenedAt", "viewCount"]);
-          allow delete: if false;
+            && isFirstOpening(request.resource.data);
+          allow update, delete: if false;
         }
       }
 
@@ -1929,7 +1869,7 @@ service cloud.firestore {
         allow read: if collectionName != "materials"
           && isActive()
           && profile().institutionId == institutionId;
-        allow create, update: if collectionName != "materials"
+        allow create, update: if !(collectionName in ["materials", "studentWeeklyReportViews"])
           && isDirector()
           && profile().institutionId == institutionId
           && request.resource.data.institutionId == institutionId;

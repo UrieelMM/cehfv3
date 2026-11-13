@@ -5,8 +5,6 @@ import {
   doc,
   onSnapshot,
   query,
-  runTransaction,
-  serverTimestamp,
   Timestamp,
   where,
   type DocumentData,
@@ -15,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { firebase } from "./firebase";
+import { recordFirstOpening } from "./first-opening-firebase";
 import { clampGradeScore, normalizeStoredGradeScore } from "./grade-scale";
 import { includesSubject, studentCanTakeSubject } from "./academic-subjects";
 import type {
@@ -74,8 +73,6 @@ function viewFromData(data: DocumentData): StudentWeeklyReportView {
     studentId: String(data.studentId ?? ""),
     studentName: String(data.studentName ?? "Alumno"),
     firstOpenedAt: asIso(data.firstOpenedAt),
-    lastOpenedAt: asIso(data.lastOpenedAt),
-    viewCount: Math.max(1, Number(data.viewCount ?? 1)),
   };
 }
 
@@ -126,7 +123,7 @@ export function watchStudentWeeklyReportViews(
     ),
     (snapshot) => callback(snapshot.docs
       .map((entry) => viewFromData(entry.data()))
-      .sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt))),
+      .sort((a, b) => b.firstOpenedAt.localeCompare(a.firstOpenedAt))),
     (error) => onError?.(error),
   );
 }
@@ -143,27 +140,14 @@ export async function markStudentWeeklyReportViewed(
     "studentWeeklyReportViews",
     report.id,
   );
-  await runTransaction(firebase.db, async (transaction) => {
-    const snapshot = await transaction.get(reference);
-    if (snapshot.exists()) {
-      transaction.update(reference, {
-        lastOpenedAt: serverTimestamp(),
-        viewCount: Math.max(1, Number(snapshot.data().viewCount ?? 1)) + 1,
-      });
-      return;
-    }
-    transaction.set(reference, {
-      reportId: report.id,
-      institutionId: report.institutionId,
-      teacherId: report.teacherId,
-      studentId: report.studentId,
-      // The report keeps the canonical student snapshot that the security
-      // rules validate. The profile name may have changed after publication.
-      studentName: report.studentName,
-      firstOpenedAt: serverTimestamp(),
-      lastOpenedAt: serverTimestamp(),
-      viewCount: 1,
-    });
+  await recordFirstOpening(reference, {
+    reportId: report.id,
+    institutionId: report.institutionId,
+    teacherId: report.teacherId,
+    studentId: report.studentId,
+    // The report keeps the canonical student snapshot that the security
+    // rules validate. The profile name may have changed after publication.
+    studentName: report.studentName,
   });
 }
 
