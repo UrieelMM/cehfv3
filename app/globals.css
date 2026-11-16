@@ -912,6 +912,7 @@ code {
 }
 
 .avatar.has-photo {
+  position: relative;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--violet) 22%, var(--border));
   background: var(--surface-soft);

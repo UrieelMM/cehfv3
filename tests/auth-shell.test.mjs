@@ -26,7 +26,7 @@ test("navbar displays the stored profile photo with initials as fallback", async
   assert.match(app, /currentProfile\.photoURL \? \(/);
   assert.match(app, /src=\{currentProfile\.photoURL\}/);
   assert.match(app, /\) : currentProfile\.initials/);
-  assert.match(styles, /\.avatar\.has-photo/);
+  assert.match(styles, /\.avatar\.has-photo\s*{[^}]*position:\s*relative[^}]*overflow:\s*hidden/s);
   assert.match(styles, /\.avatar\.has-photo img\s*{[^}]*object-fit:\s*cover/s);
 });
 
