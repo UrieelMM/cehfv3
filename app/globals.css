@@ -898,7 +898,7 @@ code {
 }
 
 .avatar {
-  position: relative;
+  position: initial;
   display: grid;
   width: 35px;
   height: 35px;
