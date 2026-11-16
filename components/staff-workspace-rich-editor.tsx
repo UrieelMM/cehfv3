@@ -1,6 +1,7 @@
 "use client";
 
 import { countWorkspaceWords } from "@/lib/staff-workspace-content";
+import { portalThemeColorScheme } from "@/lib/portal-theme";
 import { filterSuggestionItems } from "@blocknote/core/extensions";
 import { es } from "@blocknote/core/locales";
 import type { PartialBlock } from "@blocknote/core";
@@ -47,10 +48,10 @@ function useAppTheme() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
     const syncTheme = () => {
-      const selected = document.documentElement.dataset.theme;
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setTheme(selected === "dark" || (selected === "system" && prefersDark) ? "dark" : "light");
+      const scheme = portalThemeColorScheme(document.documentElement.dataset.theme);
+      setTheme(scheme === "system" ? (media.matches ? "dark" : "light") : scheme);
     };
     syncTheme();
     const observer = new MutationObserver(syncTheme);
@@ -58,7 +59,6 @@ function useAppTheme() {
       attributes: true,
       attributeFilter: ["data-theme"],
     });
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", syncTheme);
     return () => {
       observer.disconnect();

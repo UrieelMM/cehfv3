@@ -1,0 +1,426 @@
+:root[data-theme="christmas"] {
+  color-scheme: light;
+  --background: #f2f6ef;
+  --surface: #fffefa;
+  --surface-soft: #ebf1e8;
+  --surface-raised: #fffefa;
+  --foreground: #172e26;
+  --muted: #52675d;
+  --muted-strong: #354e42;
+  --border: #d5e2d7;
+  --border-strong: #becfc2;
+  --violet: #20654c;
+  --violet-dark: #153e30;
+  --violet-soft: #e1efe4;
+  --coral: #a92e4a;
+  --coral-soft: #f8e7ea;
+  --mint: #24745d;
+  --mint-soft: #e0efe7;
+  --gold: #82591f;
+  --gold-soft: #f8eed9;
+  --blue: #325f73;
+  --blue-soft: #e4eef0;
+  --danger: #a7253e;
+  --mural-open-border: #537c66;
+  --mural-open-shadow: 0 12px 28px rgb(24 70 54 / 0.25);
+  --mural-open-hover-shadow: 0 16px 34px rgb(24 70 54 / 0.32);
+  --shadow-sm: 0 1px 2px rgb(17 52 39 / 0.07);
+  --shadow-md: 0 16px 42px rgb(17 52 39 / 0.13);
+  --shadow-lg: 0 26px 70px rgb(17 52 39 / 0.2);
+  --brand-primary: #174638;
+  --feature-hero-blue: #dbad60;
+  --feature-hero-background:
+    radial-gradient(ellipse at 58% 100%, #174638, transparent 65%),
+    linear-gradient(114deg, #0e3026, #0a251d 65%, #113a2d);
+  --mural-open-background: linear-gradient(125deg, #0f382b, #205542 62%, #7b2c42);
+  --christmas-gold: #f1cd8c;
+}
+
+:root[data-theme="christmas"] .app-shell {
+  background:
+    radial-gradient(ellipse at 88% 0%, rgb(226 181 109 / 0.15), transparent 520px),
+    radial-gradient(ellipse at 12% 20%, rgb(136 179 147 / 0.13), transparent 620px),
+    var(--background);
+}
+
+:root[data-theme="christmas"] .sidebar {
+  background: linear-gradient(180deg, #f8f1e3, var(--surface) 150px);
+}
+
+:root[data-theme="christmas"] .sidebar-nav button.active::before {
+  background: var(--coral);
+}
+
+:root[data-theme|="christmas"] .sidebar-brand-logo {
+  transform: scale(1.28);
+  filter: none;
+}
+
+.christmas-wreath {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 53px;
+  height: 53px;
+  max-width: none;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.christmas-wreath-light {
+  filter: drop-shadow(0 0 2px currentColor);
+}
+
+.christmas-avatar-hat {
+  position: absolute;
+  top: -10px;
+  right: -4px;
+  z-index: 1;
+  width: 33px;
+  height: auto;
+  transform: rotate(12deg);
+  filter: drop-shadow(0 1px 1px rgb(64 26 37 / 0.24));
+  pointer-events: none;
+}
+
+:root[data-theme|="christmas"] .topbar {
+  --topbar-decoration-space: 12px;
+  padding-bottom: var(--topbar-decoration-space);
+}
+
+:root[data-theme="christmas"] .topbar {
+  border-bottom-color: #dcdac6;
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
+}
+
+:root[data-theme="christmas"] .portal-theme-trigger {
+  border-color: #bdcfbe;
+  background: var(--violet-soft);
+  color: var(--violet-dark);
+}
+
+:root[data-theme="christmas"] .time-greeting {
+  --greeting-accent: var(--violet);
+  --greeting-soft: #a0bea7;
+}
+
+:root[data-theme="christmas"] .time-greeting:is(.is-dawn, .is-morning, .is-sunset) {
+  --greeting-accent: var(--gold);
+  --greeting-soft: #e5c692;
+}
+
+:root[data-theme="christmas-dark"] .christmas-wreath {
+  filter: brightness(1.25) drop-shadow(0 0 4px color-mix(in srgb, var(--violet) 23%, transparent));
+}
+
+:root[data-theme="christmas-dark"] .christmas-flight-art {
+  filter: brightness(1.4) drop-shadow(0 0 2px rgb(239 196 125 / 0.28));
+}
+
+.christmas-navbar-woodland {
+  position: absolute;
+  z-index: -1;
+  inset: auto 0 0;
+  height: 100%;
+  background: url("/themes/christmas-navbar-woodland.webp") center bottom / auto 72px repeat-x;
+  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+  opacity: 0.23;
+  pointer-events: none;
+}
+
+.christmas-lights {
+  position: absolute;
+  top: 0;
+  inset-inline: 6%;
+  display: flex;
+  justify-content: space-around;
+  border-top: 1px solid #9d8b61;
+  pointer-events: none;
+}
+
+.christmas-lights > span {
+  --bulb: #d7952f;
+  position: relative;
+  width: 8px;
+  height: 11px;
+  border-top: 2px solid #6a6756;
+  border-radius: 2px 2px 55% 55%;
+  background: color-mix(in srgb, var(--bulb) 36%, #5f5449);
+}
+
+.christmas-lights [data-color="red"] {
+  --bulb: #df4660;
+}
+
+.christmas-lights [data-color="green"] {
+  --bulb: #27865f;
+}
+
+.christmas-lights > span::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 36% 34%, #fff9df, var(--bulb) 75%);
+  box-shadow:
+    0 0 7px 2px color-mix(in srgb, var(--bulb) 70%, transparent),
+    0 2px 15px 3px color-mix(in srgb, var(--bulb) 35%, transparent);
+  content: "";
+}
+
+.christmas-lights > span::after,
+.christmas-wreath-light {
+  animation: christmas-light 5.4s ease-in-out infinite backwards;
+  animation-delay: calc(var(--bulb-order) * 420ms);
+}
+
+@keyframes christmas-light {
+  0%, 32%, 100% { opacity: 0; }
+  8%, 19% { opacity: 1; }
+}
+
+.christmas-flight {
+  --flight-height: 26px;
+  --sleigh-width: calc(var(--flight-height) * 150 / 38);
+  --trail-length: clamp(74px, 13vw, 156px);
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--flight-height);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.christmas-flight-path {
+  position: relative;
+  height: 100%;
+  animation: christmas-sleigh-crossing 15s linear infinite;
+}
+
+.christmas-flight-team {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  width: var(--sleigh-width);
+  height: 100%;
+  animation: christmas-sleigh-float 1.65s ease-in-out infinite alternate;
+}
+
+.christmas-flight-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.christmas-flight-trail {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  width: var(--trail-length);
+  height: 100%;
+  color: light-dark(#52749a, #deefff);
+}
+
+.christmas-flight-trail > svg {
+  position: absolute;
+  filter: drop-shadow(0 0 2px light-dark(#bfdcfa, #85bdff));
+  animation: christmas-trail-snow 1.3s ease-out infinite;
+}
+
+@keyframes christmas-sleigh-crossing {
+  0% { transform: translateX(0); visibility: visible; }
+  40% { transform: translateX(calc(100% + var(--sleigh-width) + var(--trail-length))); visibility: visible; }
+  40.01%, 100% { transform: translateX(calc(100% + var(--sleigh-width) + var(--trail-length))); visibility: hidden; }
+}
+
+@keyframes christmas-sleigh-float {
+  from { transform: translateY(1px); }
+  to { transform: translateY(-1px); }
+}
+
+@keyframes christmas-trail-snow {
+  0% { opacity: 0; transform: translate(4px, -2px) rotate(-15deg) scale(0.65); }
+  24%, 55% { opacity: 0.95; }
+  100% { opacity: 0; transform: translate(-14px, 5px) rotate(55deg) scale(0.85); }
+}
+
+.christmas-home-snow {
+  position: fixed;
+  z-index: 8;
+  inset: 0 0 0 var(--sidebar-width);
+  overflow: hidden;
+  color: light-dark(#628371, var(--foreground));
+  pointer-events: none;
+}
+
+.sidebar-is-collapsed .christmas-home-snow {
+  left: var(--sidebar-collapsed-width);
+}
+
+.christmas-home-snow > span {
+  position: absolute;
+  top: -18px;
+  opacity: 0;
+  filter: drop-shadow(0 0 1px #fff9e9);
+  animation: christmas-snowfall linear infinite;
+}
+
+@keyframes christmas-snowfall {
+  0% { opacity: 0; transform: translate3d(0, 0, 0); }
+  12%, 80% { opacity: 0.58; }
+  100% { opacity: 0; transform: translate3d(var(--flake-drift), calc(100dvh + 20px), 0) rotate(125deg); }
+}
+
+:root[data-theme|="christmas"] .dashboard-stack .hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 0.78fr) minmax(144px, 0.47fr);
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 26px);
+  padding: clamp(23px, 3vw, 42px);
+}
+
+:root[data-theme="christmas"] .dashboard-stack .hero-card {
+  border-color: rgb(241 205 140 / 0.45);
+}
+
+:root[data-theme="christmas"] .dashboard-stack .hero-card::before {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--christmas-gold), transparent);
+}
+
+:root[data-theme|="christmas"] .dashboard-stack .hero-card::after {
+  display: none;
+}
+
+:root[data-theme|="christmas"] .dashboard-stack .hero-copy h2 {
+  font-size: clamp(1.9rem, 3.1vw, 3.15rem);
+}
+
+:root[data-theme="christmas"] .dashboard-stack .hero-card .pill-light {
+  border-color: rgb(241 205 140 / 0.3);
+  background: rgb(241 205 140 / 0.11);
+  color: #ffe5b5;
+}
+
+:root[data-theme|="christmas"] .dashboard-stack .hero-metric {
+  min-width: 0;
+  padding: 14px 8px;
+  text-align: center;
+}
+
+:root[data-theme="christmas"] .dashboard-stack .hero-metric {
+  border-color: rgb(241 205 140 / 0.28);
+  background: rgb(2 24 17 / 0.25);
+}
+
+:root[data-theme="christmas"] .dashboard-stack .hero-metric > span {
+  border-color: rgb(241 205 140 / 0.22);
+  background: rgb(2 24 17 / 0.31);
+}
+
+:root[data-theme|="christmas"] .hero-metric .progress-ring {
+  width: 124px;
+  height: 124px;
+}
+
+:root[data-theme|="christmas"] .hero-metric .progress-ring::after {
+  width: 104px;
+  height: 104px;
+}
+
+.christmas-hero-art {
+  position: relative;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 228px;
+  pointer-events: none;
+}
+
+.christmas-hero-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: auto;
+  height: auto;
+  max-width: calc(100% + 24px);
+  max-height: calc(100% + 32px);
+  mask-image: radial-gradient(ellipse closest-side, #000 75%, transparent 100%);
+  transform: translate(-50%, -50%);
+}
+
+@media (max-width: 980px) {
+  .app-shell .christmas-home-snow {
+    left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .christmas-navbar-woodland {
+    background-size: auto 57px;
+  }
+
+  .christmas-flight {
+    --flight-height: 22px;
+  }
+
+  .christmas-home-snow > span:nth-child(n + 11) {
+    display: none;
+  }
+
+  :root[data-theme|="christmas"] .dashboard-stack .hero-card {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  :root[data-theme|="christmas"] .dashboard-stack .hero-copy {
+    grid-column: 1 / -1;
+  }
+
+  :root[data-theme|="christmas"] .dashboard-stack .hero-metric {
+    justify-content: center;
+    flex-direction: column;
+  }
+
+  :root[data-theme|="christmas"] .hero-metric .progress-ring {
+    width: 82px;
+    height: 82px;
+  }
+
+  :root[data-theme|="christmas"] .hero-metric .progress-ring::after {
+    width: 69px;
+    height: 69px;
+  }
+
+  .christmas-hero-art {
+    min-height: 148px;
+  }
+}
+
+.reduce-motion .christmas-lights > span::after,
+.reduce-motion .christmas-wreath-light {
+  animation: none;
+}
+
+.reduce-motion :is(.christmas-flight, .christmas-home-snow) {
+  display: none;
+}
+
+:root.reduce-motion[data-theme|="christmas"] .topbar {
+  --topbar-decoration-space: 0px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .christmas-lights > span::after,
+  .christmas-wreath-light {
+    animation: none;
+  }
+
+  :is(.christmas-flight, .christmas-home-snow) {
+    display: none;
+  }
+
+  :root[data-theme|="christmas"] .topbar {
+    --topbar-decoration-space: 0px;
+  }
+}

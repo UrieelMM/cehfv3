@@ -27,6 +27,7 @@ import {
   forumRichTextToPlainText,
   parseForumRichText,
 } from "@/lib/forum-rich-text";
+import { portalThemeColorScheme } from "@/lib/portal-theme";
 
 export type ForumEditorMember = {
   id: string;
@@ -48,15 +49,14 @@ function useAppTheme() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
     const syncTheme = () => {
-      const selected = document.documentElement.dataset.theme;
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      setTheme(selected === "dark" || (selected === "system" && prefersDark) ? "dark" : "light");
+      const scheme = portalThemeColorScheme(document.documentElement.dataset.theme);
+      setTheme(scheme === "system" ? (media.matches ? "dark" : "light") : scheme);
     };
     syncTheme();
     const observer = new MutationObserver(syncTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", syncTheme);
     return () => {
       observer.disconnect();

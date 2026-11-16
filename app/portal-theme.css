@@ -1,0 +1,148 @@
+.portal-theme-picker {
+  position: relative;
+}
+
+.portal-theme-trigger {
+  display: flex;
+  width: 53px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.portal-theme-trigger[aria-expanded="true"] {
+  border-color: var(--tab-active-border);
+  background: var(--violet-soft);
+  color: var(--violet-dark);
+}
+
+.portal-theme-popover {
+  position: absolute;
+  z-index: 43;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 190px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.portal-theme-options {
+  display: grid;
+  gap: 2px;
+}
+
+.portal-theme-option {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted-strong);
+  text-align: left;
+}
+
+.portal-theme-option:hover {
+  background: var(--surface-soft);
+  color: var(--foreground);
+}
+
+.portal-theme-option[aria-pressed="true"] {
+  border-color: var(--tab-active-border);
+  background: var(--violet-soft);
+  color: var(--violet-dark);
+}
+
+.portal-theme-option .portal-theme-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.portal-theme-label svg {
+  flex: 0 0 auto;
+}
+
+.portal-theme-check {
+  margin-inline-start: auto;
+}
+
+.portal-theme-option[data-option|="christmas"] .portal-theme-label svg:first-child {
+  color: light-dark(#236247, var(--violet));
+}
+
+.setting-row.portal-theme-setting {
+  display: grid;
+  justify-content: stretch;
+  gap: 10px;
+}
+
+.portal-theme-previews {
+  display: grid;
+  width: min(100%, 810px);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 9px;
+}
+
+.portal-theme-previews .portal-theme-option {
+  display: grid;
+  gap: 8px;
+  padding: 6px;
+  border-color: var(--border);
+  border-radius: 13px;
+  background-color: var(--surface);
+}
+
+.portal-theme-previews .portal-theme-option[aria-pressed="true"] {
+  border-color: var(--violet);
+  background-color: var(--violet-soft);
+}
+
+.portal-theme-previews .portal-theme-option:hover {
+  border-color: var(--violet);
+}
+
+.portal-theme-previews .portal-theme-label {
+  padding: 0 3px 2px;
+}
+
+.portal-theme-swatch {
+  display: block;
+  height: 38px;
+  border: 1px solid rgb(127 127 127 / 0.24);
+  border-radius: 7px;
+  background: linear-gradient(110deg, #f3f6fa 0 58%, #d8dff8 58% 84%, #3449ad 84%);
+}
+
+[data-option="dark"] .portal-theme-swatch,
+[data-option="christmas-dark"] .portal-theme-swatch {
+  background: linear-gradient(110deg, #111f2d 0 58%, #252b5d 58% 84%, #aeb5ff 84%);
+}
+
+[data-option="system"] .portal-theme-swatch {
+  background: linear-gradient(110deg, #f3f6fa 0 50%, #172838 50%);
+}
+
+[data-option="christmas"] .portal-theme-swatch {
+  background: linear-gradient(110deg, #f2f6ef 0 58%, #20654c 58% 84%, #a92e4a 84%);
+}
+
+@media (max-width: 760px) {
+  .portal-theme-previews {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 400px) {
+  .portal-theme-trigger {
+    width: 41px;
+  }
+
+  .portal-theme-trigger > svg:last-child {
+    display: none;
+  }
+}

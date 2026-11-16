@@ -35,7 +35,6 @@ import {
   Mail,
   Menu,
   MessageCircle,
-  Moon,
   MoonStar,
   MoreHorizontal,
   Newspaper,
@@ -48,12 +47,14 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Snowflake,
   Sparkles,
   Sun,
   SunMedium,
   Sunrise,
   Sunset,
   Target,
+  TreePine,
   UploadCloud,
   UserRound,
   UserPlus,
@@ -66,6 +67,16 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast, Toaster } from "sonner";
 import type { User } from "firebase/auth";
 import { ForumPage } from "@/components/forum-page";
+import {
+  ChristmasAvatarHat,
+  ChristmasHeroArt,
+  ChristmasHomeSnow,
+  ChristmasLights,
+  ChristmasNavbarWoodland,
+  ChristmasSleigh,
+  ChristmasWreath,
+} from "@/components/christmas-decorations";
+import { PortalThemeOptions, PortalThemePicker, type PortalThemeSelection } from "@/components/portal-theme-picker";
 import { AcademicCalendarModal } from "@/components/academic-calendar-modal";
 import { UsersPage as CommunityUsersPage } from "@/components/users-page";
 import { WallNewspaperPage } from "@/components/wall-newspaper-page";
@@ -159,6 +170,15 @@ import {
 } from "@/lib/forum-firebase";
 import { ForumRichText } from "@/components/forum-rich-text";
 import { useOutsidePointerDismiss } from "@/lib/use-outside-pointer-dismiss";
+import {
+  isChristmasSeason,
+  isChristmasTheme,
+  portalChristmasThemeStorageKey,
+  portalThemeColorScheme,
+  portalThemeStorageKey,
+  resolvePortalTheme,
+  type PortalTheme,
+} from "@/lib/portal-theme";
 import { isResizeObserverLoopError } from "@/lib/resize-observer-error";
 import {
   playNotificationSound,
@@ -609,6 +629,8 @@ export function CEHFApp() {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [state, setState] = useState<PortalState>(createInitialPortalState);
+  const [christmasSeasonActive, setChristmasSeasonActive] = useState(isChristmasSeason);
+  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -643,7 +665,6 @@ export function CEHFApp() {
     () => new Set(),
   );
   const [mobileMore, setMobileMore] = useState(false);
-  const [systemPrefersDark, setSystemPrefersDark] = useState(false);
   const [managedAccounts, setManagedAccounts] = useState<ManagedAccount[]>([]);
   const [managedAccountsLoading, setManagedAccountsLoading] = useState(false);
   const prefersReducedMotion = useReducedMotion();
@@ -663,9 +684,13 @@ export function CEHFApp() {
   const currentProfile = profile ?? pendingProfile;
   const role = currentProfile.role;
   const unread = state.notifications.filter((item) => !item.read).length;
-  const darkModeActive =
-    state.settings.theme === "dark" ||
-    (state.settings.theme === "system" && systemPrefersDark);
+  const activeTheme = resolvePortalTheme(
+    state.settings.theme,
+    state.settings.christmasTheme,
+    christmasSeasonActive,
+    systemPrefersDark,
+  );
+  const christmasActive = isChristmasTheme(activeTheme);
   const academicConfig = useMemo(
     () =>
       resolveAcademicConfig(
@@ -967,14 +992,39 @@ export function CEHFApp() {
   }, []);
 
   useEffect(() => {
-    if (!authReady) return;
-    document.documentElement.dataset.theme = state.settings.theme;
-    window.localStorage.setItem("cehf-theme", state.settings.theme);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = () => setSystemPrefersDark(media.matches);
+    const syncSeason = () => setChristmasSeasonActive(isChristmasSeason());
+    syncSystemTheme();
+    syncSeason();
+    const timer = window.setInterval(syncSeason, 60_000);
+    media.addEventListener("change", syncSystemTheme);
+    window.addEventListener("focus", syncSeason);
+    return () => {
+      window.clearInterval(timer);
+      media.removeEventListener("change", syncSystemTheme);
+      window.removeEventListener("focus", syncSeason);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !profile) return;
+    document.documentElement.dataset.theme = activeTheme;
     document.documentElement.classList.toggle(
       "reduce-motion",
       state.settings.reducedMotion,
     );
-  }, [authReady, state.settings]);
+    try {
+      window.localStorage.setItem(portalThemeStorageKey, state.settings.theme);
+      if (state.settings.christmasTheme) {
+        window.localStorage.setItem(portalChristmasThemeStorageKey, state.settings.christmasTheme);
+      } else {
+        window.localStorage.removeItem(portalChristmasThemeStorageKey);
+      }
+    } catch {
+      // The portal can still apply the account preference without browser storage.
+    }
+  }, [activeTheme, authReady, profile, state.settings.theme, state.settings.christmasTheme, state.settings.reducedMotion]);
 
   useEffect(() => {
     if (!authReady || activeSection !== "weekly-progress") return;
@@ -1009,14 +1059,6 @@ export function CEHFApp() {
       active = false;
     };
   }, [firebaseUser, profile, role]);
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const syncPreference = () => setSystemPrefersDark(media.matches);
-    syncPreference();
-    media.addEventListener("change", syncPreference);
-    return () => media.removeEventListener("change", syncPreference);
-  }, []);
 
   function navigate(section: SectionKey) {
     window.history.pushState({}, "", routes[section]);
@@ -1087,27 +1129,32 @@ export function CEHFApp() {
   }
 
   function updateSettings(
-    updater: (previous: PortalSettings) => PortalSettings,
+    changes: Partial<PortalSettings>,
     successMessage?: string,
   ) {
-    setState((previous) => {
-      const settings = updater(previous.settings);
-      const next = { ...previous, settings };
-      if (profile) {
-        void savePortalSettings(settings, profile).catch((error) =>
-          reportFirebaseError("guardar preferencias de apariencia", error),
-        );
-      }
-      return next;
-    });
-    if (successMessage) toast.success(successMessage);
+    setState((previous) => ({
+      ...previous,
+      settings: { ...previous.settings, ...changes },
+    }));
+    if (profile) {
+      void savePortalSettings(changes, profile)
+        .then(() => {
+          if (successMessage) toast.success(successMessage);
+        })
+        .catch((error) => reportFirebaseError("guardar preferencias del portal", error));
+    }
   }
 
-  function toggleTheme() {
-    updateSettings((previous) => ({
-        ...previous,
-        theme: darkModeActive ? "light" : "dark",
-    }));
+  function selectPortalTheme(theme: PortalTheme, successMessage?: string) {
+    if (theme === activeTheme || isChristmasTheme(theme) !== christmasSeasonActive) return;
+    const { theme: savedTheme, christmasTheme } = state.settings;
+    const changes = isChristmasTheme(theme)
+      ? { christmasTheme: theme }
+      : {
+          theme,
+          ...(isChristmasTheme(savedTheme) && !christmasTheme && { christmasTheme: savedTheme }),
+        };
+    updateSettings(changes, successMessage);
   }
 
   function addManagedAccount(account: ManagedAccount) {
@@ -1201,7 +1248,7 @@ export function CEHFApp() {
     <div
       className={`app-shell ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}
     >
-      <Toaster position="top-center" richColors closeButton />
+      <Toaster position="top-center" theme={portalThemeColorScheme(activeTheme)} richColors closeButton />
       <div
         className={`sidebar-backdrop ${sidebarOpen ? "is-open" : ""}`}
         onClick={() => setSidebarOpen(false)}
@@ -1213,14 +1260,16 @@ export function CEHFApp() {
       >
         <div className="sidebar-header">
           <div className="brand">
-            <Image
-              className="sidebar-brand-logo"
-              src={logoCehf}
-              alt=""
-              aria-hidden="true"
-              sizes="43px"
-              unoptimized
-            />
+            <span className="sidebar-brand-emblem" aria-hidden="true">
+              <Image
+                className="sidebar-brand-logo"
+                src={logoCehf}
+                alt=""
+                sizes="43px"
+                unoptimized
+              />
+              {christmasActive && <ChristmasWreath />}
+            </span>
             <div className="brand-copy">
               <strong>CEHF</strong>
               <span>Campus</span>
@@ -1286,7 +1335,9 @@ export function CEHFApp() {
               onClick={() => navigate(item.key)}
               title={sidebarCollapsed ? item.label : undefined}
             >
-              <item.icon size={19} aria-hidden="true" />
+              {christmasActive && item.key === "dashboard"
+                ? <TreePine size={19} aria-hidden="true" />
+                : <item.icon size={19} aria-hidden="true" />}
               <span>{item.label}</span>
               {item.key === "tasks" && role === "student" && (
                 <span className="nav-count">
@@ -1323,7 +1374,15 @@ export function CEHFApp() {
       </aside>
 
       <div className="main-column">
+        {christmasActive && activeSection === "dashboard" && <ChristmasHomeSnow />}
         <header className="topbar">
+          {christmasActive && (
+            <>
+              <ChristmasNavbarWoodland />
+              <ChristmasLights />
+              <ChristmasSleigh />
+            </>
+          )}
           <button
             className="icon-button menu-button"
             onClick={() => setSidebarOpen(true)}
@@ -1338,47 +1397,10 @@ export function CEHFApp() {
             onOpen={openSearchResult}
           />
           <div className="topbar-actions">
-            <button
-              type="button"
-              className={`theme-switch ${darkModeActive ? "is-dark" : ""}`}
-              onClick={toggleTheme}
-              role="switch"
-              aria-checked={darkModeActive}
-              aria-label={
-                darkModeActive
-                  ? "Cambiar a modo claro"
-                  : "Cambiar a modo oscuro"
-              }
-              title={darkModeActive ? "Modo claro" : "Modo oscuro"}
-            >
-              <motion.span
-                className="theme-switch-thumb"
-                animate={{ x: darkModeActive ? 26 : 0 }}
-                transition={
-                  state.settings.reducedMotion || prefersReducedMotion
-                    ? { duration: 0 }
-                    : { type: "spring", stiffness: 520, damping: 30 }
-                }
-                aria-hidden="true"
-              >
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.span
-                    key={darkModeActive ? "moon" : "sun"}
-                    initial={{ opacity: 0, rotate: -70, scale: 0.55 }}
-                    animate={{ opacity: 1, rotate: 0, scale: 1 }}
-                    exit={{ opacity: 0, rotate: 70, scale: 0.55 }}
-                    transition={{
-                      duration:
-                        state.settings.reducedMotion || prefersReducedMotion
-                          ? 0
-                          : 0.18,
-                    }}
-                  >
-                    {darkModeActive ? <Moon size={15} /> : <Sun size={15} />}
-                  </motion.span>
-                </AnimatePresence>
-              </motion.span>
-            </button>
+            <PortalThemePicker
+              theme={activeTheme}
+              onSelect={selectPortalTheme}
+            />
             <div className="notification-wrap" ref={notificationWrapRef}>
               <button
                 className="icon-button"
@@ -1420,19 +1442,22 @@ export function CEHFApp() {
               </AnimatePresence>
             </div>
             <button className="profile-chip" onClick={() => navigate("profile")}>
-              <span
-                className={`avatar${currentProfile.photoURL ? " has-photo" : ""}`}
-                aria-label={currentProfile.photoURL ? `Fotografía de ${currentProfile.name}` : `Iniciales de ${currentProfile.name}`}
-              >
-                {currentProfile.photoURL ? (
-                  <Image
-                    src={currentProfile.photoURL}
-                    alt=""
-                    fill
-                    sizes="35px"
-                    unoptimized
-                  />
-                ) : currentProfile.initials}
+              <span className="profile-chip-avatar">
+                <span
+                  className={`avatar${currentProfile.photoURL ? " has-photo" : ""}`}
+                  aria-label={currentProfile.photoURL ? `Fotografía de ${currentProfile.name}` : `Iniciales de ${currentProfile.name}`}
+                >
+                  {currentProfile.photoURL ? (
+                    <Image
+                      src={currentProfile.photoURL}
+                      alt=""
+                      fill
+                      sizes="35px"
+                      unoptimized
+                    />
+                  ) : currentProfile.initials}
+                </span>
+                {christmasActive && <ChristmasAvatarHat />}
               </span>
               <span className="profile-copy">
                 <strong>{currentProfile.name.split(" ")[0]}</strong>
@@ -1527,6 +1552,7 @@ export function CEHFApp() {
               navigate={navigate}
               updateState={updateState}
               updateSettings={updateSettings}
+              themeSelection={{ theme: activeTheme, onSelect: (theme) => selectPortalTheme(theme, "Preferencia guardada") }}
               openDetail={openTaskDetail}
               taskRecords={taskRecords}
               taskRecordsLoading={taskRecordsLoading}
@@ -1555,6 +1581,7 @@ export function CEHFApp() {
 
       <MobileNavigation
         active={activeSection}
+        christmasActive={christmasActive}
         onNavigate={navigate}
         onMore={() => setMobileMore(true)}
       />
@@ -1996,6 +2023,7 @@ function SectionContent({
   navigate,
   updateState,
   updateSettings,
+  themeSelection,
   openDetail,
   taskRecords,
   taskRecordsLoading,
@@ -2024,9 +2052,10 @@ function SectionContent({
     message?: string,
   ) => void;
   updateSettings: (
-    updater: (previous: PortalSettings) => PortalSettings,
+    changes: Partial<PortalSettings>,
     message?: string,
   ) => void;
+  themeSelection: PortalThemeSelection;
   openDetail: (id: string) => void;
   taskRecords: TaskAssignment[];
   taskRecordsLoading: boolean;
@@ -2054,6 +2083,7 @@ function SectionContent({
           role={role}
           profile={profile}
           state={state}
+          christmasActive={isChristmasTheme(themeSelection.theme)}
           navigate={navigate}
           updateState={updateState}
           openTask={openDetail}
@@ -2181,6 +2211,7 @@ function SectionContent({
         <SettingsPage
           state={state}
           updateSettings={updateSettings}
+          themeSelection={themeSelection}
           role={role}
           profile={profile}
           academicConfig={academicConfig}
@@ -2219,6 +2250,7 @@ function Dashboard({
   role,
   profile,
   state,
+  christmasActive,
   navigate,
   updateState,
   openTask,
@@ -2236,6 +2268,7 @@ function Dashboard({
   role: Role;
   profile: UserProfile;
   state: PortalState;
+  christmasActive: boolean;
   navigate: (section: SectionKey) => void;
   updateState: (
     updater: (previous: PortalState) => PortalState,
@@ -2420,7 +2453,6 @@ function Dashboard({
         timeZone: academicConfig.timezone || "America/Mexico_City",
       }).format(new Date(dashboard.nextTask.dueAt))
     : "";
-
   return (
     <div className="dashboard-stack">
       <WeeklyVerseCard
@@ -2432,7 +2464,10 @@ function Dashboard({
       <section className={`hero-card ${role !== "student" ? "teacher-hero" : ""}`} aria-busy={dashboardLoading}>
         <div className="hero-copy">
           <span className="pill pill-light">
-            <span className="live-dot" /> Desempeño actual
+            {christmasActive
+              ? <Snowflake size={15} aria-hidden="true" />
+              : <span className="live-dot" />}
+            Desempeño actual
           </span>
           <div className="hero-copy-message" aria-live="polite" aria-atomic="true">
             {dashboardLoading ? (
@@ -2460,6 +2495,7 @@ function Dashboard({
             <ArrowRight size={17} />
           </button>
         </div>
+        {christmasActive && <ChristmasHeroArt />}
         <div className="hero-metric">
           <ProgressRing
             value={dashboardLoading ? 0 : dashboard.completion}
@@ -2775,6 +2811,7 @@ function WeekPage({
 function SettingsPage({
   state,
   updateSettings,
+  themeSelection,
   role,
   profile,
   academicConfig,
@@ -2786,9 +2823,10 @@ function SettingsPage({
 }: {
   state: PortalState;
   updateSettings: (
-    updater: (previous: PortalSettings) => PortalSettings,
+    changes: Partial<PortalSettings>,
     message?: string,
   ) => void;
+  themeSelection: PortalThemeSelection;
   role: Role;
   profile: UserProfile;
   academicConfig: AcademicConfig;
@@ -2953,42 +2991,9 @@ function SettingsPage({
                 <p>Elige cómo quieres ver y recorrer el portal.</p>
               </div>
             </div>
-            <div className="setting-row">
-              <div>
-                <strong>Tema</strong>
-                <span>Claro, oscuro o según tu dispositivo.</span>
-              </div>
-              <div className="theme-options">
-                {(["light", "dark", "system"] as const).map((theme) => (
-                  <button
-                    className={state.settings.theme === theme ? "active" : ""}
-                    key={theme}
-                    onClick={() =>
-                      updateSettings(
-                        (previous) => ({
-                          ...previous,
-                          theme,
-                        }),
-                        "Preferencia guardada",
-                      )
-                    }
-                    type="button"
-                  >
-                    {theme === "light" ? (
-                      <Sun size={16} />
-                    ) : theme === "dark" ? (
-                      <Moon size={16} />
-                    ) : (
-                      <Settings size={16} />
-                    )}
-                    {theme === "light"
-                      ? "Claro"
-                      : theme === "dark"
-                        ? "Oscuro"
-                        : "Sistema"}
-                  </button>
-                ))}
-              </div>
+            <div className="setting-row portal-theme-setting">
+              <strong>Tema</strong>
+              <PortalThemeOptions {...themeSelection} preview />
             </div>
             <div className="setting-row">
               <div>
@@ -2999,10 +3004,7 @@ function SettingsPage({
                 checked={state.settings.reducedMotion}
                 label="Reducir movimiento"
                 onChange={(checked) =>
-                  updateSettings((previous) => ({
-                    ...previous,
-                    reducedMotion: checked,
-                  }))
+                  updateSettings({ reducedMotion: checked })
                 }
               />
             </div>
@@ -3037,7 +3039,7 @@ function SettingsPage({
                 onChange={(checked) => {
                   if (checked) void unlockNotificationSound();
                   updateSettings(
-                    (previous) => ({ ...previous, notificationSound: checked }),
+                    { notificationSound: checked },
                     checked ? "Sonido activado" : "Sonido desactivado",
                   );
                 }}
@@ -4102,15 +4104,17 @@ function CreateModal({
 
 function MobileNavigation({
   active,
+  christmasActive,
   onNavigate,
   onMore,
 }: {
   active: SectionKey;
+  christmasActive: boolean;
   onNavigate: (section: SectionKey) => void;
   onMore: () => void;
 }) {
   const items: Array<{ key: SectionKey; label: string; icon: IconType }> = [
-    { key: "dashboard", label: "Inicio", icon: Home },
+    { key: "dashboard", label: "Inicio", icon: christmasActive ? TreePine : Home },
     { key: "weekly-review", label: "Repaso", icon: BookOpen },
     { key: "tasks", label: "Tareas", icon: ClipboardCheck },
     { key: "my-week", label: "Calificaciones", icon: GraduationCap },

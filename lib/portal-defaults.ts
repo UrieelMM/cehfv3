@@ -1,4 +1,5 @@
 import type { PortalState, Role, UserProfile } from "./types";
+import { defaultPortalTheme } from "./portal-theme";
 
 export const pendingProfile: UserProfile = {
   uid: "",
@@ -37,7 +38,7 @@ export const createInitialPortalState = (): PortalState => ({
   forumBans: [],
   notifications: [],
   settings: {
-    theme: "light",
+    theme: defaultPortalTheme,
     reducedMotion: false,
     notificationSound: true,
     whatsappEnabled: true,

@@ -45,6 +45,7 @@ import {
   type StorageReference,
 } from "firebase/storage";
 import { createInitialPortalState } from "./portal-defaults";
+import { isChristmasTheme, isPortalTheme } from "./portal-theme";
 import {
   academicSubjectOptions,
   gradesBySchoolLevel,
@@ -686,11 +687,10 @@ function portalSettingsFromData(
   fallback: PortalSettings,
 ): PortalSettings {
   const theme = value?.theme;
+  const christmasTheme = value?.christmasTheme;
   return {
-    theme:
-      theme === "light" || theme === "dark" || theme === "system"
-        ? theme
-        : fallback.theme,
+    theme: isPortalTheme(theme) ? theme : fallback.theme,
+    christmasTheme: isChristmasTheme(christmasTheme) ? christmasTheme : fallback.christmasTheme,
     reducedMotion:
       typeof value?.reducedMotion === "boolean"
         ? value.reducedMotion
@@ -759,13 +759,14 @@ export async function loadPortalState(
   const sharedRef = sharedStateRef(profile.institutionId);
   if (!db || !sharedRef) return createInitialPortalState();
   const initial = createInitialPortalState();
-  const sharedSnapshot = await getDoc(sharedRef);
-  const sharedState = sharedSnapshot.exists()
+  const sharedData = (await getDoc(sharedRef)).data();
+  const sharedState = sharedData
     ? ({
         ...initial,
-        ...sharedSnapshot.data(),
-        weeklyVerse:
-          sharedSnapshot.data().weeklyVerse ?? initial.weeklyVerse,
+        ...sharedData,
+        weeklyVerse: sharedData.weeklyVerse ?? initial.weeklyVerse,
+        // A shared theme can be left over from older portal saves. Theme choices are personal.
+        settings: { ...sharedData.settings, theme: initial.settings.theme, christmasTheme: undefined },
       } as PortalState)
     : initial;
 
@@ -786,7 +787,7 @@ export async function loadPortalState(
     return withPortalPreferences(sharedState, profile);
   }
 
-  if (sharedSnapshot.exists()) {
+  if (sharedData) {
     return withPortalPreferences(sharedState, profile);
   }
   if (profile.role === "director") await savePortalState(initial, profile);
@@ -803,16 +804,20 @@ export async function savePortalState(
       ? sharedStateRef(profile.institutionId)
       : privateStateRef(profile.uid);
   if (!target) return;
-  await setDoc(target, withoutUndefined({
+  const data = withoutUndefined({
     ...state,
     institutionId: profile.institutionId,
     updatedAt: new Date().toISOString(),
     updatedBy: profile.uid,
-  }));
+  });
+  // Account preferences are saved separately. Preserve legacy settings for reads.
+  await setDoc(target, data, {
+    mergeFields: Object.keys(data).filter((field) => field !== "settings"),
+  });
 }
 
 export async function savePortalSettings(
-  settings: PortalSettings,
+  settings: Partial<PortalSettings>,
   profile: UserProfile,
 ) {
   const target = appearancePreferencesRef(profile.uid);
@@ -820,7 +825,7 @@ export async function savePortalSettings(
   await setDoc(
     target,
     {
-      ...portalSettingsFromData(settings as unknown as Record<string, unknown>, settings),
+      ...withoutUndefined(settings),
       institutionId: profile.institutionId,
       updatedAt: serverTimestamp(),
     },

@@ -1,3 +1,5 @@
+import type { ChristmasPortalTheme, PortalTheme } from "./portal-theme";
+
 export type Role = "director" | "teacher" | "student";
 export type SchoolLevel = "preschool" | "primary" | "secondary";
 
@@ -1154,7 +1156,8 @@ export type WhatsAppLogPage = {
 };
 
 export type PortalSettings = {
-  theme: "light" | "dark" | "system";
+  theme: PortalTheme;
+  christmasTheme?: ChristmasPortalTheme;
   reducedMotion: boolean;
   notificationSound: boolean;
   whatsappEnabled: boolean;

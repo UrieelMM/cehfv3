@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
+import {
+  christmasPortalThemes,
+  christmasSeason,
+  defaultPortalTheme,
+  portalChristmasThemeStorageKey,
+  portalThemes,
+  portalThemeStorageKey,
+} from "@/lib/portal-theme";
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import "./globals.css";
@@ -16,16 +24,32 @@ import "./staff-workspace.css";
 import "./form-focus.css";
 import "./profile.css";
 import "./dashboard-home.css";
+import "./portal-theme.css";
+import "./christmas.css";
 
 const themeBootstrapScript = `
   (() => {
+    let theme = ${JSON.stringify(defaultPortalTheme)};
+    let christmasTheme;
+    const christmasThemes = ${JSON.stringify(christmasPortalThemes)};
     try {
-      let theme = window.localStorage.getItem("cehf-theme");
-      document.documentElement.dataset.theme =
-        theme === "dark" || theme === "system" ? theme : "light";
-    } catch {
-      document.documentElement.dataset.theme = "light";
+      const saved = window.localStorage.getItem(${JSON.stringify(portalThemeStorageKey)});
+      if (${JSON.stringify(portalThemes)}.includes(saved)) theme = saved;
+      const savedChristmas = window.localStorage.getItem(${JSON.stringify(portalChristmasThemeStorageKey)});
+      if (christmasThemes.includes(savedChristmas)) christmasTheme = savedChristmas;
+    } catch {}
+    const season = ${JSON.stringify(christmasSeason)};
+    const day = new Intl.DateTimeFormat("en-US", {
+      timeZone: season.timeZone, month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    if (day >= season.start || day <= season.end) {
+      const prefersDark = theme === "dark" ||
+        (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      theme = christmasTheme ?? (christmasThemes.includes(theme) ? theme : (prefersDark ? "christmas-dark" : "christmas"));
+    } else if (christmasThemes.includes(theme)) {
+      theme = theme === "christmas-dark" ? "dark" : "light";
     }
+    document.documentElement.dataset.theme = theme;
   })();
 `;
 

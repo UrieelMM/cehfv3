@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
+import { defaultPortalTheme, isChristmasSeason, isChristmasTheme, isPortalTheme, resolvePortalTheme } from "../lib/portal-theme.ts";
 
 const projectRoot = new URL("../", import.meta.url);
 
@@ -56,6 +58,60 @@ test("supports the documented application routes", async () => {
     const response = await render(pathname);
     assert.equal(response.status, 200, `${pathname} should render`);
   }
+});
+
+test("applies the Christmas season to cached themes before hydration and restores their regular choices afterward", async () => {
+  const response = await render("/settings/appearance");
+  const html = await response.text();
+  const bootstrap = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map(([, script]) => script)
+    .find((script) => script.includes("cehf-theme"));
+  assert.ok(bootstrap);
+
+  for (const [time, saved, savedChristmas, prefersDark, expected] of [
+    ["2026-11-15T05:59:59Z", "dark", null, false, "dark"],
+    ["2026-11-15T06:00:00Z", "dark", null, false, "christmas-dark"],
+    ["2026-12-20T12:00:00Z", "light", null, true, "christmas"],
+    ["2026-12-20T12:00:00Z", "system", null, true, "christmas-dark"],
+    ["2026-12-20T12:00:00Z", "system", null, false, "christmas"],
+    ["2026-12-20T12:00:00Z", "dark", "christmas", false, "christmas"],
+    ["2026-12-20T12:00:00Z", "christmas-dark", null, false, "christmas-dark"],
+    ["2026-12-20T12:00:00Z", "unknown", "invalid", false, "christmas"],
+    ["2027-01-07T05:59:59Z", "dark", "christmas", false, "christmas"],
+    ["2027-01-07T06:00:00Z", "dark", "christmas", false, "dark"],
+    ["2027-02-01T12:00:00Z", "system", "christmas-dark", false, "system"],
+    ["2027-02-01T12:00:00Z", "christmas-dark", null, false, "dark"],
+    ["2027-02-01T12:00:00Z", "christmas", null, true, "light"],
+    ["2027-02-01T12:00:00Z", null, null, false, "light"],
+  ]) {
+    const dataset = {};
+    const date = new Date(time);
+    runInNewContext(bootstrap, {
+      Date: class extends Date { constructor() { super(time); } },
+      document: { documentElement: { dataset } },
+      window: {
+        localStorage: { getItem: (key) => key === "cehf-theme" ? saved : savedChristmas },
+        matchMedia: () => ({ matches: prefersDark }),
+      },
+    });
+    assert.equal(dataset.theme, expected);
+    assert.equal(resolvePortalTheme(
+      isPortalTheme(saved) ? saved : defaultPortalTheme,
+      isChristmasTheme(savedChristmas) ? savedChristmas : undefined,
+      isChristmasSeason(date),
+      prefersDark,
+    ), expected);
+  }
+
+  const dataset = {};
+  runInNewContext(bootstrap, {
+    Date: class extends Date { constructor() { super("2026-12-20T12:00:00Z"); } },
+    document: { documentElement: { dataset } },
+    window: {
+      get localStorage() { throw new Error("Storage is unavailable"); },
+    },
+  });
+  assert.equal(dataset.theme, "christmas");
 });
 
 test("ships Firebase setup, rules, indexes, storage and PWA assets", async () => {
@@ -392,8 +448,8 @@ test("ships Firebase setup, rules, indexes, storage and PWA assets", async () =>
   assert.match(gradeReportPdfSource, /doc\.addImage\(brandLogo, "PNG"/);
   assert.match(appSource, /className="sidebar-brand-logo"/);
   assert.match(appSource, /className="loading-logo"/);
-  assert.match(appSource, /if \(!authReady\) return;/);
-  assert.match(css, /:root\[data-theme="dark"\] \.loading-screen/);
+  assert.match(appSource, /if \(!authReady \|\| !profile\) return;/);
+  assert.match(css, /:root:is\(\[data-theme="dark"\], \[data-theme="christmas-dark"\]\) \.loading-screen/);
   assert.match(css, /--loading-stage-background:/);
   assert.match(css, /\.loading-logo/);
   assert.match(landingCssSource, /\.lp-bento-calendar\s*\{[^}]*min-height:\s*700px/s);
@@ -542,7 +598,7 @@ test("keeps mural stories, likes and archives scoped to their edition", async ()
   assert.match(css, /@keyframes mural-open-pulse/);
   assert.match(css, /--mural-open-background:/);
   assert.match(css, /\.mural-open-button[\s\S]*background: var\(--mural-open-background\)/);
-  assert.match(css, /:root\[data-theme="dark"\][\s\S]*--mural-open-background:/);
+  assert.match(css, /:root:is\(\[data-theme="dark"\], \[data-theme="christmas-dark"\]\)[\s\S]*--mural-open-background:/);
   assert.match(css, /:root\[data-theme="system"\][\s\S]*--mural-open-background:/);
   assert.match(css, /\.wall-card\[role="button"\]:focus-visible/);
 });

@@ -4,7 +4,7 @@
   --home-card-accent: var(--violet);
 }
 
-:root[data-theme="dark"] .dashboard-stack {
+:root:is([data-theme="dark"], [data-theme="christmas-dark"]) .dashboard-stack {
   --home-glow-strength: 20%;
   --home-edge-strength: 8%;
 }
